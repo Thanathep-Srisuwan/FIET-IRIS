@@ -50,9 +50,7 @@ export const authService = {
 export const documentService = {
   getAll:   (params) => api.get('/documents', { params }),
   getById:  (id)     => api.get(`/documents/${id}`),
-  upload:   (data)   => api.post('/documents', data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
+  upload:   (data)   => api.post('/documents', data),
   delete:   (id)     => api.delete(`/documents/${id}`),
   download: (id, fileId) => api.get(`/documents/${id}/files/${fileId}`, {
     responseType: 'blob',
@@ -97,9 +95,7 @@ export const docTypeService = {
 export const announcementService = {
   getAll:     ()   => api.get('/announcements'),
   getPublic:  ()   => api.get('/announcements/public'),
-  create:     (data) => api.post('/announcements', data, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
+  create:     (data) => api.post('/announcements', data),
   markRead:   (id) => api.put(`/announcements/${id}/read`),
   markAllRead: ()  => api.put('/announcements/read-all'),
   remove:     (id) => api.delete(`/announcements/${id}`),
