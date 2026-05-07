@@ -1,0 +1,112 @@
+import axios from 'axios'
+import { useAuthStore } from '../stores/authStore'
+
+const api = axios.create({
+  baseURL: '/api',
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// ใส่ token ทุก request อัตโนมัติ
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+// Handle 401 — refresh token อัตโนมัติ
+api.interceptors.response.use(
+  (res) => res,
+  async (err) => {
+    const original = err.config
+    if (err.response?.status === 401 && !original._retry) {
+      original._retry = true
+      try {
+        const refreshToken = useAuthStore.getState().refreshToken
+        const { data } = await axios.post('/api/auth/refresh', { refreshToken })
+        useAuthStore.getState().setAuth(data.user, data.token, data.refreshToken)
+        original.headers.Authorization = `Bearer ${data.token}`
+        return api(original)
+      } catch {
+        useAuthStore.getState().logout()
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(err)
+  }
+)
+
+// Auth
+export const authService = {
+  login:          (data) => api.post('/auth/login', data),
+  logout:         ()     => api.post('/auth/logout'),
+  changePassword: (data) => api.put('/auth/change-password', data),
+  refresh:        (data) => api.post('/auth/refresh', data),
+}
+
+// Documents
+export const documentService = {
+  getAll:   (params) => api.get('/documents', { params }),
+  getById:  (id)     => api.get(`/documents/${id}`),
+  upload:   (data)   => api.post('/documents', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  delete:   (id)     => api.delete(`/documents/${id}`),
+  download: (id, fileId) => api.get(`/documents/${id}/files/${fileId}`, {
+    responseType: 'blob',
+  }),
+}
+
+// Trash (admin only)
+export const trashService = {
+  getAll:          (params) => api.get('/documents/trash', { params }),
+  restore:         (id)     => api.put(`/documents/${id}/restore`),
+  permanentDelete: (id)     => api.delete(`/documents/${id}/permanent`),
+}
+
+// Notifications
+export const notificationService = {
+  getAll:      ()   => api.get('/notifications'),
+  getUnread:   ()   => api.get('/notifications/unread'),
+  markRead:    (id) => api.put(`/notifications/${id}/read`),
+  markAllRead: ()   => api.put('/notifications/read-all'),
+}
+
+// Users (Admin)
+export const userService = {
+  getAll:        (params)    => api.get('/users', { params }),
+  search:        (q)         => api.get('/users/search', { params: { q } }),
+  getAdvisors:   ()          => api.get('/users/advisors'),
+  create:        (data)      => api.post('/users', data),
+  update:        (id, data)  => api.put(`/users/${id}`, data),
+  toggle:        (id)        => api.patch(`/users/${id}/toggle`),
+  resetPassword: (id)        => api.post(`/users/${id}/reset-password`),
+  importExcel:   (data)      => api.post('/users/import', data),
+}
+
+// Document Types
+export const docTypeService = {
+  getAll:  ()    => api.get('/doc-types'),
+  create:  (data) => api.post('/doc-types', data),
+  remove:  (id)  => api.delete(`/doc-types/${id}`),
+}
+
+// Announcements
+export const announcementService = {
+  getAll:     ()   => api.get('/announcements'),
+  getPublic:  ()   => api.get('/announcements/public'),
+  create:     (data) => api.post('/announcements', data, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  markRead:   (id) => api.put(`/announcements/${id}/read`),
+  markAllRead: ()  => api.put('/announcements/read-all'),
+  remove:     (id) => api.delete(`/announcements/${id}`),
+}
+
+export default api
+
+// Executive
+export const executiveService = {
+  getOverview:     ()       => api.get('/executive/overview'),
+  getBranches:     ()       => api.get('/executive/branches'),
+  getDocuments:    (params) => api.get('/executive/documents', { params }),
+}

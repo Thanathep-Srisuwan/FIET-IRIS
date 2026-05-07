@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment
+.env
+server/.env
+
+# Uploads (ไม่เก็บไฟล์จริงใน git)
+server/uploads/*
+!server/uploads/ri/.gitkeep
+!server/uploads/irb/.gitkeep
+
+# Build
+client/dist/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
