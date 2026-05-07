@@ -9,10 +9,13 @@ const api = axios.create({
   },
 })
 
-// ใส่ token ทุก request อัตโนมัติ
+// ใส่ token ทุก request อัตโนมัติ และลบ Content-Type สำหรับ FormData
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token
   if (token) config.headers.Authorization = `Bearer ${token}`
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
+  }
   return config
 })
 
