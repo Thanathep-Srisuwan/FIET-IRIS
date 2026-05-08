@@ -78,7 +78,7 @@ const getDocuments = async (req, res) => {
     const {
       search, doc_type, status,
       page = 1, limit = 15,
-      degree_level, advisor_id, owner_role,
+      degree_level, advisor_id, owner_role, department,
       sort_by, sort_dir,
     } = req.query
     const { user_id, role } = req.user
@@ -120,6 +120,10 @@ const getDocuments = async (req, res) => {
       where += ' AND u.role = @owner_role'
       addParam('owner_role', sql.NVarChar, owner_role)
     }
+    if (department && (role === 'admin' || role === 'advisor')) {
+      where += ' AND u.department = @department'
+      addParam('department', sql.NVarChar, department)
+    }
 
     const sortMap = {
       title: 'd.title', doc_type: 'd.doc_type',
@@ -145,6 +149,7 @@ const getDocuments = async (req, res) => {
         CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining,
         u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email,
         u.student_id AS owner_student_id, u.role AS owner_role, u.degree_level AS owner_degree_level,
+        u.department AS owner_department,
         a.name AS advisor_name, a.user_id AS advisor_id,
         (SELECT COUNT(*) FROM dbo.DOCUMENT_FILES f WHERE f.doc_id = d.doc_id) AS file_count
       FROM dbo.DOCUMENTS d

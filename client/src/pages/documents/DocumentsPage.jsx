@@ -11,6 +11,30 @@ const statusColor = {
   expired:       'bg-red-50 text-red-600 border border-red-200',
 }
 const degreeLabel = { bachelor: 'ป.ตรี', master: 'ป.โท', doctoral: 'ป.เอก' }
+const branchesByDegree = {
+  bachelor: [
+    'ครุศาสตร์โยธา',
+    'ครุศาสตร์เครื่องกล',
+    'ครุศาสตร์ไฟฟ้า',
+    'ครุศาสตร์อุตสาหการ',
+    'เทคโนโลยีการศึกษาและสื่อสารมวลชน',
+    'เทคโนโลยีการพิมพ์และบรรจุภัณฑ์',
+    'เทคโนโลยีอุตสาหกรรม',
+    'วิทยาการคอมพิวเตอร์ประยุกต์ – มัลติมีเดีย',
+  ],
+  master: [
+    'เทคโนโลยีการเรียนรู้และสื่อสารมวลชน',
+    'วิศวกรรมเครื่องกล',
+    'วิศวกรรมไฟฟ้า',
+    'วิศวกรรมโยธา',
+    'วิศวกรรมอุตสาหการ',
+    'เทคโนโลยีบรรจุภัณฑ์และนวัตกรรมการพิมพ์',
+    'คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
+  ],
+  doctoral: [
+    'นวัตกรรมการเรียนรู้และเทคโนโลยี',
+  ],
+}
 const roleLabel   = { student: 'นักศึกษา', advisor: 'อาจารย์', admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร', staff: 'เจ้าหน้าที่' }
 const LIMIT = 15
 
@@ -486,6 +510,242 @@ function DateInput({ display, iso, onChange }) {
   )
 }
 
+// ─── Export Modal ─────────────────────────────────────────────────────────────
+function ExportModal({ onClose, search, docType, status, sort }) {
+  const [exportMode, setExportMode] = useState('all')
+  const [loading, setLoading]       = useState(false)
+
+  const fetchAllDocs = async () => {
+    const { data } = await documentService.getAll({
+      search, doc_type: docType, status,
+      sort_by: sort.by, sort_dir: sort.dir,
+      limit: 9999, page: 1,
+    })
+    return data.documents || []
+  }
+
+const handleExport = async () => {
+    setLoading(true)
+    try {
+      const docs = await fetchAllDocs()
+      const now = new Date()
+      const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
+      const modeLabels = { all: 'ทั้งหมด', role: 'แบ่งตามบทบาท', degree: 'แบ่งตามระดับการศึกษา', branch: 'แบ่งตามสาขาวิชา' }
+
+      const { default: ExcelJS } = await import('exceljs')
+      const wb = new ExcelJS.Workbook()
+      wb.creator = 'ระบบ IRIS'
+      wb.created = now
+
+      const ws = wb.addWorksheet('เอกสาร', {
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+      })
+      ws.pageSetup.margins = { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 }
+
+      const N = 12
+      ws.columns = [
+        { width: 22 }, { width: 8  }, { width: 13 },
+        { width: 16 }, { width: 10 }, { width: 10 },
+        { width: 22 }, { width: 16 }, { width: 14 },
+        { width: 14 }, { width: 11 }, { width: 12 },
+      ]
+
+      const FNT  = 'Calibri'
+      const fFill   = (c) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } })
+      const fBorder = (s = 'thin') => ({ top: { style: s }, bottom: { style: s }, left: { style: s }, right: { style: s } })
+      const fillRow = (row, argb) => { for (let c = 1; c <= N; c++) row.getCell(c).fill = fFill(argb) }
+
+      // ─ Document header (rows 1-3)
+      const docHeaders = [
+        { left: 'ระบบ IRIS', center: 'มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี', right: `ที่พิมพ์: ${dateStr}`, h: 26, bg: 'FF0D2D3E', cSz: 12 },
+        { left: '',          center: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',     right: '',                  h: 20, bg: 'FF1A6EA5', cSz: 11 },
+        { left: '',          center: 'รายงานเอกสารใบประกาศ — ระบบ IRIS',        right: '',                  h: 24, bg: 'FF1A6EA5', cSz: 13 },
+      ]
+      docHeaders.forEach(({ left, center, right, h, bg, cSz }, ri) => {
+        const row = ws.addRow([left, '', '', center, '', '', '', '', '', right, '', ''])
+        row.height = h
+        const rn = ri + 1
+        ws.mergeCells(rn, 1, rn, 3)
+        ws.mergeCells(rn, 4, rn, 9)
+        ws.mergeCells(rn, 10, rn, 12)
+        fillRow(row, bg)
+        row.getCell(1).style  = { font: { name: FNT, bold: true, size: 11, color: { argb: 'FFFFFFFF' } }, fill: fFill(bg), alignment: { horizontal: 'left',   vertical: 'middle' } }
+        row.getCell(4).style  = { font: { name: FNT, bold: true, size: cSz, color: { argb: 'FFFFFFFF' } }, fill: fFill(bg), alignment: { horizontal: 'center', vertical: 'middle' } }
+        row.getCell(10).style = { font: { name: FNT, size: 9, color: { argb: 'FFD6EAF8' } },              fill: fFill(bg), alignment: { horizontal: 'right',  vertical: 'middle' } }
+      })
+
+      // ─ Info row (row 4)
+      const r4 = ws.addRow([`รูปแบบรายงาน: ${modeLabels[exportMode]}`, '', '', `รวมทั้งหมด: ${docs.length} รายการ`, '', '', '', '', '', '', '', ''])
+      r4.height = 18
+      ws.mergeCells(r4.number, 1, r4.number, 3)
+      ws.mergeCells(r4.number, 4, r4.number, 12)
+      fillRow(r4, 'FFD6EAF8')
+      r4.getCell(1).style = { font: { name: FNT, size: 10, color: { argb: 'FF0D2D3E' } },             fill: fFill('FFD6EAF8'), alignment: { horizontal: 'left', vertical: 'middle' } }
+      r4.getCell(4).style = { font: { name: FNT, size: 10, bold: true, color: { argb: 'FF0D2D3E' } }, fill: fFill('FFD6EAF8'), alignment: { horizontal: 'left', vertical: 'middle' } }
+
+      // ─ Spacer
+      const spacer = ws.addRow(Array(N).fill(''))
+      spacer.height = 5
+      fillRow(spacer, 'FFFFFFFF')
+
+      // ─ Column label row
+      const COL_LABELS = ['ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของเอกสาร', 'บทบาท', 'ระดับการศึกษา', 'สาขาวิชา', 'อาจารย์ที่ปรึกษา', 'วันที่ออกใบประกาศ', 'วันหมดอายุ', 'คงเหลือ (วัน)', 'สถานะ']
+      const addTableHeader = () => {
+        const hr = ws.addRow(COL_LABELS)
+        hr.height = 26
+        const s = {
+          font: { name: FNT, bold: true, size: 10, color: { argb: 'FF0D2D3E' } },
+          fill: fFill('FF42B5E1'),
+          alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+          border: fBorder('medium'),
+        }
+        for (let c = 1; c <= N; c++) hr.getCell(c).style = s
+      }
+
+      const docToRow = (doc) => [
+        doc.title || '',
+        doc.doc_type || '',
+        doc.owner_student_id || '',
+        doc.owner_name || '',
+        roleLabel[doc.owner_role] || doc.owner_role || '',
+        degreeLabel[doc.owner_degree_level] || '',
+        doc.owner_department || '',
+        doc.advisor_name || '',
+        doc.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '',
+        doc.no_expire ? 'ไม่มีวันหมดอายุ' : (doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : ''),
+        doc.no_expire ? '' : (doc.days_remaining ?? ''),
+        doc.no_expire ? 'ไม่มีวันหมดอายุ' : (statusLabel[computedStatus(doc)] || doc.status || ''),
+      ]
+
+      const addDataRows = (docList) => {
+        docList.forEach((doc, i) => {
+          const dr = ws.addRow(docToRow(doc))
+          dr.height = 16
+          const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFE0F4FB'
+          const base = {
+            font: { name: FNT, size: 10, color: { argb: 'FF1B2631' } },
+            fill: fFill(bg),
+            border: { bottom: { style: 'hair' }, left: { style: 'hair' }, right: { style: 'hair' } },
+          }
+          for (let c = 1; c <= N; c++) {
+            dr.getCell(c).style = { ...base, alignment: { vertical: 'middle', horizontal: c === 11 ? 'center' : 'left' } }
+          }
+        })
+      }
+
+      const addSection = (label, count) => {
+        const sr = ws.addRow([`  ${label}  (${count} รายการ)`, ...Array(N - 1).fill('')])
+        sr.height = 22
+        ws.mergeCells(sr.number, 1, sr.number, N)
+        sr.getCell(1).style = { font: { name: FNT, bold: true, size: 10, color: { argb: 'FFFFFFFF' } }, fill: fFill('FF1A5276'), alignment: { horizontal: 'left', vertical: 'middle' } }
+      }
+
+      const buildGrouped = (allDocs, keyFn, labelFn, orderedKeys = []) => {
+        const groups = new Map()
+        for (const d of allDocs) {
+          const k = keyFn(d); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d)
+        }
+        const keys = [...orderedKeys.filter(k => groups.has(k)), ...[...groups.keys()].filter(k => !orderedKeys.includes(k))]
+        for (const k of keys) {
+          const gDocs = groups.get(k); if (!gDocs?.length) continue
+          const sp = ws.addRow(Array(N).fill('')); sp.height = 6
+          addSection(labelFn(k), gDocs.length)
+          addTableHeader()
+          addDataRows(gDocs)
+        }
+      }
+
+      let suffix = 'all'
+      if (exportMode === 'all') {
+        addTableHeader(); addDataRows(docs)
+      } else if (exportMode === 'role') {
+        suffix = 'by_role'
+        buildGrouped(docs, d => d.owner_role || 'other', k => roleLabel[k] || k, ['student', 'advisor', 'staff', 'admin', 'executive'])
+      } else if (exportMode === 'degree') {
+        suffix = 'by_degree'
+        buildGrouped(docs,
+          d => d.owner_role === 'student' ? (d.owner_degree_level || 'bachelor') : (d.owner_role || 'other'),
+          k => k in degreeLabel ? `นักศึกษา ${degreeLabel[k]}` : (roleLabel[k] || k),
+          ['bachelor', 'master', 'doctoral', 'advisor', 'staff'])
+      } else if (exportMode === 'branch') {
+        suffix = 'by_branch'
+        buildGrouped(docs, d => d.owner_department || 'ไม่ระบุสาขา', k => k, Object.values(branchesByDegree).flat())
+      }
+
+      const buffer = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `iris_documents_${suffix}_${now.toISOString().slice(0, 10)}.xlsx`; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+      toast.success(`ส่งออก ${docs.length} รายการสำเร็จ`)
+      onClose()
+    } catch (err) { console.error(err); toast.error('ส่งออกข้อมูลล้มเหลว') }
+    finally { setLoading(false) }
+  }
+
+  const opts = [
+    { key: 'all',    icon: '📋', label: 'ทั้งหมด',              desc: 'ส่งออกเอกสารทั้งหมดในไฟล์เดียว' },
+    { key: 'role',   icon: '👥', label: 'แบ่งตามบทบาท',         desc: 'แยกหมวด: นักศึกษา / อาจารย์ / เจ้าหน้าที่' },
+    { key: 'degree', icon: '🎓', label: 'แบ่งตามระดับการศึกษา', desc: 'แยกหมวด: ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่' },
+    { key: 'branch', icon: '🏫', label: 'แบ่งตามสาขาวิชา',      desc: 'แยกหมวดตามสาขาวิชาทุกสาขา' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-semibold text-slate-800">ส่งออกข้อมูล Excel</h2>
+            <p className="text-xs text-slate-400 mt-0.5">เลือกรูปแบบการจัดกลุ่มในไฟล์ที่ส่งออก</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl ml-4">✕</button>
+        </div>
+        <div className="p-5 space-y-2">
+          {opts.map(opt => (
+            <label key={opt.key}
+              className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all
+                ${exportMode === opt.key
+                  ? 'border-[#42b5e1] bg-[#f0f9ff]'
+                  : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'}`}>
+              <input type="radio" name="exportMode" value={opt.key}
+                checked={exportMode === opt.key}
+                onChange={() => setExportMode(opt.key)}
+                className="accent-[#42b5e1] flex-shrink-0" />
+              <span className="text-xl flex-shrink-0">{opt.icon}</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-700">{opt.label}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{opt.desc}</p>
+              </div>
+              {exportMode === opt.key && (
+                <span className="ml-auto flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                  style={{ backgroundColor: '#42b5e1' }}>✓</span>
+              )}
+            </label>
+          ))}
+        </div>
+        <div className="px-5 pb-5 pt-1 border-t border-slate-50 flex gap-3 mt-1">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
+          <button type="button" onClick={handleExport} disabled={loading}
+            className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            style={{ backgroundColor: '#42b5e1' }}>
+            {loading ? (
+              <>
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                กำลังส่งออก...
+              </>
+            ) : '⬇ ดาวน์โหลด Excel'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onUploaded, docTypes, user }) {
   const firstType = docTypes[0]?.type_code || ''
@@ -700,6 +960,7 @@ export default function DocumentsPage() {
   const [docType, setDocType]           = useState('')
   const [status, setStatus]             = useState('')
   const [advisorFilter, setAdvisorFilter] = useState('')
+  const [branchFilter, setBranchFilter] = useState('')
   const [sort, setSort]                 = useState({ by: 'created_at', dir: 'desc' })
   const [page, setPage]                 = useState(1)
   const [modal, setModal]               = useState(null)
@@ -715,7 +976,7 @@ export default function DocumentsPage() {
   }, [isAdmin])
 
   // Reset page when filters change (not when page itself changes)
-  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, sort])
+  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, branchFilter, sort])
 
   const fetchDocs = useCallback(async () => {
     setLoading(true)
@@ -727,13 +988,14 @@ export default function DocumentsPage() {
         sort_by: sort.by, sort_dir: sort.dir,
         page, limit: LIMIT,
         ...(advisorFilter && { advisor_id: advisorFilter }),
+        ...(branchFilter  && { department: branchFilter }),
       }
       const { data } = await documentService.getAll(params)
       setDocs(data.documents || [])
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [activeTab, search, docType, status, sort, page, advisorFilter])
+  }, [activeTab, search, docType, status, sort, page, advisorFilter, branchFilter])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
@@ -748,46 +1010,7 @@ export default function DocumentsPage() {
     setSort(prev => prev.by === key ? { by: key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { by: key, dir: 'desc' })
   }
 
-  const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter('') }
-
-  const exportCSV = async () => {
-    try {
-      const tabParams = tabs.find(t => t.key === activeTab)?.params || {}
-      const { data } = await documentService.getAll({
-        ...tabParams, search, doc_type: docType, status,
-        sort_by: sort.by, sort_dir: sort.dir,
-        ...(advisorFilter && { advisor_id: advisorFilter }),
-        limit: 9999, page: 1,
-      })
-      const allDocs = data.documents || []
-      const csvHeaders = ['ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของ', 'กลุ่ม', 'อาจารย์ที่ปรึกษา', 'วันออก', 'วันหมดอายุ', 'คงเหลือ (วัน)', 'สถานะ']
-      const csvRows = allDocs.map(d => {
-        const gb = groupBadge(d)
-        const status = d.no_expire ? 'ไม่มีวันหมดอายุ' : (statusLabel[computedStatus(d)] || d.status)
-        return [
-          `"${(d.title || '').replace(/"/g, '""')}"`,
-          d.doc_type || '',
-          d.owner_student_id || '',
-          `"${(d.owner_name || '').replace(/"/g, '""')}"`,
-          gb?.text || '',
-          `"${(d.advisor_name || '').replace(/"/g, '""')}"`,
-          d.issue_date ? new Date(d.issue_date).toLocaleDateString('th-TH') : '',
-          d.no_expire ? 'ไม่มีวันหมดอายุ' : (d.expire_date ? new Date(d.expire_date).toLocaleDateString('th-TH') : ''),
-          d.no_expire ? '' : (d.days_remaining ?? ''),
-          status,
-        ].join(',')
-      })
-      const csv = '﻿' + [csvHeaders.join(','), ...csvRows].join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `documents_${activeTab}_${new Date().toISOString().slice(0, 10)}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast.success(`ส่งออก ${allDocs.length} รายการสำเร็จ`)
-    } catch { toast.error('ส่งออกข้อมูลล้มเหลว') }
-  }
+  const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setBranchFilter('') }
 
   const refreshAll = useCallback(() => {
     fetchDocs()
@@ -799,6 +1022,9 @@ export default function DocumentsPage() {
   const showOwner     = isAdmin || isAdvisor
   const showGroup     = isAdmin && activeTab === 'all'
   const showAdvisorFilter = isAdmin && isStudentTab
+  const degreeTabKey  = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : null
+  const showBranchFilter = (isAdmin || isAdvisor) && degreeTabKey != null
+  const branchOptions = degreeTabKey ? branchesByDegree[degreeTabKey] : []
 
   const pageTitle = isAdmin ? 'ใบประกาศทั้งหมด'
     : isAdvisor             ? 'ใบประกาศนักศึกษาในที่ปรึกษา'
@@ -827,9 +1053,9 @@ export default function DocumentsPage() {
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {isAdmin && (
-            <button onClick={exportCSV}
-              className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all whitespace-nowrap">
-              ส่งออก CSV
+            <button onClick={() => setModal('export')}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all whitespace-nowrap flex items-center gap-1.5">
+              <span>⬇</span> ส่งออก Excel
             </button>
           )}
           {(isAdmin || user?.role === 'student' || user?.role === 'staff') && (
@@ -868,6 +1094,12 @@ export default function DocumentsPage() {
               <select className="input-field w-full sm:w-auto sm:max-w-[180px]" value={advisorFilter} onChange={e => setAdvisorFilter(e.target.value)}>
                 <option value="">ทุกอาจารย์</option>
                 {advisors.map(a => <option key={a.user_id} value={a.user_id}>{a.name}</option>)}
+              </select>
+            )}
+            {showBranchFilter && (
+              <select className="input-field w-full sm:w-auto sm:max-w-[220px]" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+                <option value="">ทุกสาขา</option>
+                {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             )}
           </div>
@@ -1058,6 +1290,12 @@ export default function DocumentsPage() {
         </>
       )}
 
+      {modal === 'export' && (
+        <ExportModal
+          onClose={() => setModal(null)}
+          search={search} docType={docType} status={status} sort={sort}
+        />
+      )}
       {modal === 'upload' && (
         <UploadModal onClose={() => setModal(null)} onUploaded={refreshAll}
           docTypes={docTypes} user={user} />
