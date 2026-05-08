@@ -1,18 +1,64 @@
 import { useEffect, useState, useCallback } from 'react'
 import { userService } from '../../services/api'
 import toast from 'react-hot-toast'
+import ExcelJS from 'exceljs'
+import * as XLSX from 'xlsx'
+
+const LIMIT = 20
+
+const DEPARTMENTS_BY_DEGREE = {
+  bachelor: [
+    'ครุศาสตร์โยธา',
+    'ครุศาสตร์เครื่องกล',
+    'ครุศาสตร์ไฟฟ้า',
+    'ครุศาสตร์อุตสาหการ',
+    'เทคโนโลยีการศึกษาและสื่อสารมวลชน',
+    'เทคโนโลยีการพิมพ์และบรรจุภัณฑ์',
+    'เทคโนโลยีอุตสาหกรรม',
+    'วิทยาการคอมพิวเตอร์ประยุกต์ – มัลติมีเดีย',
+  ],
+  master: [
+    'เทคโนโลยีการเรียนรู้และสื่อสารมวลชน',
+    'วิศวกรรมเครื่องกล',
+    'วิศวกรรมไฟฟ้า',
+    'วิศวกรรมโยธา',
+    'วิศวกรรมอุตสาหการ',
+    'เทคโนโลยีบรรจุภัณฑ์และนวัตกรรมการพิมพ์',
+    'คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
+  ],
+  doctoral: [
+    'นวัตกรรมการเรียนรู้และเทคโนโลยี',
+  ],
+}
+const ALL_DEPARTMENTS = ['สำนักงานคณบดี', ...Object.values(DEPARTMENTS_BY_DEGREE).flat()]
+
+// columns: key = backend sort key, null = not sortable
+const COLUMNS = [
+  { key: 'student_id',   label: 'รหัสนักศึกษา',    sort: true  },
+  { key: 'name',         label: 'ชื่อ-นามสกุล',    sort: true  },
+  { key: 'email',        label: 'อีเมล',             sort: true  },
+  { key: 'role',         label: 'Role',              sort: true  },
+  { key: 'degree_level', label: 'ระดับ',             sort: true  },
+  { key: null,           label: 'อาจารย์ที่ปรึกษา',  sort: false },
+  { key: 'department',   label: 'สาขาวิชา',          sort: true  },
+  { key: 'doc_count',    label: 'เอกสาร',            sort: true  },
+  { key: 'is_active',    label: 'สถานะ',             sort: true  },
+  { key: null,           label: '',                   sort: false },
+]
 
 const roleLabel = {
   student:   'นักศึกษา',
   advisor:   'อาจารย์',
   staff:     'เจ้าหน้าที่',
   admin:     'ผู้ดูแลระบบ',
+  executive: 'ผู้บริหาร',
 }
 const roleColor = {
-  student: 'bg-blue-50 text-blue-700 border border-blue-200',
-  advisor: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  staff:   'bg-orange-50 text-orange-700 border border-orange-200',
-  admin:   'bg-purple-50 text-purple-700 border border-purple-200',
+  student:   'bg-blue-50 text-blue-700 border border-blue-200',
+  advisor:   'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  staff:     'bg-orange-50 text-orange-700 border border-orange-200',
+  admin:     'bg-purple-50 text-purple-700 border border-purple-200',
+  executive: 'bg-teal-50 text-teal-700 border border-teal-200',
 }
 const degreeLabel = { bachelor: 'ป.ตรี', master: 'ป.โท', doctoral: 'ป.เอก' }
 const degreeColor = {
@@ -34,6 +80,8 @@ function UserModal({ user, advisors, onClose, onSaved }) {
     degree_level: user?.degree_level || 'bachelor',
   })
   const [loading, setLoading] = useState(false)
+  const isStudent = form.role === 'student'
+  const deptOptions = isStudent ? (DEPARTMENTS_BY_DEGREE[form.degree_level] || []) : ALL_DEPARTMENTS
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -70,6 +118,7 @@ function UserModal({ user, advisors, onClose, onSaved }) {
               onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
               placeholder="กรอกชื่อ-นามสกุล" required />
           </div>
+
           {!isEdit && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">อีเมล (@kmutt.ac.th)</label>
@@ -79,24 +128,29 @@ function UserModal({ user, advisors, onClose, onSaved }) {
             </div>
           )}
 
-          {/* Role */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Role</label>
             <select className="input-field" value={form.role}
-              onChange={e => setForm(p => ({ ...p, role: e.target.value, advisor_id: '', degree_level: e.target.value === 'student' ? 'bachelor' : '' }))}>
+              onChange={e => setForm(p => ({
+                ...p,
+                role:         e.target.value,
+                advisor_id:   '',
+                degree_level: e.target.value === 'student' ? 'bachelor' : '',
+                student_id:   e.target.value === 'student' ? p.student_id : '',
+              }))}>
               <option value="student">นักศึกษา</option>
               <option value="advisor">อาจารย์</option>
               <option value="staff">เจ้าหน้าที่</option>
+              <option value="executive">ผู้บริหาร</option>
               <option value="admin">ผู้ดูแลระบบ</option>
             </select>
           </div>
 
-          {/* ระดับการศึกษา — เฉพาะนักศึกษา */}
-          {form.role === 'student' && (
+          {isStudent && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">ระดับการศึกษา</label>
               <select className="input-field" value={form.degree_level}
-                onChange={e => setForm(p => ({ ...p, degree_level: e.target.value }))}>
+                onChange={e => setForm(p => ({ ...p, degree_level: e.target.value, department: '' }))}>
                 <option value="bachelor">ปริญญาตรี (ป.ตรี)</option>
                 <option value="master">ปริญญาโท (ป.โท)</option>
                 <option value="doctoral">ปริญญาเอก (ป.เอก)</option>
@@ -104,18 +158,16 @@ function UserModal({ user, advisors, onClose, onSaved }) {
             </div>
           )}
 
-          {/* รหัสนักศึกษา — เฉพาะนักศึกษา */}
-          {form.role === 'student' && (
+          {isStudent && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">รหัสนักศึกษา</label>
               <input className="input-field font-mono" value={form.student_id}
                 onChange={e => setForm(p => ({ ...p, student_id: e.target.value }))}
-                placeholder="เช่น 65010500XXX" />
+                placeholder="เช่น 66080502xxx" />
             </div>
           )}
 
-          {/* อาจารย์ที่ปรึกษา — เฉพาะนักศึกษา */}
-          {form.role === 'student' && (
+          {isStudent && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">อาจารย์ที่ปรึกษา</label>
               <select className="input-field" value={form.advisor_id}
@@ -133,14 +185,7 @@ function UserModal({ user, advisors, onClose, onSaved }) {
             <select className="input-field" value={form.department}
               onChange={e => setForm(p => ({ ...p, department: e.target.value }))}>
               <option value="">-- เลือกสาขาวิชา --</option>
-              <option value="สำนักงานคณบดี">สำนักงานคณบดี</option>
-              <option value="ครุศาสตร์เครื่องกล">ครุศาสตร์เครื่องกล</option>
-              <option value="ครุศาสตร์โยธา">ครุศาสตร์โยธา</option>
-              <option value="ครุศาสตร์ไฟฟ้า">ครุศาสตร์ไฟฟ้า</option>
-              <option value="ครุศาสตร์อุตสาหการ">ครุศาสตร์อุตสาหการ</option>
-              <option value="เทคโนโลยีและสื่อสารการศึกษา">เทคโนโลยีและสื่อสารการศึกษา</option>
-              <option value="เทคโนโลยีการพิมพ์และบรรจุภัณฑ์">เทคโนโลยีการพิมพ์และบรรจุภัณฑ์</option>
-              <option value="คอมพิวเตอร์และเทคโนโลยีสารสนเทศ">คอมพิวเตอร์และเทคโนโลยีสารสนเทศ</option>
+              {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
 
@@ -158,7 +203,7 @@ function UserModal({ user, advisors, onClose, onSaved }) {
   )
 }
 
-// ─── Modal: Import Excel ────────────────────────────────────────────────────
+// ─── Modal: Import CSV ──────────────────────────────────────────────────────
 function ImportModal({ advisors, onClose, onSaved }) {
   const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(false)
@@ -169,16 +214,27 @@ function ImportModal({ advisors, onClose, onSaved }) {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (ev) => {
-      const text = ev.target.result
-      const lines = text.trim().split('\n').slice(1)
-      const parsed = lines.map(line => {
-        const [name, email, role, advisor_email, department, degree_level] = line.split(',').map(s => s.trim().replace(/"/g, ''))
-        return { name, email, role, advisor_email, department, degree_level }
+      const data = new Uint8Array(ev.target.result)
+      const workbook = XLSX.read(data, { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+      if (allRows.length < 2) { setRows([]); return }
+      const parsed = allRows.slice(1).map(cols => {
+        const [name, email, role, student_id, advisor_email, department, degree_level] = cols
+        return {
+          name:          String(name          || '').trim(),
+          email:         String(email         || '').trim(),
+          role:          String(role          || '').trim(),
+          student_id:    String(student_id    || '').trim(),
+          advisor_email: String(advisor_email || '').trim(),
+          department:    String(department    || '').trim(),
+          degree_level:  String(degree_level  || '').trim(),
+        }
       }).filter(r => r.name && r.email)
       setRows(parsed)
       setErrors([])
     }
-    reader.readAsText(file, 'UTF-8')
+    reader.readAsArrayBuffer(file)
   }
 
   const handleImport = async () => {
@@ -188,7 +244,8 @@ function ImportModal({ advisors, onClose, onSaved }) {
         name:         r.name,
         email:        r.email,
         role:         r.role || 'student',
-        department:   r.department,
+        department:   r.department || null,
+        student_id:   r.student_id || null,
         degree_level: r.degree_level || (r.role === 'student' ? 'bachelor' : null),
         advisor_id:   advisors.find(a => a.email === r.advisor_email)?.user_id || null,
       }))
@@ -201,12 +258,39 @@ function ImportModal({ advisors, onClose, onSaved }) {
     } finally { setLoading(false) }
   }
 
-  const downloadTemplate = () => {
-    const csv = 'name,email,role,advisor_email,department,degree_level\nชื่อตัวอย่าง,student@kmutt.ac.th,student,advisor@kmutt.ac.th,ครุศาสตร์เครื่องกล,bachelor\nอาจารย์ตัวอย่าง,advisor@kmutt.ac.th,advisor,,ครุศาสตร์เครื่องกล,\nเจ้าหน้าที่ตัวอย่าง,staff@kmutt.ac.th,staff,,สำนักงานคณบดี,'
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a'); a.href = url
-    a.download = 'FIET-IRIS_user_template.csv'; a.click()
+  const downloadTemplate = async () => {
+    const workbook  = new ExcelJS.Workbook()
+    const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
+    worksheet.columns = [
+      { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
+      { width: 30 }, { width: 30 }, { width: 18 },
+    ]
+    const headerRow = worksheet.addRow([
+      'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
+      'อีเมลอาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา',
+    ])
+    headerRow.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF42B5E1' } }
+      cell.font = { name: 'TH Sarabun New', bold: true, color: { argb: 'FFFFFFFF' }, size: 14 }
+      cell.alignment = { vertical: 'middle', horizontal: 'center' }
+    })
+    const examples = [
+      ['ชื่อนักศึกษาตัวอย่าง', 'student@kmutt.ac.th', 'student', '66080502xxx', 'advisor@kmutt.ac.th', 'ครุศาสตร์ไฟฟ้า', 'bachelor'],
+      ['อาจารย์ตัวอย่าง',      'advisor@kmutt.ac.th', 'advisor', '',             '',                    'ครุศาสตร์ไฟฟ้า', ''],
+      ['เจ้าหน้าที่ตัวอย่าง',  'staff@kmutt.ac.th',   'staff',   '',             '',                    'สำนักงานคณบดี',  ''],
+    ]
+    examples.forEach(ex => {
+      const row = worksheet.addRow(ex)
+      row.eachCell({ includeEmpty: true }, cell => {
+        cell.font      = { name: 'TH Sarabun New', size: 14 }
+        cell.alignment = { vertical: 'middle' }
+      })
+    })
+    const buffer = await workbook.xlsx.writeBuffer()
+    const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url    = URL.createObjectURL(blob)
+    const a      = document.createElement('a')
+    a.href = url; a.download = 'FIET-IRIS_user_template.xlsx'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -215,17 +299,25 @@ function ImportModal({ advisors, onClose, onSaved }) {
       style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-slate-800">นำเข้าผู้ใช้จาก Excel/CSV</h2>
+          <h2 className="text-base font-semibold text-slate-800">นำเข้าผู้ใช้จาก Excel</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
         </div>
         <div className="p-6 space-y-4">
           <button onClick={downloadTemplate}
             className="w-full py-2 rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 hover:border-fiet-blue hover:text-fiet-blue transition-all">
-            ⬇ ดาวน์โหลด Template CSV (รองรับ degree_level)
+            ⬇ ดาวน์โหลด Template Excel
           </button>
+
+          <div className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2 space-y-0.5">
+            <p className="font-semibold text-slate-500">คอลัมน์ที่รองรับ (ตามลำดับ):</p>
+            <p>ชื่อ-นามสกุล · อีเมล · บทบาท · รหัสนักศึกษา · อีเมลอาจารย์ที่ปรึกษา · สาขาวิชา · ระดับการศึกษา</p>
+            <p>• บทบาท: student / advisor / staff / executive / admin</p>
+            <p>• ระดับการศึกษา: bachelor / master / doctoral (สำหรับนักศึกษาเท่านั้น)</p>
+          </div>
+
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">อัปโหลดไฟล์ CSV</label>
-            <input type="file" accept=".csv" onChange={handleFile}
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">อัปโหลดไฟล์ Excel</label>
+            <input type="file" accept=".xlsx,.xls" onChange={handleFile}
               className="block w-full text-sm text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-slate-100 file:text-slate-600 hover:file:bg-slate-200" />
           </div>
 
@@ -239,7 +331,10 @@ function ImportModal({ advisors, onClose, onSaved }) {
                   <div key={i} className="px-4 py-2 flex items-center justify-between text-sm">
                     <div>
                       <p className="font-medium text-slate-700">{r.name}</p>
-                      <p className="text-xs text-slate-400">{r.email}</p>
+                      <p className="text-xs text-slate-400">
+                        {r.email}
+                        {r.student_id && <span className="font-mono ml-1">({r.student_id})</span>}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor[r.role] || roleColor.student}`}>
@@ -280,31 +375,89 @@ function ImportModal({ advisors, onClose, onSaved }) {
   )
 }
 
+// ─── Modal: ยืนยันลบ ────────────────────────────────────────────────────────
+function DeleteConfirmModal({ users, onClose, onConfirm, loading }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-800">ยืนยันการลบผู้ใช้</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-slate-600">
+            จะลบผู้ใช้ <strong className="text-red-600">{users.length} คน</strong> ต่อไปนี้ออกจากระบบถาวร:
+          </p>
+          <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 rounded-lg border border-slate-200">
+            {users.map(u => (
+              <div key={u.user_id} className="px-3 py-2 flex items-center justify-between text-sm">
+                <div>
+                  <p className="font-medium text-slate-700">{u.name}</p>
+                  <p className="text-xs text-slate-400">{u.email}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor[u.role] || 'bg-slate-100 text-slate-500'}`}>
+                  {roleLabel[u.role] || u.role}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+            <p className="text-xs text-amber-700">⚠️ ผู้ใช้ที่มีเอกสารในระบบจะไม่ถูกลบ กรุณาลบเอกสารออกก่อน</p>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
+            <button onClick={onConfirm} disabled={loading}
+              className="flex-1 py-2 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-all disabled:opacity-60">
+              {loading ? 'กำลังลบ...' : `ยืนยันลบ ${users.length} คน`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function AdminUsersPage() {
-  const [users, setUsers]           = useState([])
-  const [advisors, setAdvisors]     = useState([])
-  const [total, setTotal]           = useState(0)
-  const [loading, setLoading]       = useState(true)
-  const [search, setSearch]         = useState('')
-  const [roleFilter, setRoleFilter] = useState('')
-  const [modal, setModal]           = useState(null)
-  const [selected, setSelected]     = useState(null)
+  const [users, setUsers]               = useState([])
+  const [advisors, setAdvisors]         = useState([])
+  const [total, setTotal]               = useState(0)
+  const [loading, setLoading]           = useState(true)
+  const [search, setSearch]             = useState('')
+  const [roleFilter, setRoleFilter]     = useState('')
+  const [deptFilter, setDeptFilter]     = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [degreeFilter, setDegreeFilter] = useState('')
+  const [sortBy, setSortBy]             = useState('created_at')
+  const [sortDir, setSortDir]           = useState('desc')
+  const [page, setPage]                 = useState(1)
+  const [modal, setModal]               = useState(null)
+  const [selected, setSelected]         = useState(null)
+  const [selectedIds, setSelectedIds]   = useState(new Set())
+  const [pendingDelete, setPendingDelete] = useState(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await userService.getAll({ search, role: roleFilter })
+      const { data } = await userService.getAll({
+        search, role: roleFilter, department: deptFilter,
+        status: statusFilter, degree_level: degreeFilter,
+        sortBy, sortDir, page, limit: LIMIT,
+      })
       setUsers(data.users || [])
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [search, roleFilter])
+  }, [search, roleFilter, deptFilter, statusFilter, degreeFilter, sortBy, sortDir, page])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
+
   useEffect(() => {
-    userService.getAll({ role: 'advisor' })
-      .then(r => setAdvisors(r.data?.users || []))
+    userService.getAdvisors()
+      .then(r => setAdvisors(r.data?.advisors || []))
       .catch(() => {})
   }, [])
 
@@ -324,17 +477,125 @@ export default function AdminUsersPage() {
     } catch { toast.error('เกิดข้อผิดพลาด') }
   }
 
-  const exportCSV = () => {
-    const header = 'ชื่อ,อีเมล,Role,ระดับการศึกษา,สาขาวิชา,สถานะ,วันที่สร้าง'
-    const rows = users.map(u =>
-      `"${u.name}","${u.email}","${roleLabel[u.role] || u.role}","${degreeLabel[u.degree_level] || ''}","${u.department || ''}","${u.is_active ? 'ใช้งาน' : 'ระงับ'}","${new Date(u.created_at).toLocaleDateString('th-TH')}"`
-    )
-    const csv  = [header, ...rows].join('\n')
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a'); a.href = url
-    a.download = 'FIET-IRIS_users.csv'; a.click()
-    URL.revokeObjectURL(url)
+  const handleBulkDelete = async () => {
+    if (!pendingDelete?.length) return
+    setDeleteLoading(true)
+    try {
+      const ids = pendingDelete.map(u => u.user_id)
+      const { data } = await userService.bulkDelete(ids)
+      toast.success(data.message)
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        ids.forEach(id => next.delete(id))
+        return next
+      })
+      setPendingDelete(null)
+      setModal(null)
+      fetchUsers()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+    } finally { setDeleteLoading(false) }
+  }
+
+  const handleBulkToggle = async (activate) => {
+    try {
+      const ids = Array.from(selectedIds)
+      const { data } = await userService.bulkToggle(ids, activate)
+      toast.success(data.message)
+      setSelectedIds(new Set())
+      fetchUsers()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+    }
+  }
+
+  const exportExcel = async () => {
+    setExportLoading(true)
+    try {
+      const { data } = await userService.getAll({
+        search, role: roleFilter, department: deptFilter,
+        status: statusFilter, degree_level: degreeFilter,
+        sortBy, sortDir, limit: 9999, page: 1,
+      })
+      const all = data.users || []
+      if (all.length === 0) { toast('ไม่มีข้อมูลที่จะ Export'); return }
+
+      const workbook  = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
+      worksheet.columns = [
+        { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
+        { width: 25 }, { width: 30 }, { width: 18 }, { width: 12 }, { width: 15 },
+      ]
+      const headerRow = worksheet.addRow([
+        'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
+        'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา', 'สถานะ', 'วันที่สร้าง',
+      ])
+      headerRow.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF42B5E1' } }
+        cell.font = { name: 'TH Sarabun New', bold: true, color: { argb: 'FFFFFFFF' }, size: 14 }
+        cell.alignment = { vertical: 'middle', horizontal: 'center' }
+      })
+      all.forEach(u => {
+        const row = worksheet.addRow([
+          u.name,
+          u.email,
+          roleLabel[u.role]         || u.role,
+          u.student_id              || '',
+          u.advisor_name            || '',
+          u.department              || '',
+          degreeLabel[u.degree_level] || '',
+          u.is_active ? 'ใช้งาน' : 'ระงับ',
+          new Date(u.created_at).toLocaleDateString('th-TH'),
+        ])
+        row.eachCell({ includeEmpty: true }, cell => {
+          cell.font      = { name: 'TH Sarabun New', size: 14 }
+          cell.alignment = { vertical: 'middle' }
+        })
+      })
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url    = URL.createObjectURL(blob)
+      const a      = document.createElement('a')
+      a.href = url; a.download = `FIET-IRIS_users_${new Date().toISOString().slice(0, 10)}.xlsx`; a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`Export ${all.length} รายการสำเร็จ`)
+    } catch { toast.error('Export ล้มเหลว') }
+    finally { setExportLoading(false) }
+  }
+
+  const handleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(col)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
+
+  const totalPages    = Math.ceil(total / LIMIT)
+  const allSelected   = users.length > 0 && users.every(u => selectedIds.has(u.user_id))
+  const someSelected  = users.some(u => selectedIds.has(u.user_id))
+  const selectedUsers = users.filter(u => selectedIds.has(u.user_id))
+
+  const toggleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(prev => new Set([...prev, ...users.map(u => u.user_id)]))
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        users.forEach(u => next.delete(u.user_id))
+        return next
+      })
+    }
+  }
+
+  const toggleSelectOne = (userId, checked) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      checked ? next.add(userId) : next.delete(userId)
+      return next
+    })
   }
 
   return (
@@ -348,9 +609,9 @@ export default function AdminUsersPage() {
           <p className="text-slate-400 text-sm mt-0.5">ทั้งหมด {total} บัญชี</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={exportCSV}
-            className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all">
-            ⬇ Export
+          <button onClick={exportExcel} disabled={exportLoading}
+            className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-60">
+            {exportLoading ? 'กำลัง Export...' : '⬇ Export'}
           </button>
           <button onClick={() => setModal('import')}
             className="px-3 py-2 rounded-lg border text-sm font-medium transition-all"
@@ -366,40 +627,109 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <input className="input-field w-full sm:max-w-xs"
           placeholder="ค้นหาชื่อ อีเมล หรือรหัสนักศึกษา..."
-          value={search} onChange={e => setSearch(e.target.value)} />
-        <select className="input-field w-full sm:max-w-[160px]" value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}>
+          value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
+        <select className="input-field w-full sm:w-auto" value={roleFilter}
+          onChange={e => { setRoleFilter(e.target.value); setPage(1) }}>
           <option value="">ทุก Role</option>
           <option value="student">นักศึกษา</option>
           <option value="advisor">อาจารย์</option>
           <option value="staff">เจ้าหน้าที่</option>
+          <option value="executive">ผู้บริหาร</option>
           <option value="admin">ผู้ดูแลระบบ</option>
         </select>
+        <select className="input-field w-full sm:w-auto" value={degreeFilter}
+          onChange={e => { setDegreeFilter(e.target.value); setDeptFilter(''); setPage(1) }}>
+          <option value="">ทุกระดับ</option>
+          <option value="bachelor">ป.ตรี</option>
+          <option value="master">ป.โท</option>
+          <option value="doctoral">ป.เอก</option>
+        </select>
+        <select className="input-field w-full sm:w-auto" value={deptFilter}
+          onChange={e => { setDeptFilter(e.target.value); setPage(1) }}>
+          <option value="">ทุกสาขาวิชา</option>
+          {(degreeFilter ? DEPARTMENTS_BY_DEGREE[degreeFilter] || [] : ALL_DEPARTMENTS).map(d => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+        <select className="input-field w-full sm:w-auto" value={statusFilter}
+          onChange={e => { setStatusFilter(e.target.value); setPage(1) }}>
+          <option value="">ทุกสถานะ</option>
+          <option value="active">ใช้งาน</option>
+          <option value="inactive">ระงับ</option>
+        </select>
       </div>
+
+      {/* Bulk Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-800 text-white rounded-xl">
+          <span className="text-sm font-medium">เลือกแล้ว {selectedIds.size} คน</span>
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={() => handleBulkToggle(true)}
+              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-xs font-medium transition-colors">
+              เปิดใช้งาน
+            </button>
+            <button onClick={() => handleBulkToggle(false)}
+              className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-xs font-medium transition-colors">
+              ระงับ
+            </button>
+            <button onClick={() => { setPendingDelete(selectedUsers); setModal('delete') }}
+              className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-xs font-medium transition-colors">
+              ลบที่เลือก
+            </button>
+            <button onClick={() => setSelectedIds(new Set())}
+              className="text-xs text-slate-300 hover:text-white px-2">
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: '960px' }}>
+          <table className="w-full text-sm" style={{ minWidth: '1020px' }}>
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                {['รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'อีเมล', 'Role', 'ระดับ', 'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'เอกสาร', 'สถานะ', ''].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                    {h}
+                <th className="px-4 py-3 w-10">
+                  <input type="checkbox"
+                    checked={allSelected}
+                    ref={el => { if (el) el.indeterminate = someSelected && !allSelected }}
+                    onChange={toggleSelectAll}
+                    className="rounded border-slate-300 cursor-pointer"
+                  />
+                </th>
+                {COLUMNS.map((col, i) => (
+                  <th key={i}
+                    onClick={() => col.sort && col.key && handleSort(col.key)}
+                    className={`text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap ${col.sort && col.key ? 'cursor-pointer hover:text-slate-700 select-none' : ''}`}>
+                    {col.label}
+                    {col.sort && col.key && (
+                      <span className="ml-1" style={sortBy === col.key ? { color: '#42b5e1' } : { color: '#cbd5e1' }}>
+                        {sortBy === col.key ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+                      </span>
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
               ) : users.map(u => (
-                <tr key={u.user_id} className={`hover:bg-slate-50 transition-colors ${!u.is_active ? 'opacity-50' : ''}`}>
+                <tr key={u.user_id}
+                  className={`hover:bg-slate-50 transition-colors ${!u.is_active ? 'opacity-50' : ''} ${selectedIds.has(u.user_id) ? 'bg-blue-50/40' : ''}`}>
+                  <td className="px-4 py-3">
+                    <input type="checkbox"
+                      checked={selectedIds.has(u.user_id)}
+                      onChange={e => toggleSelectOne(u.user_id, e.target.checked)}
+                      className="rounded border-slate-300 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-slate-500 text-xs font-mono whitespace-nowrap">{u.student_id || '—'}</td>
                   <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{u.name}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{u.email}</td>
@@ -445,6 +775,11 @@ export default function AdminUsersPage() {
                         className="text-xs text-slate-500 hover:text-amber-600 transition-colors font-medium">
                         รีเซ็ต
                       </button>
+                      <span className="text-slate-200">|</span>
+                      <button onClick={() => { setPendingDelete([u]); setModal('delete') }}
+                        className="text-xs text-slate-500 hover:text-red-600 transition-colors font-medium">
+                        ลบ
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -452,6 +787,26 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
+            <p className="text-xs text-slate-500">
+              แสดง {Math.min((page - 1) * LIMIT + 1, total)}–{Math.min(page * LIMIT, total)} จาก {total} รายการ
+            </p>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage(p => p - 1)} disabled={page === 1}
+                className="px-2.5 py-1 rounded-lg text-sm text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                ‹
+              </button>
+              <span className="px-3 text-sm text-slate-600 tabular-nums">{page} / {totalPages}</span>
+              <button onClick={() => setPage(p => p + 1)} disabled={page >= totalPages}
+                className="px-2.5 py-1 rounded-lg text-sm text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+                ›
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {(modal === 'add' || modal === 'edit') && (
@@ -467,6 +822,14 @@ export default function AdminUsersPage() {
           advisors={advisors}
           onClose={() => setModal(null)}
           onSaved={fetchUsers}
+        />
+      )}
+      {modal === 'delete' && pendingDelete && (
+        <DeleteConfirmModal
+          users={pendingDelete}
+          onClose={() => { setModal(null); setPendingDelete(null) }}
+          onConfirm={handleBulkDelete}
+          loading={deleteLoading}
         />
       )}
     </div>

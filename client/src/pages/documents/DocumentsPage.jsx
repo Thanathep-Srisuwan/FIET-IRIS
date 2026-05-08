@@ -550,28 +550,27 @@ const handleExport = async () => {
         { width: 14 }, { width: 11 }, { width: 12 },
       ]
 
-      const FNT  = 'Calibri'
+      const FNT  = 'TH Sarabun New'
       const fFill   = (c) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } })
       const fBorder = (s = 'thin') => ({ top: { style: s }, bottom: { style: s }, left: { style: s }, right: { style: s } })
       const fillRow = (row, argb) => { for (let c = 1; c <= N; c++) row.getCell(c).fill = fFill(argb) }
 
       // ─ Document header (rows 1-3)
       const docHeaders = [
-        { left: 'ระบบ IRIS', center: 'มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี', right: `ที่พิมพ์: ${dateStr}`, h: 26, bg: 'FF0D2D3E', cSz: 12 },
-        { left: '',          center: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',     right: '',                  h: 20, bg: 'FF1A6EA5', cSz: 11 },
-        { left: '',          center: 'รายงานเอกสารใบประกาศ — ระบบ IRIS',        right: '',                  h: 24, bg: 'FF1A6EA5', cSz: 13 },
+        { left: 'ระบบ IRIS', center: 'มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี', right: `ที่พิมพ์: ${dateStr}`, h: 26, cSz: 12 },
+        { left: '',          center: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',     right: '',                  h: 20, cSz: 11 },
+        { left: '',          center: 'รายงานเอกสารใบประกาศ — ระบบ IRIS',        right: '',                  h: 24, cSz: 13 },
       ]
-      docHeaders.forEach(({ left, center, right, h, bg, cSz }, ri) => {
+      docHeaders.forEach(({ left, center, right, h, cSz }, ri) => {
         const row = ws.addRow([left, '', '', center, '', '', '', '', '', right, '', ''])
         row.height = h
         const rn = ri + 1
         ws.mergeCells(rn, 1, rn, 3)
         ws.mergeCells(rn, 4, rn, 9)
         ws.mergeCells(rn, 10, rn, 12)
-        fillRow(row, bg)
-        row.getCell(1).style  = { font: { name: FNT, bold: true, size: 11, color: { argb: 'FFFFFFFF' } }, fill: fFill(bg), alignment: { horizontal: 'left',   vertical: 'middle' } }
-        row.getCell(4).style  = { font: { name: FNT, bold: true, size: cSz, color: { argb: 'FFFFFFFF' } }, fill: fFill(bg), alignment: { horizontal: 'center', vertical: 'middle' } }
-        row.getCell(10).style = { font: { name: FNT, size: 9, color: { argb: 'FFD6EAF8' } },              fill: fFill(bg), alignment: { horizontal: 'right',  vertical: 'middle' } }
+        row.getCell(1).style  = { font: { name: FNT, bold: true, size: 11, color: { argb: 'FF1B2631' } }, alignment: { horizontal: 'left',   vertical: 'middle' } }
+        row.getCell(4).style  = { font: { name: FNT, bold: true, size: cSz, color: { argb: 'FF1B2631' } }, alignment: { horizontal: 'center', vertical: 'middle' } }
+        row.getCell(10).style = { font: { name: FNT, size: 9,    color: { argb: 'FF64748B' } },           alignment: { horizontal: 'right',  vertical: 'middle' } }
       })
 
       // ─ Info row (row 4)
@@ -579,9 +578,8 @@ const handleExport = async () => {
       r4.height = 18
       ws.mergeCells(r4.number, 1, r4.number, 3)
       ws.mergeCells(r4.number, 4, r4.number, 12)
-      fillRow(r4, 'FFD6EAF8')
-      r4.getCell(1).style = { font: { name: FNT, size: 10, color: { argb: 'FF0D2D3E' } },             fill: fFill('FFD6EAF8'), alignment: { horizontal: 'left', vertical: 'middle' } }
-      r4.getCell(4).style = { font: { name: FNT, size: 10, bold: true, color: { argb: 'FF0D2D3E' } }, fill: fFill('FFD6EAF8'), alignment: { horizontal: 'left', vertical: 'middle' } }
+      r4.getCell(1).style = { font: { name: FNT, size: 10, color: { argb: 'FF1B2631' } },             alignment: { horizontal: 'left', vertical: 'middle' } }
+      r4.getCell(4).style = { font: { name: FNT, size: 10, bold: true, color: { argb: 'FF1B2631' } }, alignment: { horizontal: 'left', vertical: 'middle' } }
 
       // ─ Spacer
       const spacer = ws.addRow(Array(N).fill(''))
@@ -1045,11 +1043,11 @@ export default function DocumentsPage() {
             {roleDisplay}
           </p>
           <h1 className="text-2xl font-bold text-slate-800">{pageTitle}</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          {/* <p className="text-slate-400 text-sm mt-0.5">
             {hasTabs
               ? `กลุ่มนี้ ${total.toLocaleString()} รายการ`
               : `ทั้งหมด ${total.toLocaleString()} รายการ`}
-          </p>
+          </p> */}
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {isAdmin && (

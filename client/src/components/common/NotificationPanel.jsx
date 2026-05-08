@@ -115,6 +115,7 @@ export default function NotificationPanel({ onCountChange }) {
   const [announcements, setAnnouncements] = useState([])
   const [loading, setLoading]       = useState(false)
   const [selectedAnn, setSelectedAnn] = useState(null)
+  const [badgeCount, setBadgeCount] = useState(0)
   const panelRef                    = useRef(null)
 
   useEffect(() => {
@@ -125,7 +126,9 @@ export default function NotificationPanel({ onCountChange }) {
       ]).then(([nRes, aRes]) => {
         const docUnread = Array.isArray(nRes.data) ? nRes.data.length : 0
         const annUnread = (aRes.data || []).filter(a => !a.is_read).length
-        onCountChange?.(docUnread + annUnread)
+        const total = docUnread + annUnread
+        setBadgeCount(total)
+        onCountChange?.(total)
       })
 
     loadCount()
@@ -145,7 +148,9 @@ export default function NotificationPanel({ onCountChange }) {
 
       const docUnread = (nRes.data || []).filter(n => !n.in_app_read).length
       const annUnread = (aRes.data || []).filter(a => !a.is_read).length
-      onCountChange?.(docUnread + annUnread)
+      const total = docUnread + annUnread
+      setBadgeCount(total)
+      onCountChange?.(total)
     } catch {}
     finally { setLoading(false) }
   }
@@ -168,7 +173,9 @@ export default function NotificationPanel({ onCountChange }) {
       setNotifs(prev => prev.map(n => n.notif_id === id ? { ...n, in_app_read: true } : n))
       const docUnread = notifs.filter(n => !n.in_app_read && n.notif_id !== id).length
       const annUnread = announcements.filter(a => !a.is_read).length
-      onCountChange?.(docUnread + annUnread)
+      const total = docUnread + annUnread
+      setBadgeCount(total)
+      onCountChange?.(total)
     } catch { toast.error('เกิดข้อผิดพลาด') }
   }
 
@@ -178,7 +185,9 @@ export default function NotificationPanel({ onCountChange }) {
       setAnnouncements(prev => prev.map(a => a.announcement_id === id ? { ...a, is_read: true } : a))
       const docUnread = notifs.filter(n => !n.in_app_read).length
       const annUnread = announcements.filter(a => !a.is_read && a.announcement_id !== id).length
-      onCountChange?.(docUnread + annUnread)
+      const total = docUnread + annUnread
+      setBadgeCount(total)
+      onCountChange?.(total)
     } catch { toast.error('เกิดข้อผิดพลาด') }
   }
 
@@ -196,6 +205,7 @@ export default function NotificationPanel({ onCountChange }) {
       ])
       setNotifs(prev => prev.map(n => ({ ...n, in_app_read: true })))
       setAnnouncements(prev => prev.map(a => ({ ...a, is_read: true })))
+      setBadgeCount(0)
       onCountChange?.(0)
       toast.success('อ่านทั้งหมดแล้ว')
     } catch { toast.error('เกิดข้อผิดพลาด') }
@@ -221,12 +231,12 @@ export default function NotificationPanel({ onCountChange }) {
           className="relative p-2 rounded-lg transition-colors hover:bg-slate-100"
         >
           <span className="text-xl">🔔</span>
-          {unreadCount > 0 && (
+          {badgeCount > 0 && (
             <span
               className="absolute -top-0.5 -right-0.5 w-5 h-5 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
               style={{ backgroundColor: '#f7924a' }}
             >
-              {unreadCount > 9 ? '9+' : unreadCount}
+              {badgeCount > 9 ? '9+' : badgeCount}
             </span>
           )}
         </button>

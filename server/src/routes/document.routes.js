@@ -8,6 +8,7 @@ const { requirePasswordChange } = require('../middlewares/validate')
 const {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
+  bulkRestoreDocuments, bulkPermanentDeleteDocuments,
   downloadFile, previewFile, getDocumentSummary,
 } = require('../controllers/document.controller')
 
@@ -41,10 +42,12 @@ const auth      = [authenticate, requirePasswordChange]
 const adminOnly = [authenticate, requirePasswordChange, authorize('admin')]
 
 // Static sub-routes (ต้องอยู่ก่อน /:id)
-router.get('/summary',            ...adminOnly, getDocumentSummary)
-router.get('/trash',              ...adminOnly, getTrashedDocuments)
-router.put('/:id/restore',        ...adminOnly, restoreDocument)
-router.delete('/:id/permanent',   ...adminOnly, permanentDeleteDocument)
+router.get('/summary',                      ...adminOnly, getDocumentSummary)
+router.get('/trash',                        ...adminOnly, getTrashedDocuments)
+router.put('/trash/bulk-restore',           ...adminOnly, bulkRestoreDocuments)
+router.delete('/trash/bulk-permanent',      ...adminOnly, bulkPermanentDeleteDocuments)
+router.put('/:id/restore',                  ...adminOnly, restoreDocument)
+router.delete('/:id/permanent',             ...adminOnly, permanentDeleteDocument)
 
 // Standard routes
 router.get('/',                              ...auth,      getDocuments)

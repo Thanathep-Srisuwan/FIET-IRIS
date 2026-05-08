@@ -2,10 +2,31 @@ import { useEffect, useState, useCallback } from 'react'
 import { executiveService } from '../../services/api'
 import toast from 'react-hot-toast'
 
-const BRANCHES = [
-  'ครุศาสตร์เครื่องกล','ครุศาสตร์โยธา','ครุศาสตร์ไฟฟ้า','ครุศาสตร์อุตสาหการ',
-  'เทคโนโลยีและสื่อสารการศึกษา','เทคโนโลยีการพิมพ์และบรรจุภัณฑ์','คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
-]
+const BRANCHES_BY_DEGREE = {
+  bachelor: [
+    'ครุศาสตร์โยธา',
+    'ครุศาสตร์เครื่องกล',
+    'ครุศาสตร์ไฟฟ้า',
+    'ครุศาสตร์อุตสาหการ',
+    'เทคโนโลยีการศึกษาและสื่อสารมวลชน',
+    'เทคโนโลยีการพิมพ์และบรรจุภัณฑ์',
+    'เทคโนโลยีอุตสาหกรรม',
+    'วิทยาการคอมพิวเตอร์ประยุกต์ – มัลติมีเดีย',
+  ],
+  master: [
+    'เทคโนโลยีการเรียนรู้และสื่อสารมวลชน',
+    'วิศวกรรมเครื่องกล',
+    'วิศวกรรมไฟฟ้า',
+    'วิศวกรรมโยธา',
+    'วิศวกรรมอุตสาหการ',
+    'เทคโนโลยีบรรจุภัณฑ์และนวัตกรรมการพิมพ์',
+    'คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
+  ],
+  doctoral: [
+    'นวัตกรรมการเรียนรู้และเทคโนโลยี',
+  ],
+}
+const ALL_BRANCHES = Object.values(BRANCHES_BY_DEGREE).flat()
 const statusColor = {
   active:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
   expiring_soon: 'bg-amber-50 text-amber-700 border border-amber-200',
@@ -19,16 +40,17 @@ export default function ExecutiveDocumentsPage() {
   const [search, setSearch]   = useState('')
   const [docType, setDocType] = useState('')
   const [status, setStatus]   = useState('')
+  const [degree, setDegree]   = useState('')
   const [branch, setBranch]   = useState('')
 
   const fetchDocs = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await executiveService.getDocuments({ search, doc_type: docType, status, branch })
+      const { data } = await executiveService.getDocuments({ search, doc_type: docType, status, degree_level: degree, branch })
       setDocs(data.documents || [])
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [search, docType, status, branch])
+  }, [search, docType, status, degree, branch])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
@@ -74,9 +96,18 @@ export default function ExecutiveDocumentsPage() {
           <option value="expiring_soon">ใกล้หมดอายุ</option>
           <option value="expired">หมดอายุ</option>
         </select>
+        <select className="input-field max-w-[140px]" value={degree}
+          onChange={e => { setDegree(e.target.value); setBranch('') }}>
+          <option value="">ทุกระดับ</option>
+          <option value="bachelor">ป.ตรี</option>
+          <option value="master">ป.โท</option>
+          <option value="doctoral">ป.เอก</option>
+        </select>
         <select className="input-field max-w-[220px]" value={branch} onChange={e => setBranch(e.target.value)}>
           <option value="">ทุกสาขา</option>
-          {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+          {(degree ? BRANCHES_BY_DEGREE[degree] || [] : ALL_BRANCHES).map(b => (
+            <option key={b} value={b}>{b}</option>
+          ))}
         </select>
       </div>
 

@@ -48,4 +48,33 @@ const expiryWarningTemplate = ({ name, docTitle, docType, expireDate, daysRemain
   `,
 })
 
-module.exports = { sendMail, expiryWarningTemplate }
+// Template: แจ้งเตือนเอกสารถูกลบถาวร
+const permanentDeleteTemplate = ({ name, docTitle, docType, reason, deletedBy }) => ({
+  subject: `[FIET-IRIS] เอกสาร ${docType} ของท่านถูกลบออกจากระบบถาวรแล้ว`,
+  html: `
+    <div style="font-family: sans-serif; max-width: 600px; margin: auto;">
+      <h2 style="color: #dc2626;">🗑️ แจ้งเตือน: เอกสารถูกลบถาวร</h2>
+      <p>เรียน คุณ${name}</p>
+      <p>เอกสาร <strong>${docType}</strong> ชื่อ <strong>"${docTitle}"</strong>
+         ถูกลบออกจากระบบถาวรแล้ว และ<strong>ไม่สามารถกู้คืนได้อีกต่อไป</strong></p>
+      <table style="border-collapse:collapse;width:100%;margin:16px 0;">
+        <tr style="background:#f8fafc;">
+          <td style="padding:8px 12px;font-size:13px;color:#64748b;width:120px;">ดำเนินการโดย</td>
+          <td style="padding:8px 12px;font-size:13px;color:#1e293b;">${deletedBy}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;font-size:13px;color:#64748b;">เหตุผล</td>
+          <td style="padding:8px 12px;font-size:13px;color:#1e293b;">${reason}</td>
+        </tr>
+      </table>
+      <p style="color:#6b7280;font-size:13px;">
+        หากคุณมีข้อสงสัยเกี่ยวกับการลบเอกสารนี้ กรุณาติดต่อผู้ดูแลระบบ
+      </p>
+      <p style="color:#6b7280;font-size:12px;margin-top:24px;">
+        อีเมลนี้ส่งโดยอัตโนมัติจากระบบ FIET-IRIS คณะ FIET มจธ.
+      </p>
+    </div>
+  `,
+})
+
+module.exports = { sendMail, expiryWarningTemplate, permanentDeleteTemplate }

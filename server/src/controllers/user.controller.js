@@ -16,7 +16,7 @@ const ensureColumns = async (pool) => {
 // GET /api/users
 const getUsers = async (req, res) => {
   try {
-    const { role, search, page = 1, limit = 20 } = req.query
+    const { role, search, department, status, degree_level, sortBy = 'created_at', sortDir = 'desc', page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const pool = await getPool()
     await ensureColumns(pool)
@@ -32,6 +32,27 @@ const getUsers = async (req, res) => {
       where += ' AND (u.name LIKE @search OR u.email LIKE @search OR u.student_id LIKE @search)'
       inputs.push({ name: 'search', type: sql.NVarChar, value: `%${search}%` })
     }
+    if (department) {
+      where += ' AND u.department = @department'
+      inputs.push({ name: 'department', type: sql.NVarChar, value: department })
+    }
+    if (status === 'active') {
+      where += ' AND u.is_active = 1'
+    } else if (status === 'inactive') {
+      where += ' AND u.is_active = 0'
+    }
+    if (degree_level) {
+      where += ' AND u.degree_level = @degree_level'
+      inputs.push({ name: 'degree_level', type: sql.NVarChar, value: degree_level })
+    }
+
+    const SORT_COLS = {
+      name: 'u.name', student_id: 'u.student_id', email: 'u.email',
+      role: 'u.role', department: 'u.department', degree_level: 'u.degree_level',
+      is_active: 'u.is_active', created_at: 'u.created_at', doc_count: 'doc_count',
+    }
+    const orderCol = SORT_COLS[sortBy] || 'u.created_at'
+    const orderDir = sortDir === 'asc' ? 'ASC' : 'DESC'
 
     const req2 = pool.request()
     inputs.forEach(i => req2.input(i.name, i.type, i.value))
@@ -45,7 +66,7 @@ const getUsers = async (req, res) => {
       FROM dbo.USERS u
       LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
       ${where}
-      ORDER BY u.created_at DESC
+      ORDER BY ${orderCol} ${orderDir}
       OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
     `)
 
@@ -348,4 +369,71 @@ const getAdvisors = async (req, res) => {
   }
 }
 
-module.exports = { getUsers, searchUsers, createUser, updateUser, toggleUser, resetPassword, importUsers, getAdvisors }
+// DELETE /api/users/bulk
+const bulkDeleteUsers = async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'กรุณาเลือกผู้ใช้ที่ต้องการลบ' })
+
+    const pool = await getPool()
+    const placeholders = ids.map((_, i) => `@id${i}`).join(',')
+
+    const checkReq = pool.request()
+    ids.forEach((id, i) => checkReq.input(`id${i}`, sql.Int, id))
+    const docCheck = await checkReq.query(`
+      SELECT u.user_id, u.name
+      FROM dbo.USERS u
+      WHERE u.user_id IN (${placeholders})
+        AND EXISTS (
+          SELECT 1 FROM dbo.DOCUMENTS d
+          WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')
+        )
+    `)
+    if (docCheck.recordset.length > 0) {
+      const names = docCheck.recordset.map(r => r.name).join(', ')
+      return res.status(400).json({ message: `ไม่สามารถลบได้ ผู้ใช้ต่อไปนี้ยังมีเอกสารในระบบ: ${names}` })
+    }
+
+    const delReq = pool.request()
+    ids.forEach((id, i) => delReq.input(`id${i}`, sql.Int, id))
+    delReq.input('self_id', sql.Int, req.user.user_id)
+    const result = await delReq.query(`
+      DELETE FROM dbo.USERS WHERE user_id IN (${placeholders}) AND user_id != @self_id
+    `)
+
+    logger.info(`Bulk delete ${result.rowsAffected[0]} users by admin ${req.user.user_id}`)
+    res.json({ message: `ลบผู้ใช้ ${result.rowsAffected[0]} คนสำเร็จ`, deleted: result.rowsAffected[0] })
+  } catch (err) {
+    logger.error(`bulkDeleteUsers error: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PATCH /api/users/bulk/toggle
+const bulkToggleUsers = async (req, res) => {
+  try {
+    const { ids, is_active } = req.body
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'กรุณาเลือกผู้ใช้' })
+
+    const pool = await getPool()
+    const placeholders = ids.map((_, i) => `@id${i}`).join(',')
+    const req2 = pool.request()
+    ids.forEach((id, i) => req2.input(`id${i}`, sql.Int, id))
+    req2.input('is_active', sql.Bit, is_active ? 1 : 0)
+    req2.input('self_id', sql.Int, req.user.user_id)
+    const result = await req2.query(`
+      UPDATE dbo.USERS SET is_active=@is_active, updated_at=GETDATE()
+      WHERE user_id IN (${placeholders}) AND user_id != @self_id
+    `)
+
+    logger.info(`Bulk toggle ${result.rowsAffected[0]} users to ${is_active ? 'active' : 'inactive'} by admin ${req.user.user_id}`)
+    res.json({ message: `${is_active ? 'เปิด' : 'ปิด'}บัญชีผู้ใช้ ${result.rowsAffected[0]} คนสำเร็จ` })
+  } catch (err) {
+    logger.error(`bulkToggleUsers error: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+module.exports = { getUsers, searchUsers, createUser, updateUser, toggleUser, resetPassword, importUsers, getAdvisors, bulkDeleteUsers, bulkToggleUsers }

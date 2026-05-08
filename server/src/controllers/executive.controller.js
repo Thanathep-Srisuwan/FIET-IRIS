@@ -109,16 +109,17 @@ const getBranchSummary = async (req, res) => {
 // GET /api/executive/documents — ดูเอกสารทั้งคณะ (read-only)
 const getAllDocuments = async (req, res) => {
   try {
-    const { search, doc_type, status, branch, page = 1, limit = 20 } = req.query
+    const { search, doc_type, status, degree_level, branch, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const pool = await getPool()
     const r = pool.request()
 
     let where = "WHERE d.status != 'deleted'"
-    if (doc_type) { where += ' AND d.doc_type = @doc_type'; r.input('doc_type', sql.NVarChar, doc_type) }
-    if (status)   { where += ' AND d.status = @status';     r.input('status',   sql.NVarChar, status)   }
-    if (branch)   { where += ' AND u.department = @branch';     r.input('branch',   sql.NVarChar, branch)   }
-    if (search)   { where += ' AND (d.title LIKE @search OR u.name LIKE @search)'; r.input('search', sql.NVarChar, `%${search}%`) }
+    if (doc_type)     { where += ' AND d.doc_type = @doc_type';       r.input('doc_type',     sql.NVarChar, doc_type)     }
+    if (status)       { where += ' AND d.status = @status';           r.input('status',       sql.NVarChar, status)       }
+    if (degree_level) { where += ' AND u.degree_level = @degree_level'; r.input('degree_level', sql.NVarChar, degree_level) }
+    if (branch)       { where += ' AND u.department = @branch';       r.input('branch',       sql.NVarChar, branch)       }
+    if (search)       { where += ' AND (d.title LIKE @search OR u.name LIKE @search)'; r.input('search', sql.NVarChar, `%${search}%`) }
 
     const result = await r.query(`
       SELECT

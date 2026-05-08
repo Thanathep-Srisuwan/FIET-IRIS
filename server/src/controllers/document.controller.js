@@ -2,6 +2,7 @@ const path = require('path')
 const fs   = require('fs')
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
+const { sendMail, permanentDeleteTemplate } = require('../utils/mailer')
 
 const ensureNoExpireColumn = async (pool) => {
   await pool.request().query(`
@@ -42,6 +43,13 @@ const ensureTrashedColumns = async (pool) => {
       ADD CONSTRAINT CHK_DOCUMENTS_status
       CHECK (status IN ('active', 'expiring_soon', 'expired', 'deleted', 'trashed'))
     END
+  `)
+}
+
+const ensureTrashReasonColumn = async (pool) => {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='trash_reason')
+      ALTER TABLE dbo.DOCUMENTS ADD trash_reason NVARCHAR(500) NULL
   `)
 }
 
@@ -272,8 +280,10 @@ const deleteDocument = async (req, res) => {
   try {
     const { id } = req.params
     const { user_id } = req.user
+    const { reason } = req.body
     const pool = await getPool()
     await ensureTrashedColumns(pool)
+    await ensureTrashReasonColumn(pool)
 
     const result = await pool.request()
       .input('doc_id', sql.Int, id)
@@ -287,16 +297,20 @@ const deleteDocument = async (req, res) => {
     if (result.recordset.length === 0)
       return res.status(404).json({ message: 'ไม่พบเอกสาร หรือเอกสารอยู่ในถังขยะแล้ว' })
 
+    const trashReason = reason?.trim() || 'ลบโดยผู้ดูแลระบบ'
+
     await pool.request()
-      .input('doc_id',  sql.Int, id)
-      .input('user_id', sql.Int, user_id)
+      .input('doc_id',       sql.Int,      id)
+      .input('user_id',      sql.Int,      user_id)
+      .input('trash_reason', sql.NVarChar, trashReason)
       .query(`
         UPDATE dbo.DOCUMENTS
-        SET status='trashed', trashed_at=GETDATE(), trashed_by=@user_id, updated_at=GETDATE()
+        SET status='trashed', trashed_at=GETDATE(), trashed_by=@user_id,
+            trash_reason=@trash_reason, updated_at=GETDATE()
         WHERE doc_id=@doc_id
       `)
 
-    logger.info(`Document trashed: ${id} by admin ${user_id}`)
+    logger.info(`Document trashed: ${id} by admin ${user_id} reason="${trashReason}"`)
     res.json({ message: 'ย้ายเอกสารไปถังขยะสำเร็จ' })
   } catch (err) {
     logger.error(`deleteDocument: ${err.message}`)
@@ -307,23 +321,49 @@ const deleteDocument = async (req, res) => {
 // GET /api/documents/trash — admin only
 const getTrashedDocuments = async (req, res) => {
   try {
-    const { search, doc_type, page = 1, limit = 20 } = req.query
-    const offset = (page - 1) * limit
+    const { search, doc_type, degree_level, date_from, date_to, page = 1, limit = 20 } = req.query
+    const parsedPage  = Math.max(1, parseInt(page) || 1)
+    const parsedLimit = Math.min(200, Math.max(1, parseInt(limit) || 20))
+    const offset = (parsedPage - 1) * parsedLimit
     const pool = await getPool()
     await ensureTrashedColumns(pool)
+    await ensureTrashReasonColumn(pool)
 
-    const r = pool.request()
-    let where = "WHERE d.status = 'trashed'"
-    if (doc_type) { where += ' AND d.doc_type = @doc_type'; r.input('doc_type', sql.NVarChar, doc_type) }
-    if (search)   { where += ' AND (d.title LIKE @search OR u.name LIKE @search)'; r.input('search', sql.NVarChar, `%${search}%`) }
+    const buildWhere = (r) => {
+      let where = "WHERE d.status = 'trashed'"
+      if (doc_type)     { where += ' AND d.doc_type = @doc_type';    r.input('doc_type', sql.NVarChar, doc_type) }
+      if (search)       { where += ' AND (d.title LIKE @search OR u.name LIKE @search OR u.student_id LIKE @search)'; r.input('search', sql.NVarChar, `%${search}%`) }
+      if (degree_level) {
+        where += degree_level === 'bachelor'
+          ? ' AND (u.degree_level = @degree_level OR u.degree_level IS NULL)'
+          : ' AND u.degree_level = @degree_level'
+        r.input('degree_level', sql.NVarChar, degree_level)
+      }
+      if (date_from) { where += ' AND CAST(d.trashed_at AS DATE) >= @date_from'; r.input('date_from', sql.Date, date_from) }
+      if (date_to)   { where += ' AND CAST(d.trashed_at AS DATE) <= @date_to';   r.input('date_to',   sql.Date, date_to) }
+      return where
+    }
 
-    const result = await r.query(`
+    const countR = pool.request()
+    const where  = buildWhere(countR)
+    const countResult = await countR.query(`
+      SELECT COUNT(*) AS total
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      ${where}
+    `)
+
+    const dataR = pool.request()
+    buildWhere(dataR)
+    const result = await dataR.query(`
       SELECT
         d.doc_id, d.title, d.doc_type, d.description,
         d.issue_date, d.expire_date, d.no_expire, d.status, d.version,
-        d.trashed_at, d.trashed_by, d.created_at, d.project_category,
+        d.trashed_at, d.trashed_by, d.trash_reason, d.created_at, d.project_category,
+        DATEADD(DAY, 30, d.trashed_at) AS trash_expires_at,
+        DATEDIFF(DAY, CAST(GETDATE() AS DATE), CAST(DATEADD(DAY, 30, d.trashed_at) AS DATE)) AS days_until_purge,
         u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email,
-        u.student_id AS owner_student_id,
+        u.student_id AS owner_student_id, u.degree_level AS owner_degree_level,
         a.name AS advisor_name,
         tb.name AS trashed_by_name,
         (SELECT COUNT(*) FROM dbo.DOCUMENT_FILES f WHERE f.doc_id = d.doc_id) AS file_count
@@ -333,12 +373,127 @@ const getTrashedDocuments = async (req, res) => {
       LEFT JOIN dbo.USERS tb ON d.trashed_by = tb.user_id
       ${where}
       ORDER BY d.trashed_at DESC
-      OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
+      OFFSET ${offset} ROWS FETCH NEXT ${parsedLimit} ROWS ONLY
     `)
 
-    res.json({ documents: result.recordset, total: result.recordset.length, page: parseInt(page) })
+    res.json({
+      documents: result.recordset,
+      total: countResult.recordset[0].total,
+      page: parsedPage,
+      limit: parsedLimit,
+    })
   } catch (err) {
     logger.error(`getTrashedDocuments: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PUT /api/documents/trash/bulk-restore — admin only
+const bulkRestoreDocuments = async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'กรุณาระบุรายการเอกสาร' })
+
+    const pool = await getPool()
+    const paramNames = ids.map((_, i) => `@id${i}`).join(',')
+    const r = pool.request()
+    ids.forEach((id, i) => r.input(`id${i}`, sql.Int, parseInt(id)))
+
+    await r.query(`
+      UPDATE dbo.DOCUMENTS
+      SET
+        status = CASE
+          WHEN no_expire = 1 THEN 'active'
+          WHEN expire_date < CAST(GETDATE() AS DATE) THEN 'expired'
+          WHEN expire_date <= DATEADD(DAY, 90, CAST(GETDATE() AS DATE)) THEN 'expiring_soon'
+          ELSE 'active'
+        END,
+        trashed_at = NULL,
+        trashed_by = NULL,
+        updated_at = GETDATE()
+      WHERE doc_id IN (${paramNames}) AND status = 'trashed'
+    `)
+
+    logger.info(`Bulk restored: [${ids.join(',')}]`)
+    res.json({ message: `กู้คืนสำเร็จ ${ids.length} รายการ` })
+  } catch (err) {
+    logger.error(`bulkRestoreDocuments: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// DELETE /api/documents/trash/bulk-permanent — admin only
+const bulkPermanentDeleteDocuments = async (req, res) => {
+  try {
+    const { ids } = req.body
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'กรุณาระบุรายการเอกสาร' })
+
+    const pool = await getPool()
+    const { user_id } = req.user
+    const paramNames = ids.map((_, i) => `@id${i}`).join(',')
+
+    const docsR = pool.request()
+    ids.forEach((id, i) => docsR.input(`id${i}`, sql.Int, parseInt(id)))
+    const docsResult = await docsR.query(`
+      SELECT d.doc_id, d.title, d.doc_type, d.trash_reason,
+             u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      WHERE d.doc_id IN (${paramNames}) AND d.status = 'trashed'
+    `)
+
+    const adminResult = await pool.request()
+      .input('user_id', sql.Int, user_id)
+      .query('SELECT name FROM dbo.USERS WHERE user_id = @user_id')
+    const adminName = adminResult.recordset[0]?.name || 'ผู้ดูแลระบบ'
+
+    for (const doc of docsResult.recordset) {
+      const filesResult = await pool.request()
+        .input('doc_id', sql.Int, doc.doc_id)
+        .query('SELECT * FROM dbo.DOCUMENT_FILES WHERE doc_id = @doc_id')
+
+      // แจ้งเจ้าของก่อนลบ
+      await notifyOwnerPermanentDelete(pool, {
+        doc_id:       doc.doc_id,
+        owner_id:     doc.owner_id,
+        owner_name:   doc.owner_name,
+        owner_email:  doc.owner_email,
+        doc_type:     doc.doc_type,
+        title:        doc.title,
+        deletedByName: adminName,
+        reason:       doc.trash_reason || 'ลบถาวรโดยผู้ดูแลระบบ (กลุ่ม)',
+      })
+
+      for (const f of filesResult.recordset) {
+        if (fs.existsSync(f.file_path)) fs.unlinkSync(f.file_path)
+      }
+
+      await pool.request()
+        .input('doc_id', sql.Int, doc.doc_id)
+        .query(`UPDATE dbo.DOCUMENTS SET status='deleted', deleted_at=GETDATE(), updated_at=GETDATE() WHERE doc_id=@doc_id`)
+
+      const firstFile = filesResult.recordset[0]
+      await pool.request()
+        .input('doc_id',             sql.Int,      doc.doc_id)
+        .input('deleted_by',         sql.Int,      user_id)
+        .input('reason',             sql.NVarChar, doc.trash_reason || 'bulk_admin')
+        .input('original_file_path', sql.NVarChar, firstFile?.file_path || '')
+        .input('original_file_name', sql.NVarChar, firstFile?.file_name || '')
+        .input('doc_title',          sql.NVarChar, doc.title)
+        .input('owner_email',        sql.NVarChar, doc.owner_email)
+        .query(`
+          INSERT INTO dbo.DELETION_LOGS
+            (doc_id, deleted_by, reason, original_file_path, original_file_name, doc_title, owner_email)
+          VALUES (@doc_id, @deleted_by, @reason, @original_file_path, @original_file_name, @doc_title, @owner_email)
+        `)
+    }
+
+    logger.info(`Bulk permanent delete: [${ids.join(',')}] by admin ${user_id}`)
+    res.json({ message: `ลบถาวรสำเร็จ ${docsResult.recordset.length} รายการ` })
+  } catch (err) {
+    logger.error(`bulkPermanentDeleteDocuments: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
   }
 }
@@ -388,6 +543,28 @@ const restoreDocument = async (req, res) => {
   }
 }
 
+// helper: ส่งการแจ้งเตือนและอีเมลให้เจ้าของเมื่อถูกลบถาวร
+const notifyOwnerPermanentDelete = async (pool, { doc_id, owner_id, owner_name, owner_email, doc_type, title, deletedByName, reason }) => {
+  try {
+    const message = `เอกสาร ${doc_type} "${title}" ถูกลบออกจากระบบถาวรแล้ว เหตุผล: ${reason}`
+    await pool.request()
+      .input('user_id', sql.Int,      owner_id)
+      .input('doc_id',  sql.Int,      doc_id)
+      .input('type',    sql.NVarChar, 'deleted')
+      .input('message', sql.NVarChar, message)
+      .input('channel', sql.NVarChar, 'both')
+      .query(`
+        INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel)
+        VALUES (@user_id, @doc_id, @type, @message, @channel)
+      `)
+
+    const template = permanentDeleteTemplate({ name: owner_name, docTitle: title, docType: doc_type, reason, deletedBy: deletedByName })
+    await sendMail({ to: owner_email, ...template })
+  } catch (err) {
+    logger.error(`notifyOwnerPermanentDelete: ${err.message}`)
+  }
+}
+
 // DELETE /api/documents/:id/permanent — ลบถาวร admin only
 const permanentDeleteDocument = async (req, res) => {
   try {
@@ -398,9 +575,12 @@ const permanentDeleteDocument = async (req, res) => {
     const result = await pool.request()
       .input('doc_id', sql.Int, id)
       .query(`
-        SELECT d.*, u.name AS owner_name, u.email AS owner_email
+        SELECT d.*, u.name AS owner_name, u.email AS owner_email,
+               u.user_id AS owner_id,
+               tb.name AS admin_name
         FROM dbo.DOCUMENTS d
         JOIN dbo.USERS u ON d.user_id = u.user_id
+        LEFT JOIN dbo.USERS tb ON d.trashed_by = tb.user_id
         WHERE d.doc_id = @doc_id AND d.status = 'trashed'
       `)
 
@@ -408,29 +588,37 @@ const permanentDeleteDocument = async (req, res) => {
       return res.status(404).json({ message: 'ไม่พบเอกสารในถังขยะ' })
 
     const doc = result.recordset[0]
+    const deleteReason = doc.trash_reason || 'ลบถาวรโดยผู้ดูแลระบบ'
 
     const files = await pool.request()
       .input('doc_id', sql.Int, id)
       .query('SELECT * FROM dbo.DOCUMENT_FILES WHERE doc_id = @doc_id')
 
-    // ลบไฟล์จริงออกจาก server
+    // แจ้งเจ้าของก่อนลบ (doc ยังอยู่ใน DB ณ จุดนี้)
+    await notifyOwnerPermanentDelete(pool, {
+      doc_id:       doc.doc_id,
+      owner_id:     doc.owner_id,
+      owner_name:   doc.owner_name,
+      owner_email:  doc.owner_email,
+      doc_type:     doc.doc_type,
+      title:        doc.title,
+      deletedByName: doc.admin_name || 'ผู้ดูแลระบบ',
+      reason:       deleteReason,
+    })
+
     for (const f of files.recordset) {
       if (fs.existsSync(f.file_path)) fs.unlinkSync(f.file_path)
     }
 
     await pool.request()
       .input('doc_id', sql.Int, id)
-      .query(`
-        UPDATE dbo.DOCUMENTS
-        SET status='deleted', deleted_at=GETDATE(), updated_at=GETDATE()
-        WHERE doc_id=@doc_id
-      `)
+      .query(`UPDATE dbo.DOCUMENTS SET status='deleted', deleted_at=GETDATE(), updated_at=GETDATE() WHERE doc_id=@doc_id`)
 
     const firstFile = files.recordset[0]
     await pool.request()
       .input('doc_id',             sql.Int,      id)
       .input('deleted_by',         sql.Int,      user_id)
-      .input('reason',             sql.NVarChar, 'manual_admin')
+      .input('reason',             sql.NVarChar, deleteReason)
       .input('original_file_path', sql.NVarChar, firstFile?.file_path || '')
       .input('original_file_name', sql.NVarChar, firstFile?.file_name || '')
       .input('doc_title',          sql.NVarChar, doc.title)
@@ -554,5 +742,6 @@ const getDocumentSummary = async (req, res) => {
 module.exports = {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
+  bulkRestoreDocuments, bulkPermanentDeleteDocuments,
   downloadFile, previewFile, getDocumentSummary,
 }

@@ -62,9 +62,11 @@ export const documentService = {
 
 // Trash (admin only)
 export const trashService = {
-  getAll:          (params) => api.get('/documents/trash', { params }),
-  restore:         (id)     => api.put(`/documents/${id}/restore`),
-  permanentDelete: (id)     => api.delete(`/documents/${id}/permanent`),
+  getAll:              (params) => api.get('/documents/trash', { params }),
+  restore:             (id)     => api.put(`/documents/${id}/restore`),
+  permanentDelete:     (id)     => api.delete(`/documents/${id}/permanent`),
+  bulkRestore:         (ids)    => api.put('/documents/trash/bulk-restore', { ids }),
+  bulkPermanentDelete: (ids)    => api.delete('/documents/trash/bulk-permanent', { data: { ids } }),
 }
 
 // Notifications
@@ -77,14 +79,16 @@ export const notificationService = {
 
 // Users (Admin)
 export const userService = {
-  getAll:        (params)    => api.get('/users', { params }),
-  search:        (q)         => api.get('/users/search', { params: { q } }),
-  getAdvisors:   ()          => api.get('/users/advisors'),
-  create:        (data)      => api.post('/users', data),
-  update:        (id, data)  => api.put(`/users/${id}`, data),
-  toggle:        (id)        => api.patch(`/users/${id}/toggle`),
-  resetPassword: (id)        => api.post(`/users/${id}/reset-password`),
-  importExcel:   (data)      => api.post('/users/import', data),
+  getAll:        (params)         => api.get('/users', { params }),
+  search:        (q)              => api.get('/users/search', { params: { q } }),
+  getAdvisors:   ()               => api.get('/users/advisors'),
+  create:        (data)           => api.post('/users', data),
+  update:        (id, data)       => api.put(`/users/${id}`, data),
+  toggle:        (id)             => api.patch(`/users/${id}/toggle`),
+  resetPassword: (id)             => api.post(`/users/${id}/reset-password`),
+  importExcel:   (data)           => api.post('/users/import', data),
+  bulkDelete:    (ids)            => api.delete('/users/bulk', { data: { ids } }),
+  bulkToggle:    (ids, is_active) => api.patch('/users/bulk/toggle', { ids, is_active }),
 }
 
 // Document Types
