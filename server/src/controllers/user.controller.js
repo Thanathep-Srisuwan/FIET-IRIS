@@ -3,24 +3,23 @@ const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 const { sendMail } = require('../utils/mailer')
 
-// เพิ่ม column student_id ถ้ายังไม่มี (idempotent)
-const ensureStudentIdColumn = async (pool) => {
+// เพิ่ม columns ถ้ายังไม่มี (idempotent)
+const ensureColumns = async (pool) => {
   await pool.request().query(`
-    IF NOT EXISTS (
-      SELECT 1 FROM sys.columns
-      WHERE object_id = OBJECT_ID('dbo.USERS') AND name = 'student_id'
-    )
-    ALTER TABLE dbo.USERS ADD student_id NVARCHAR(50) NULL
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='student_id')
+      ALTER TABLE dbo.USERS ADD student_id NVARCHAR(50) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='degree_level')
+      ALTER TABLE dbo.USERS ADD degree_level NVARCHAR(20) NULL;
   `)
 }
 
-// GET /api/users — ดูรายชื่อทั้งหมด พร้อม filter และ search
+// GET /api/users
 const getUsers = async (req, res) => {
   try {
     const { role, search, page = 1, limit = 20 } = req.query
     const offset = (page - 1) * limit
     const pool = await getPool()
-    await ensureStudentIdColumn(pool)
+    await ensureColumns(pool)
 
     let where = 'WHERE u.user_id != @self_id'
     const inputs = [{ name: 'self_id', type: sql.Int, value: req.user.user_id }]
@@ -39,10 +38,10 @@ const getUsers = async (req, res) => {
 
     const result = await req2.query(`
       SELECT
-        u.user_id, u.name, u.email, u.student_id, u.role, u.department,
-        u.is_active, u.must_change_pw, u.last_login, u.created_at,
+        u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level,
+        u.department, u.is_active, u.must_change_pw, u.last_login, u.created_at,
         a.name AS advisor_name,
-        (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status != 'deleted') AS doc_count
+        (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
       FROM dbo.USERS u
       LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
       ${where}
@@ -68,17 +67,17 @@ const getUsers = async (req, res) => {
   }
 }
 
-// GET /api/users/search?q=xxx — ค้นหาด้วย student_id, ชื่อ, หรืออีเมล (สำหรับ admin เลือกเจ้าของเอกสาร)
+// GET /api/users/search?q=xxx
 const searchUsers = async (req, res) => {
   try {
     const { q } = req.query
     if (!q?.trim()) return res.json([])
     const pool = await getPool()
-    await ensureStudentIdColumn(pool)
+    await ensureColumns(pool)
     const result = await pool.request()
       .input('q', sql.NVarChar, `%${q.trim()}%`)
       .query(`
-        SELECT TOP 15 user_id, name, email, student_id, role, department
+        SELECT TOP 15 user_id, name, email, student_id, role, degree_level, department
         FROM dbo.USERS
         WHERE is_active = 1 AND role != 'admin'
           AND (student_id LIKE @q OR name LIKE @q OR email LIKE @q)
@@ -91,20 +90,22 @@ const searchUsers = async (req, res) => {
   }
 }
 
-// POST /api/users — เพิ่มผู้ใช้ทีละคน
+// POST /api/users
 const createUser = async (req, res) => {
   try {
-    const { name, email, role, advisor_id, department, student_id } = req.body
+    const { name, email, role, advisor_id, department, student_id, degree_level } = req.body
 
     if (!name || !email || !role)
       return res.status(400).json({ message: 'กรุณากรอกข้อมูลให้ครบถ้วน' })
     if (!email.endsWith('@kmutt.ac.th'))
       return res.status(400).json({ message: 'กรุณาใช้อีเมล @kmutt.ac.th เท่านั้น' })
+    if (!['student','advisor','admin','executive','staff'].includes(role))
+      return res.status(400).json({ message: 'Role ไม่ถูกต้อง' })
     if (role === 'student' && !advisor_id)
       return res.status(400).json({ message: 'นักศึกษาต้องระบุอาจารย์ที่ปรึกษา' })
 
     const pool = await getPool()
-    await ensureStudentIdColumn(pool)
+    await ensureColumns(pool)
 
     const existing = await pool.request()
       .input('email', sql.NVarChar, email)
@@ -116,16 +117,19 @@ const createUser = async (req, res) => {
     const hash = await bcrypt.hash(tempPassword, 12)
 
     await pool.request()
-      .input('name',       sql.NVarChar, name)
-      .input('email',      sql.NVarChar, email)
-      .input('hash',       sql.NVarChar, hash)
-      .input('role',       sql.NVarChar, role)
-      .input('advisor_id', sql.Int,      advisor_id || null)
-      .input('department', sql.NVarChar, department || null)
-      .input('student_id', sql.NVarChar, student_id?.trim() || null)
+      .input('name',         sql.NVarChar, name)
+      .input('email',        sql.NVarChar, email)
+      .input('hash',         sql.NVarChar, hash)
+      .input('role',         sql.NVarChar, role)
+      .input('advisor_id',   sql.Int,      role === 'student' ? (advisor_id || null) : null)
+      .input('department',   sql.NVarChar, department || null)
+      .input('student_id',   sql.NVarChar, student_id?.trim() || null)
+      .input('degree_level', sql.NVarChar, role === 'student' ? (degree_level || 'bachelor') : null)
       .query(`
-        INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, department, student_id, must_change_pw)
-        VALUES (@name, @email, @hash, @role, @advisor_id, @department, @student_id, 1)
+        INSERT INTO dbo.USERS
+          (name, email, password_hash, role, advisor_id, department, student_id, degree_level, must_change_pw)
+        VALUES
+          (@name, @email, @hash, @role, @advisor_id, @department, @student_id, @degree_level, 1)
       `)
 
     await sendMail({
@@ -153,25 +157,27 @@ const createUser = async (req, res) => {
   }
 }
 
-// PUT /api/users/:id — แก้ไขข้อมูลผู้ใช้
+// PUT /api/users/:id
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { name, role, advisor_id, department, student_id } = req.body
+    const { name, role, advisor_id, department, student_id, degree_level } = req.body
     const pool = await getPool()
-    await ensureStudentIdColumn(pool)
+    await ensureColumns(pool)
 
     await pool.request()
-      .input('user_id',    sql.Int,      id)
-      .input('name',       sql.NVarChar, name)
-      .input('role',       sql.NVarChar, role)
-      .input('advisor_id', sql.Int,      advisor_id || null)
-      .input('department', sql.NVarChar, department || null)
-      .input('student_id', sql.NVarChar, student_id?.trim() || null)
+      .input('user_id',      sql.Int,      id)
+      .input('name',         sql.NVarChar, name)
+      .input('role',         sql.NVarChar, role)
+      .input('advisor_id',   sql.Int,      role === 'student' ? (advisor_id || null) : null)
+      .input('department',   sql.NVarChar, department || null)
+      .input('student_id',   sql.NVarChar, student_id?.trim() || null)
+      .input('degree_level', sql.NVarChar, role === 'student' ? (degree_level || 'bachelor') : null)
       .query(`
         UPDATE dbo.USERS
         SET name=@name, role=@role, advisor_id=@advisor_id,
-            department=@department, student_id=@student_id, updated_at=GETDATE()
+            department=@department, student_id=@student_id,
+            degree_level=@degree_level, updated_at=GETDATE()
         WHERE user_id=@user_id
       `)
 
@@ -182,7 +188,7 @@ const updateUser = async (req, res) => {
   }
 }
 
-// PATCH /api/users/:id/toggle — เปิด/ปิดบัญชี
+// PATCH /api/users/:id/toggle
 const toggleUser = async (req, res) => {
   try {
     const { id } = req.params
@@ -211,7 +217,7 @@ const toggleUser = async (req, res) => {
   }
 }
 
-// POST /api/users/:id/reset-password — รีเซ็ตรหัสผ่าน
+// POST /api/users/:id/reset-password
 const resetPassword = async (req, res) => {
   try {
     const { id } = req.params
@@ -256,7 +262,7 @@ const resetPassword = async (req, res) => {
   }
 }
 
-// POST /api/users/import — Import จาก Excel
+// POST /api/users/import
 const importUsers = async (req, res) => {
   try {
     const { users } = req.body
@@ -264,7 +270,7 @@ const importUsers = async (req, res) => {
       return res.status(400).json({ message: 'ไม่พบข้อมูลผู้ใช้' })
 
     const pool = await getPool()
-    await ensureStudentIdColumn(pool)
+    await ensureColumns(pool)
     const results = { success: 0, failed: 0, errors: [] }
 
     for (const u of users) {
@@ -291,18 +297,22 @@ const importUsers = async (req, res) => {
 
         const tempPassword = `Iris@${Math.random().toString(36).slice(-6).toUpperCase()}`
         const hash = await bcrypt.hash(tempPassword, 12)
+        const degLevel = u.role === 'student' ? (u.degree_level || 'bachelor') : null
 
         await pool.request()
-          .input('name',       sql.NVarChar, u.name)
-          .input('email',      sql.NVarChar, u.email)
-          .input('hash',       sql.NVarChar, hash)
-          .input('role',       sql.NVarChar, u.role)
-          .input('advisor_id', sql.Int,      u.advisor_id || null)
-          .input('department', sql.NVarChar, u.department || null)
-          .input('student_id', sql.NVarChar, u.student_id?.trim() || null)
+          .input('name',         sql.NVarChar, u.name)
+          .input('email',        sql.NVarChar, u.email)
+          .input('hash',         sql.NVarChar, hash)
+          .input('role',         sql.NVarChar, u.role)
+          .input('advisor_id',   sql.Int,      u.role === 'student' ? (u.advisor_id || null) : null)
+          .input('department',   sql.NVarChar, u.department || null)
+          .input('student_id',   sql.NVarChar, u.student_id?.trim() || null)
+          .input('degree_level', sql.NVarChar, degLevel)
           .query(`
-            INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, department, student_id, must_change_pw)
-            VALUES (@name, @email, @hash, @role, @advisor_id, @department, @student_id, 1)
+            INSERT INTO dbo.USERS
+              (name, email, password_hash, role, advisor_id, department, student_id, degree_level, must_change_pw)
+            VALUES
+              (@name, @email, @hash, @role, @advisor_id, @department, @student_id, @degree_level, 1)
           `)
 
         await sendMail({
@@ -326,7 +336,7 @@ const importUsers = async (req, res) => {
   }
 }
 
-// GET /api/users/advisors — ดึงรายชื่ออาจารย์
+// GET /api/users/advisors
 const getAdvisors = async (req, res) => {
   try {
     const pool = await getPool()

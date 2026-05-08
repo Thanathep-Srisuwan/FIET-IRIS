@@ -5,6 +5,7 @@ import { announcementService } from '../../services/api'
 
 import fietLogo  from '../../assets/fiet-logo.png'
 import kmuttLogo from '../../assets/kmutt-logo.png'
+import irisLogo   from '../../assets/LOGO-IRIS.png'
 
 const RI_URL   = 'https://ethics.kmutt.ac.th/riservice/'
 const IRB_URL  = 'https://ethics.kmutt.ac.th/irb/'
@@ -92,8 +93,9 @@ const FEATURES = [
     icon: (
       <svg viewBox="0 0 48 48" className="w-10 h-10" fill="none">
         <rect width="48" height="48" rx="12" fill="#e0f2fe"/>
-        <path d="M14 16h20M14 22h14M14 28h10" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round"/>
-        <path d="M30 28l4 4m0 0l4-4m-4 4V20" stroke="#42b5e1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M13 14a2 2 0 012-2h12l8 8v16a2 2 0 01-2 2H15a2 2 0 01-2-2V14z" fill="white" stroke="#0284c7" strokeWidth="2.2"/>
+        <path d="M27 12v8h8" stroke="#0284c7" strokeWidth="2" strokeLinejoin="round"/>
+        <path d="M18 22h12M18 26h9M18 30h6" stroke="#0284c7" strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     ),
     title: 'จัดการเอกสารวิจัย',
@@ -103,9 +105,11 @@ const FEATURES = [
     icon: (
       <svg viewBox="0 0 48 48" className="w-10 h-10" fill="none">
         <rect width="48" height="48" rx="12" fill="#fef3c7"/>
-        <path d="M24 12v4M24 32v4M12 24h4m16 0h4" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round"/>
-        <circle cx="24" cy="24" r="6" stroke="#f59e0b" strokeWidth="2.5"/>
-        <path d="M16.9 16.9l2.8 2.8M28.3 28.3l2.8 2.8M16.9 31.1l2.8-2.8M28.3 19.7l2.8-2.8" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M24 11v3" stroke="#d97706" strokeWidth="2" strokeLinecap="round"/>
+        <path d="M16 29v-7a8 8 0 0116 0v7" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M12 30h24" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M21.5 33a2.5 2.5 0 005 0" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round"/>
+        <circle cx="32" cy="15" r="5" fill="#f59e0b"/>
       </svg>
     ),
     title: 'แจ้งเตือนอัตโนมัติ',
@@ -140,9 +144,9 @@ const FEATURES = [
     icon: (
       <svg viewBox="0 0 48 48" className="w-10 h-10" fill="none">
         <rect width="48" height="48" rx="12" fill="#fce7f3"/>
-        <path d="M14 24h20M14 18h12M14 30h16" stroke="#db2777" strokeWidth="2.5" strokeLinecap="round"/>
-        <circle cx="35" cy="18" r="4" fill="#fbcfe8" stroke="#db2777" strokeWidth="2"/>
-        <path d="M33.5 18h1.5l1 1" stroke="#db2777" strokeWidth="1.5" strokeLinecap="round"/>
+        <circle cx="21" cy="21" r="9" stroke="#db2777" strokeWidth="2.5"/>
+        <path d="M27.5 27.5l7 7" stroke="#db2777" strokeWidth="2.5" strokeLinecap="round"/>
+        <path d="M17 19.5h8M18.5 22h5M20 24.5h2" stroke="#db2777" strokeWidth="1.8" strokeLinecap="round"/>
       </svg>
     ),
     title: 'ค้นหาและกรองข้อมูล',
@@ -152,8 +156,9 @@ const FEATURES = [
     icon: (
       <svg viewBox="0 0 48 48" className="w-10 h-10" fill="none">
         <rect width="48" height="48" rx="12" fill="#cffafe"/>
-        <path d="M24 13v6m0 10v6M13 24h6m10 0h6" stroke="#0891b2" strokeWidth="2.5" strokeLinecap="round"/>
-        <circle cx="24" cy="24" r="4" stroke="#06b6d4" strokeWidth="2.5"/>
+        <rect x="7" y="19" width="15" height="10" rx="5" stroke="#0891b2" strokeWidth="2.5"/>
+        <rect x="26" y="19" width="15" height="10" rx="5" stroke="#06b6d4" strokeWidth="2.5"/>
+        <path d="M22 24h4" stroke="#0891b2" strokeWidth="2.5" strokeLinecap="round"/>
       </svg>
     ),
     title: 'เชื่อมต่อระบบภายนอก',
@@ -351,62 +356,6 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== About section (alternating) ===== */}
-      <section className="py-20 px-6 bg-[#f8fafc]">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-12">
-          {/* Visual */}
-          <div className="flex-1 flex justify-center">
-            <div className="relative w-full max-w-sm">
-              <div className="w-full aspect-square rounded-3xl flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg,#e0f2fe,#bfdbfe)' }}>
-                <svg viewBox="0 0 200 200" className="w-3/4 h-3/4" fill="none">
-                  <rect x="20" y="30" width="160" height="140" rx="12" fill="white" stroke="#93c5fd" strokeWidth="2"/>
-                  <rect x="36" y="52" width="80" height="8" rx="4" fill="#bfdbfe"/>
-                  <rect x="36" y="68" width="60" height="8" rx="4" fill="#dbeafe"/>
-                  <rect x="36" y="84" width="100" height="8" rx="4" fill="#dbeafe"/>
-                  <rect x="36" y="106" width="128" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.5"/>
-                  <rect x="48" y="116" width="50" height="6" rx="3" fill="#93c5fd"/>
-                  <rect x="48" y="128" width="72" height="6" rx="3" fill="#dbeafe"/>
-                  <circle cx="148" cy="128" r="16" fill="#1262a0"/>
-                  <path d="M141 128l4 4 8-8" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <div className="absolute -bottom-4 -right-4 bg-white rounded-2xl shadow-lg px-4 py-3 border border-gray-100">
-                <p className="text-xs font-semibold text-[#1262a0]">สถานะเอกสาร</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">อัปเดตแบบ Real-time</p>
-              </div>
-            </div>
-          </div>
-          {/* Text */}
-          <div className="flex-1">
-            <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#42b5e1' }}>
-              เกี่ยวกับระบบ
-            </p>
-            <h2 className="text-2xl md:text-3xl font-black text-[#1a2d45] mb-5 leading-tight">
-              ติดตามงานวิจัยได้<br/>ทุกที่ ทุกเวลา
-            </h2>
-            <div className="space-y-3">
-              {[
-                'ติดตามสถานะเอกสารของคุณแบบ real-time',
-                'รับแจ้งเตือนก่อนเอกสารหมดอายุ',
-                'ดาวน์โหลดรายงานภาพรวมได้ทันที',
-                'รองรับการทำงานทุกขนาดหน้าจอ',
-              ].map(item => (
-                <div key={item} className="flex items-start gap-3">
-                  <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5"
-                    style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}>
-                    <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none">
-                      <path d="M2 5l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <p className="text-sm text-gray-700">{item}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ===== External Links ===== */}
       <section id="links" className="py-20 px-6 bg-white">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row gap-12 items-start">
@@ -481,7 +430,7 @@ export default function LandingPage() {
                 <div className="w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-sm flex items-center justify-center text-3xl mb-5">
                   🎓
                 </div>
-                <p className="text-lg font-black text-white mb-1">FIET · มจธ.</p>
+                <p className="text-lg font-black text-white mb-1">FIET มจธ.</p>
                 <p className="text-xs text-white/70 mb-4">Faculty of Industrial Education and Technology</p>
                 <p className="text-sm text-white/80 leading-relaxed mb-6">
                   ศูนย์กลางข้อมูลคณะ ครอบคลุมหลักสูตร บุคลากร งานวิจัย และข่าวสารกิจกรรมทั้งหมด
@@ -587,8 +536,9 @@ export default function LandingPage() {
             {/* Brand */}
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <img src={kmuttLogo} alt="KMUTT" className="h-8 w-auto object-contain brightness-0 invert opacity-80" />
-                <img src={fietLogo} alt="FIET" className="h-9 w-auto object-contain brightness-0 invert opacity-80" />
+                <img src={kmuttLogo} alt="KMUTT" className="h-12 w-auto object-contain brightness-0 invert opacity-80" />
+                <img src={fietLogo} alt="FIET" className="h-14 w-auto object-contain brightness-0 invert opacity-80" />
+                <img src={irisLogo} alt="IRIS" className="h-10 w-auto object-contain brightness-0 invert opacity-80" />
               </div>
               <p className="text-xs text-white/50 leading-relaxed">
                 ระบบสารสนเทศงานวิจัย<br/>
@@ -605,6 +555,7 @@ export default function LandingPage() {
                   { label: 'ฟีเจอร์', href: '#features' },
                   { label: 'ระบบที่เกี่ยวข้อง', href: '#links' },
                   { label: 'ประกาศ / ข่าวสาร', href: '#announcements' },
+                  { label: 'ตรวจสอบสถานะ IRB', href: TRACK_IRB_URL, target: '_blank' },
                 ].map(({ label, href }) => (
                   <li key={label}>
                     <a href={href} className="text-sm text-white/60 hover:text-white transition-colors">{label}</a>

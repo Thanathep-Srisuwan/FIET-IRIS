@@ -2,20 +2,36 @@ import { useEffect, useState, useCallback } from 'react'
 import { userService } from '../../services/api'
 import toast from 'react-hot-toast'
 
-const roleLabel = { student: 'นักศึกษา', advisor: 'อาจารย์', admin: 'ผู้ดูแลระบบ' }
+const roleLabel = {
+  student:   'นักศึกษา',
+  advisor:   'อาจารย์',
+  staff:     'เจ้าหน้าที่',
+  admin:     'ผู้ดูแลระบบ',
+}
 const roleColor = {
   student: 'bg-blue-50 text-blue-700 border border-blue-200',
   advisor: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  staff:   'bg-orange-50 text-orange-700 border border-orange-200',
   admin:   'bg-purple-50 text-purple-700 border border-purple-200',
+}
+const degreeLabel = { bachelor: 'ป.ตรี', master: 'ป.โท', doctoral: 'ป.เอก' }
+const degreeColor = {
+  bachelor: 'bg-sky-50 text-sky-700 border border-sky-200',
+  master:   'bg-violet-50 text-violet-700 border border-violet-200',
+  doctoral: 'bg-rose-50 text-rose-700 border border-rose-200',
 }
 
 // ─── Modal: เพิ่ม/แก้ไข User ───────────────────────────────────────────────
 function UserModal({ user, advisors, onClose, onSaved }) {
   const isEdit = !!user?.user_id
   const [form, setForm] = useState({
-    name: user?.name || '', email: user?.email || '',
-    role: user?.role || 'student', advisor_id: user?.advisor_id || '',
-    department: user?.department || '', student_id: user?.student_id || '',
+    name:         user?.name         || '',
+    email:        user?.email        || '',
+    role:         user?.role         || 'student',
+    advisor_id:   user?.advisor_id   || '',
+    department:   user?.department   || '',
+    student_id:   user?.student_id   || '',
+    degree_level: user?.degree_level || 'bachelor',
   })
   const [loading, setLoading] = useState(false)
 
@@ -40,7 +56,7 @@ function UserModal({ user, advisors, onClose, onSaved }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <h2 className="text-base font-semibold text-slate-800">
             {isEdit ? 'แก้ไขข้อมูลผู้ใช้' : 'เพิ่มผู้ใช้ใหม่'}
@@ -62,39 +78,58 @@ function UserModal({ user, advisors, onClose, onSaved }) {
                 placeholder="username@kmutt.ac.th" required />
             </div>
           )}
+
+          {/* Role */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Role</label>
             <select className="input-field" value={form.role}
-              onChange={e => setForm(p => ({ ...p, role: e.target.value, advisor_id: '' }))}>
+              onChange={e => setForm(p => ({ ...p, role: e.target.value, advisor_id: '', degree_level: e.target.value === 'student' ? 'bachelor' : '' }))}>
               <option value="student">นักศึกษา</option>
               <option value="advisor">อาจารย์</option>
+              <option value="staff">เจ้าหน้าที่</option>
               <option value="admin">ผู้ดูแลระบบ</option>
             </select>
           </div>
+
+          {/* ระดับการศึกษา — เฉพาะนักศึกษา */}
           {form.role === 'student' && (
-            <>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">รหัสนักศึกษา</label>
-                <input className="input-field font-mono" value={form.student_id}
-                  onChange={e => setForm(p => ({ ...p, student_id: e.target.value }))}
-                  placeholder="เช่น 65010500XXX" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">อาจารย์ที่ปรึกษา</label>
-                <select className="input-field" value={form.advisor_id}
-                  onChange={e => setForm(p => ({ ...p, advisor_id: e.target.value }))} required>
-                  <option value="">-- เลือกอาจารย์ --</option>
-                  {advisors.map(a => (
-                    <option key={a.user_id} value={a.user_id}>{a.name}</option>
-                  ))}
-                </select>
-              </div>
-            </>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">ระดับการศึกษา</label>
+              <select className="input-field" value={form.degree_level}
+                onChange={e => setForm(p => ({ ...p, degree_level: e.target.value }))}>
+                <option value="bachelor">ปริญญาตรี (ป.ตรี)</option>
+                <option value="master">ปริญญาโท (ป.โท)</option>
+                <option value="doctoral">ปริญญาเอก (ป.เอก)</option>
+              </select>
+            </div>
           )}
+
+          {/* รหัสนักศึกษา — เฉพาะนักศึกษา */}
+          {form.role === 'student' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">รหัสนักศึกษา</label>
+              <input className="input-field font-mono" value={form.student_id}
+                onChange={e => setForm(p => ({ ...p, student_id: e.target.value }))}
+                placeholder="เช่น 65010500XXX" />
+            </div>
+          )}
+
+          {/* อาจารย์ที่ปรึกษา — เฉพาะนักศึกษา */}
+          {form.role === 'student' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">อาจารย์ที่ปรึกษา</label>
+              <select className="input-field" value={form.advisor_id}
+                onChange={e => setForm(p => ({ ...p, advisor_id: e.target.value }))} required>
+                <option value="">-- เลือกอาจารย์ --</option>
+                {advisors.map(a => (
+                  <option key={a.user_id} value={a.user_id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-              สาขาวิชา
-            </label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">สาขาวิชา</label>
             <select className="input-field" value={form.department}
               onChange={e => setForm(p => ({ ...p, department: e.target.value }))}>
               <option value="">-- เลือกสาขาวิชา --</option>
@@ -108,9 +143,9 @@ function UserModal({ user, advisors, onClose, onSaved }) {
               <option value="คอมพิวเตอร์และเทคโนโลยีสารสนเทศ">คอมพิวเตอร์และเทคโนโลยีสารสนเทศ</option>
             </select>
           </div>
+
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="btn-secondary flex-1 text-sm">ยกเลิก</button>
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
             <button type="submit" disabled={loading}
               className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-60"
               style={{ backgroundColor: '#42b5e1' }}>
@@ -125,9 +160,9 @@ function UserModal({ user, advisors, onClose, onSaved }) {
 
 // ─── Modal: Import Excel ────────────────────────────────────────────────────
 function ImportModal({ advisors, onClose, onSaved }) {
-  const [rows, setRows]     = useState([])
+  const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(false)
-  const [errors, setErrors]  = useState([])
+  const [errors, setErrors]   = useState([])
 
   const handleFile = (e) => {
     const file = e.target.files[0]
@@ -135,10 +170,10 @@ function ImportModal({ advisors, onClose, onSaved }) {
     const reader = new FileReader()
     reader.onload = (ev) => {
       const text = ev.target.result
-      const lines = text.trim().split('\n').slice(1) // skip header
+      const lines = text.trim().split('\n').slice(1)
       const parsed = lines.map(line => {
-        const [name, email, role, advisor_email, department] = line.split(',').map(s => s.trim().replace(/"/g, ''))
-        return { name, email, role, advisor_email, department }
+        const [name, email, role, advisor_email, department, degree_level] = line.split(',').map(s => s.trim().replace(/"/g, ''))
+        return { name, email, role, advisor_email, department, degree_level }
       }).filter(r => r.name && r.email)
       setRows(parsed)
       setErrors([])
@@ -149,11 +184,13 @@ function ImportModal({ advisors, onClose, onSaved }) {
   const handleImport = async () => {
     setLoading(true)
     try {
-      // แปลง advisor_email → advisor_id
       const usersToImport = rows.map(r => ({
-        name: r.name, email: r.email, role: r.role || 'student',
-        department: r.department,
-        advisor_id: advisors.find(a => a.email === r.advisor_email)?.user_id || null,
+        name:         r.name,
+        email:        r.email,
+        role:         r.role || 'student',
+        department:   r.department,
+        degree_level: r.degree_level || (r.role === 'student' ? 'bachelor' : null),
+        advisor_id:   advisors.find(a => a.email === r.advisor_email)?.user_id || null,
       }))
       const { data } = await userService.importExcel({ users: usersToImport })
       toast.success(data.message)
@@ -165,8 +202,8 @@ function ImportModal({ advisors, onClose, onSaved }) {
   }
 
   const downloadTemplate = () => {
-    const csv = 'name,email,role,advisor_email,department\nชื่อตัวอย่าง,example@kmutt.ac.th,student,advisor@kmutt.ac.th,FIET'
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+    const csv = 'name,email,role,advisor_email,department,degree_level\nชื่อตัวอย่าง,student@kmutt.ac.th,student,advisor@kmutt.ac.th,ครุศาสตร์เครื่องกล,bachelor\nอาจารย์ตัวอย่าง,advisor@kmutt.ac.th,advisor,,ครุศาสตร์เครื่องกล,\nเจ้าหน้าที่ตัวอย่าง,staff@kmutt.ac.th,staff,,สำนักงานคณบดี,'
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url
     a.download = 'FIET-IRIS_user_template.csv'; a.click()
@@ -184,12 +221,10 @@ function ImportModal({ advisors, onClose, onSaved }) {
         <div className="p-6 space-y-4">
           <button onClick={downloadTemplate}
             className="w-full py-2 rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 hover:border-fiet-blue hover:text-fiet-blue transition-all">
-            ⬇ ดาวน์โหลด Template CSV
+            ⬇ ดาวน์โหลด Template CSV (รองรับ degree_level)
           </button>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-              อัปโหลดไฟล์ CSV
-            </label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">อัปโหลดไฟล์ CSV</label>
             <input type="file" accept=".csv" onChange={handleFile}
               className="block w-full text-sm text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-slate-100 file:text-slate-600 hover:file:bg-slate-200" />
           </div>
@@ -206,9 +241,16 @@ function ImportModal({ advisors, onClose, onSaved }) {
                       <p className="font-medium text-slate-700">{r.name}</p>
                       <p className="text-xs text-slate-400">{r.email}</p>
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor[r.role] || roleColor.student}`}>
-                      {roleLabel[r.role] || r.role}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor[r.role] || roleColor.student}`}>
+                        {roleLabel[r.role] || r.role}
+                      </span>
+                      {r.role === 'student' && r.degree_level && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${degreeColor[r.degree_level] || degreeColor.bachelor}`}>
+                          {degreeLabel[r.degree_level] || r.degree_level}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -240,14 +282,14 @@ function ImportModal({ advisors, onClose, onSaved }) {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function AdminUsersPage() {
-  const [users, setUsers]       = useState([])
-  const [advisors, setAdvisors] = useState([])
-  const [total, setTotal]       = useState(0)
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
+  const [users, setUsers]           = useState([])
+  const [advisors, setAdvisors]     = useState([])
+  const [total, setTotal]           = useState(0)
+  const [loading, setLoading]       = useState(true)
+  const [search, setSearch]         = useState('')
   const [roleFilter, setRoleFilter] = useState('')
-  const [modal, setModal]       = useState(null) // null | 'add' | 'edit' | 'import'
-  const [selected, setSelected] = useState(null)
+  const [modal, setModal]           = useState(null)
+  const [selected, setSelected]     = useState(null)
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
@@ -283,12 +325,12 @@ export default function AdminUsersPage() {
   }
 
   const exportCSV = () => {
-    const header = 'ชื่อ,อีเมล,Role,สาขาวิชา,สถานะ,วันที่สร้าง'
+    const header = 'ชื่อ,อีเมล,Role,ระดับการศึกษา,สาขาวิชา,สถานะ,วันที่สร้าง'
     const rows = users.map(u =>
-      `"${u.name}","${u.email}","${roleLabel[u.role]}","${u.department||''}","${u.is_active?'ใช้งาน':'ระงับ'}","${new Date(u.created_at).toLocaleDateString('th-TH')}"`
+      `"${u.name}","${u.email}","${roleLabel[u.role] || u.role}","${degreeLabel[u.degree_level] || ''}","${u.department || ''}","${u.is_active ? 'ใช้งาน' : 'ระงับ'}","${new Date(u.created_at).toLocaleDateString('th-TH')}"`
     )
     const csv  = [header, ...rows].join('\n')
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url
     a.download = 'FIET-IRIS_users.csv'; a.click()
@@ -301,9 +343,7 @@ export default function AdminUsersPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>
-            ผู้ดูแลระบบ
-          </p>
+          <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>ผู้ดูแลระบบ</p>
           <h1 className="text-2xl font-bold text-slate-800">จัดการผู้ใช้งาน</h1>
           <p className="text-slate-400 text-sm mt-0.5">ทั้งหมด {total} บัญชี</p>
         </div>
@@ -327,17 +367,15 @@ export default function AdminUsersPage() {
 
       {/* Filter Bar */}
       <div className="flex flex-col sm:flex-row gap-3">
-        <input
-          className="input-field w-full sm:max-w-xs"
+        <input className="input-field w-full sm:max-w-xs"
           placeholder="ค้นหาชื่อ อีเมล หรือรหัสนักศึกษา..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+          value={search} onChange={e => setSearch(e.target.value)} />
         <select className="input-field w-full sm:max-w-[160px]" value={roleFilter}
           onChange={e => setRoleFilter(e.target.value)}>
           <option value="">ทุก Role</option>
           <option value="student">นักศึกษา</option>
           <option value="advisor">อาจารย์</option>
+          <option value="staff">เจ้าหน้าที่</option>
           <option value="admin">ผู้ดูแลระบบ</option>
         </select>
       </div>
@@ -345,80 +383,77 @@ export default function AdminUsersPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: '900px' }}>
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              {['รหัสนักศึกษา','ชื่อ-นามสกุล','อีเมล','Role','อาจารย์ที่ปรึกษา','สาขาวิชา','เอกสาร','Last Login','สถานะ',''].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {loading ? (
-              <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
-            ) : users.length === 0 ? (
-              <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
-            ) : users.map(u => (
-              <tr key={u.user_id} className={`hover:bg-slate-50 transition-colors ${!u.is_active ? 'opacity-50' : ''}`}>
-                <td className="px-4 py-3 text-slate-500 text-xs font-mono whitespace-nowrap">{u.student_id || '—'}</td>
-                <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{u.name}</td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{u.email}</td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${roleColor[u.role]}`}>
-                    {roleLabel[u.role]}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-500 text-xs">{u.advisor_name || '—'}</td>
-                <td className="px-4 py-3 text-slate-500 text-xs max-w-[120px] truncate">{u.department || '—'}</td>
-                <td className="px-4 py-3 text-center text-slate-600 text-xs tabular-nums">{u.doc_count}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">
-                  {u.last_login ? new Date(u.last_login).toLocaleDateString('th-TH') : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                    u.is_active
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-slate-100 text-slate-500 border border-slate-200'
-                  }`}>
-                    {u.is_active ? 'ใช้งาน' : 'ระงับ'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => { setSelected(u); setModal('edit') }}
-                      className="text-xs text-slate-500 hover:text-fiet-blue transition-colors font-medium"
-                      title="แก้ไข">
-                      แก้ไข
-                    </button>
-                    <span className="text-slate-200">|</span>
-                    <button
-                      onClick={() => handleToggle(u)}
-                      className={`text-xs font-medium transition-colors ${
-                        u.is_active ? 'text-slate-500 hover:text-red-500' : 'text-slate-500 hover:text-emerald-600'
-                      }`}
-                      title={u.is_active ? 'ระงับบัญชี' : 'เปิดบัญชี'}>
-                      {u.is_active ? 'ระงับ' : 'เปิด'}
-                    </button>
-                    <span className="text-slate-200">|</span>
-                    <button
-                      onClick={() => handleReset(u)}
-                      className="text-xs text-slate-500 hover:text-amber-600 transition-colors font-medium"
-                      title="รีเซ็ตรหัสผ่าน">
-                      รีเซ็ต
-                    </button>
-                  </div>
-                </td>
+          <table className="w-full text-sm" style={{ minWidth: '960px' }}>
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                {['รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'อีเมล', 'Role', 'ระดับ', 'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'เอกสาร', 'สถานะ', ''].map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loading ? (
+                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+              ) : users.length === 0 ? (
+                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
+              ) : users.map(u => (
+                <tr key={u.user_id} className={`hover:bg-slate-50 transition-colors ${!u.is_active ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-3 text-slate-500 text-xs font-mono whitespace-nowrap">{u.student_id || '—'}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{u.name}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">{u.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${roleColor[u.role] || 'bg-slate-100 text-slate-500'}`}>
+                      {roleLabel[u.role] || u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {u.degree_level ? (
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${degreeColor[u.degree_level] || 'bg-slate-100 text-slate-500'}`}>
+                        {degreeLabel[u.degree_level] || u.degree_level}
+                      </span>
+                    ) : <span className="text-slate-300 text-xs">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{u.advisor_name || '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs max-w-[120px] truncate">{u.department || '—'}</td>
+                  <td className="px-4 py-3 text-center text-slate-600 text-xs tabular-nums">{u.doc_count}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                      u.is_active
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    }`}>
+                      {u.is_active ? 'ใช้งาน' : 'ระงับ'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <button onClick={() => { setSelected(u); setModal('edit') }}
+                        className="text-xs text-slate-500 hover:text-fiet-blue transition-colors font-medium">
+                        แก้ไข
+                      </button>
+                      <span className="text-slate-200">|</span>
+                      <button onClick={() => handleToggle(u)}
+                        className={`text-xs font-medium transition-colors ${
+                          u.is_active ? 'text-slate-500 hover:text-red-500' : 'text-slate-500 hover:text-emerald-600'
+                        }`}>
+                        {u.is_active ? 'ระงับ' : 'เปิด'}
+                      </button>
+                      <span className="text-slate-200">|</span>
+                      <button onClick={() => handleReset(u)}
+                        className="text-xs text-slate-500 hover:text-amber-600 transition-colors font-medium">
+                        รีเซ็ต
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Modals */}
       {(modal === 'add' || modal === 'edit') && (
         <UserModal
           user={modal === 'edit' ? selected : null}

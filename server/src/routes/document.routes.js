@@ -8,7 +8,7 @@ const { requirePasswordChange } = require('../middlewares/validate')
 const {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
-  downloadFile, previewFile,
+  downloadFile, previewFile, getDocumentSummary,
 } = require('../controllers/document.controller')
 
 // Multer config
@@ -40,7 +40,8 @@ const upload = multer({
 const auth      = [authenticate, requirePasswordChange]
 const adminOnly = [authenticate, requirePasswordChange, authorize('admin')]
 
-// Trash routes (ต้องอยู่ก่อน /:id เพื่อไม่ให้ 'trash' ถูก parse เป็น id)
+// Static sub-routes (ต้องอยู่ก่อน /:id)
+router.get('/summary',            ...adminOnly, getDocumentSummary)
 router.get('/trash',              ...adminOnly, getTrashedDocuments)
 router.put('/:id/restore',        ...adminOnly, restoreDocument)
 router.delete('/:id/permanent',   ...adminOnly, permanentDeleteDocument)

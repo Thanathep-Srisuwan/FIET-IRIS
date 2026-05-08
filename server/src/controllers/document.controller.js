@@ -75,44 +75,92 @@ const ensureDocTypeColumn = async (pool) => {
 // GET /api/documents
 const getDocuments = async (req, res) => {
   try {
-    const { search, doc_type, status, page = 1, limit = 20 } = req.query
+    const {
+      search, doc_type, status,
+      page = 1, limit = 15,
+      degree_level, advisor_id, owner_role,
+      sort_by, sort_dir,
+    } = req.query
     const { user_id, role } = req.user
-    const offset = (page - 1) * limit
+    const parsedPage  = Math.max(1, parseInt(page)  || 1)
+    const parsedLimit = Math.min(200, Math.max(1, parseInt(limit) || 15))
+    const offset = (parsedPage - 1) * parsedLimit
+
     const pool = await getPool()
-    const r = pool.request()
 
+    // Collect params so we can reuse across count + data requests
+    const filterParams = []
+    const addParam = (name, type, value) => filterParams.push({ name, type, value })
+    const applyParams = (req) => { filterParams.forEach(({ name, type, value }) => req.input(name, type, value)); return req }
+
+    addParam('user_id', sql.Int, user_id)
     let where = "WHERE d.status NOT IN ('deleted','trashed')"
-    r.input('user_id', sql.Int, user_id)
 
-    if (role === 'student') {
+    if (role === 'student' || role === 'staff') {
       where += ' AND d.user_id = @user_id'
     } else if (role === 'advisor') {
       where += ' AND u.advisor_id = @user_id'
     }
 
-    if (doc_type) { where += ' AND d.doc_type = @doc_type'; r.input('doc_type', sql.NVarChar, doc_type) }
-    if (status)   { where += ' AND d.status = @status';   r.input('status',   sql.NVarChar, status)   }
-    if (search)   { where += ' AND (d.title LIKE @search OR u.name LIKE @search)'; r.input('search', sql.NVarChar, `%${search}%`) }
+    if (doc_type)     { where += ' AND d.doc_type = @doc_type';         addParam('doc_type',           sql.NVarChar, doc_type) }
+    if (status)       { where += ' AND d.status = @status';             addParam('status',             sql.NVarChar, status) }
+    if (search)       { where += ' AND (d.title LIKE @search OR u.name LIKE @search OR u.student_id LIKE @search)'; addParam('search', sql.NVarChar, `%${search}%`) }
+    if (degree_level) {
+      // NULL degree_level is treated as 'bachelor' (matches summary fallback logic)
+      where += degree_level === 'bachelor'
+        ? ' AND (u.degree_level = @degree_level OR u.degree_level IS NULL)'
+        : ' AND u.degree_level = @degree_level'
+      addParam('degree_level', sql.NVarChar, degree_level)
+    }
+    if (advisor_id && (role === 'admin' || role === 'executive')) {
+      where += ' AND u.advisor_id = @filter_advisor_id'
+      addParam('filter_advisor_id', sql.Int, parseInt(advisor_id))
+    }
+    if (owner_role && role === 'admin') {
+      where += ' AND u.role = @owner_role'
+      addParam('owner_role', sql.NVarChar, owner_role)
+    }
 
-    const result = await r.query(`
+    const sortMap = {
+      title: 'd.title', doc_type: 'd.doc_type',
+      issue_date: 'd.issue_date', expire_date: 'd.expire_date',
+      owner_name: 'u.name', created_at: 'd.created_at',
+      days_remaining: 'd.expire_date',
+    }
+    const sortCol = sortMap[sort_by] || 'd.created_at'
+    const sortDirection = sort_dir === 'asc' ? 'ASC' : 'DESC'
+
+    const countResult = await applyParams(pool.request()).query(`
+      SELECT COUNT(*) AS total
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      ${where}
+    `)
+
+    const result = await applyParams(pool.request()).query(`
       SELECT
         d.doc_id, d.title, d.doc_type, d.description,
         d.issue_date, d.expire_date, d.no_expire, d.status, d.version,
         d.created_at, d.project_category,
         CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining,
         u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email,
-        u.student_id AS owner_student_id,
-        a.name AS advisor_name,
+        u.student_id AS owner_student_id, u.role AS owner_role, u.degree_level AS owner_degree_level,
+        a.name AS advisor_name, a.user_id AS advisor_id,
         (SELECT COUNT(*) FROM dbo.DOCUMENT_FILES f WHERE f.doc_id = d.doc_id) AS file_count
       FROM dbo.DOCUMENTS d
       JOIN dbo.USERS u ON d.user_id = u.user_id
       LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
       ${where}
-      ORDER BY d.created_at DESC
-      OFFSET ${offset} ROWS FETCH NEXT ${limit} ROWS ONLY
+      ORDER BY ${sortCol} ${sortDirection}
+      OFFSET ${offset} ROWS FETCH NEXT ${parsedLimit} ROWS ONLY
     `)
 
-    res.json({ documents: result.recordset, total: result.recordset.length, page: parseInt(page) })
+    res.json({
+      documents: result.recordset,
+      total: countResult.recordset[0].total,
+      page: parsedPage,
+      limit: parsedLimit,
+    })
   } catch (err) {
     logger.error(`getDocuments: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
@@ -192,10 +240,11 @@ const createDocument = async (req, res) => {
       const fileType = file.fieldname === 'main' ? 'main'
         : file.fieldname === 'certificate' ? 'certificate' : 'attachment'
 
+      const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8')
       await pool.request()
         .input('doc_id',    sql.Int,      doc_id)
         .input('file_type', sql.NVarChar, fileType)
-        .input('file_name', sql.NVarChar, file.originalname)
+        .input('file_name', sql.NVarChar, fileName)
         .input('file_path', sql.NVarChar, file.path)
         .input('file_size', sql.Int,      file.size)
         .input('mime_type', sql.NVarChar, file.mimetype)
@@ -447,8 +496,58 @@ const previewFile = async (req, res) => {
   }
 }
 
+// GET /api/documents/summary — admin only
+const getDocumentSummary = async (req, res) => {
+  try {
+    const pool = await getPool()
+    const result = await pool.request().query(`
+      SELECT
+        u.role AS owner_role,
+        u.degree_level,
+        COUNT(*) AS total,
+        SUM(CASE WHEN d.no_expire = 1 THEN 1 ELSE 0 END) AS no_expire_count,
+        SUM(CASE WHEN d.no_expire = 0 AND DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) < 0 THEN 1 ELSE 0 END) AS expired,
+        SUM(CASE WHEN d.no_expire = 0 AND DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) BETWEEN 0 AND 90 THEN 1 ELSE 0 END) AS expiring_soon
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      WHERE d.status NOT IN ('deleted','trashed')
+      GROUP BY u.role, u.degree_level
+    `)
+
+    const init = () => ({ total: 0, expired: 0, expiring_soon: 0, no_expire_count: 0 })
+    const groups = {
+      all: init(), bachelor: init(), master: init(),
+      doctoral: init(), advisor: init(), staff: init(),
+    }
+
+    const addTo = (key, row) => {
+      groups[key].total          += parseInt(row.total)          || 0
+      groups[key].expired        += parseInt(row.expired)        || 0
+      groups[key].expiring_soon  += parseInt(row.expiring_soon)  || 0
+      groups[key].no_expire_count += parseInt(row.no_expire_count) || 0
+    }
+
+    for (const row of result.recordset) {
+      addTo('all', row)
+      if (row.owner_role === 'student') {
+        const lvl = row.degree_level || 'bachelor'
+        addTo(groups[lvl] ? lvl : 'bachelor', row)
+      } else if (row.owner_role === 'advisor') {
+        addTo('advisor', row)
+      } else if (row.owner_role === 'staff') {
+        addTo('staff', row)
+      }
+    }
+
+    res.json(groups)
+  } catch (err) {
+    logger.error(`getDocumentSummary: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
 module.exports = {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
-  downloadFile, previewFile,
+  downloadFile, previewFile, getDocumentSummary,
 }

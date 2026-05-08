@@ -51,13 +51,13 @@ export const authService = {
 
 // Documents
 export const documentService = {
-  getAll:   (params) => api.get('/documents', { params }),
-  getById:  (id)     => api.get(`/documents/${id}`),
-  upload:   (data)   => api.post('/documents', data),
-  delete:   (id)     => api.delete(`/documents/${id}`),
-  download: (id, fileId) => api.get(`/documents/${id}/files/${fileId}`, {
-    responseType: 'blob',
-  }),
+  getAll:      (params) => api.get('/documents', { params }),
+  getSummary:  ()       => api.get('/documents/summary'),
+  getById:     (id)     => api.get(`/documents/${id}`),
+  upload:      (data)   => api.post('/documents', data),
+  delete:      (id)     => api.delete(`/documents/${id}`),
+  download:    (id, fileId) => api.get(`/documents/${id}/files/${fileId}/download`, { responseType: 'blob' }),
+  preview:     (id, fileId) => api.get(`/documents/${id}/files/${fileId}/preview`, { responseType: 'blob' }),
 }
 
 // Trash (admin only)
@@ -111,4 +111,9 @@ export const executiveService = {
   getOverview:     ()       => api.get('/executive/overview'),
   getBranches:     ()       => api.get('/executive/branches'),
   getDocuments:    (params) => api.get('/executive/documents', { params }),
+}
+
+// Admin
+export const adminService = {
+  getStats: () => api.get('/admin/stats'),
 }

@@ -6,30 +6,40 @@ import irisLogo from '../../assets/LOGO-IRIS.png'
 
 const navByRole = {
   student: [
-    { to: '/dashboard',  label: 'หน้าแรก',          icon: '▪' },
-    { to: '/documents',  label: 'ใบประกาศของฉัน',   icon: '▪' },
+    { to: '/dashboard',  label: 'หน้าแรก' },
+    { to: '/documents',  label: 'ใบประกาศของฉัน' },
   ],
   advisor: [
-    { to: '/dashboard',  label: 'หน้าแรก',            icon: '▪' },
-    { to: '/documents',  label: 'ใบประกาศ RI/IRB',   icon: '▪' },
+    { to: '/dashboard',  label: 'หน้าแรก' },
+    { to: '/documents',  label: 'ใบประกาศ RI/IRB' },
+  ],
+  staff: [
+    { to: '/dashboard',  label: 'หน้าแรก' },
+    { to: '/documents',  label: 'เอกสารของฉัน' },
   ],
   admin: [
-    { to: '/dashboard',              label: 'หน้าแรก',             icon: '▪' },
-    { to: '/documents',              label: 'ใบประกาศทั้งหมด',    icon: '▪' },
-    { to: '/admin/users',            label: 'จัดการผู้ใช้',       icon: '▪' },
-    { to: '/admin/announcements',    label: 'จัดการการแจ้งเตือน', icon: '▪' },
-    { to: '/admin/doc-types',        label: 'ประเภทใบประกาศ',     icon: '▪' },
-    { to: '/admin/trash',            label: 'ถังขยะ',              icon: '▪' },
-    { to: '/admin/logs',             label: 'ประวัติระบบ',         icon: '▪' },
+    { to: '/dashboard',              label: 'หน้าแรก' },
+    { to: '/documents',              label: 'ใบประกาศทั้งหมด' },
+    { to: '/admin/users',            label: 'จัดการผู้ใช้' },
+    { to: '/admin/announcements',    label: 'จัดการการแจ้งเตือน' },
+    { to: '/admin/doc-types',        label: 'ประเภทใบประกาศ' },
+    { to: '/admin/trash',            label: 'ถังขยะ' },
+    { to: '/admin/logs',             label: 'ประวัติระบบ' },
   ],
   executive: [
-    { to: '/executive/overview',  label: 'ภาพรวมคณะ',      icon: '▪' },
-    { to: '/executive/branches',  label: 'สรุปรายงานรายสาขาวิชา',     icon: '▪' },
-    { to: '/executive/documents', label: 'เอกสารทั้งคณะ',   icon: '▪' },
+    { to: '/executive/overview',  label: 'ภาพรวมคณะ' },
+    { to: '/executive/branches',  label: 'สรุปรายงานรายสาขาวิชา' },
+    { to: '/executive/documents', label: 'เอกสารทั้งคณะ' },
   ],
 }
 
-const roleLabel = { student: 'นักศึกษา', advisor: 'อาจารย์', admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร' }
+const roleLabel = {
+  student:   'นักศึกษา',
+  advisor:   'อาจารย์',
+  staff:     'เจ้าหน้าที่',
+  admin:     'ผู้ดูแลระบบ',
+  executive: 'ผู้บริหาร',
+}
 
 export default function Sidebar({ onClose }) {
   const { user, logout } = useAuthStore()
@@ -44,47 +54,68 @@ export default function Sidebar({ onClose }) {
   }
 
   return (
-    <aside className="w-64 flex flex-col text-white select-none"
+    <aside className="w-64 flex flex-col font-sans text-white select-none"
       style={{ backgroundColor: '#0d2d3e', minHeight: '100vh' }}>
-      <div className="px-6 py-6 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-        <img src={irisLogo} alt="FIET-IRIS Logo" className="h-12 w-auto mb-3 object-contain" />
-        <p className="text-lg font-bold tracking-widest text-white">FIET-IRIS</p>
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Integrity Research Information System</p>
+
+      {/* Logo */}
+      <div className="px-5 py-5 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div className="flex items-center gap-3.5">
+          <img src={irisLogo} alt="FIET-IRIS Logo" className="h-11 w-auto object-contain flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-lg font-bold tracking-wide text-white">FIET</p>
+            <div className="w-6 h-0.5 my-1.5 rounded-full" style={{ backgroundColor: '#42b5e1' }} />
+            <p className="text-[9.5px] font-medium leading-snug" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              Integrity Research<br />Information System
+            </p>
+          </div>
+        </div>
       </div>
 
-      <nav className="flex-1 px-4 py-5 space-y-0.5">
-        {items.map(item => (
-          <NavLink key={item.to} to={item.to}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${isActive ? 'text-white' : 'hover:text-white'}`
-            }
-            style={({ isActive }) => ({
-              backgroundColor: isActive ? '#42b5e1' : 'transparent',
-              color: isActive ? '#fff' : 'rgba(255,255,255,0.55)',
-            })}>
-            <span className="text-[8px]">{item.icon}</span>
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-5">
+        <p className="text-[10px] font-bold uppercase tracking-widest px-3 mb-3" style={{ color: 'rgba(255,255,255,0.22)' }}>
+          เมนูหลัก
+        </p>
+        <div className="space-y-0.5">
+          {items.map(item => (
+            <NavLink key={item.to} to={item.to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  isActive ? 'text-white' : 'text-white/55 hover:text-white hover:bg-white/5'
+                }`
+              }
+              style={({ isActive }) =>
+                isActive ? { background: 'linear-gradient(135deg,#42b5e1,#1262a0)' } : {}
+              }>
+              {({ isActive }) => (
+                <>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors ${isActive ? 'bg-white' : 'bg-white/25'}`} />
+                  <span>{item.label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </div>
       </nav>
 
-      <div className="px-5 py-5 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-            style={{ backgroundColor: '#42b5e1', color: '#fff' }}>
+      {/* User */}
+      <div className="px-4 py-5 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div className="flex items-center gap-3 mb-4 px-1">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)', color: '#fff' }}>
             {user?.name?.[0] || 'U'}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-            <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.4)' }}>{roleLabel[user?.role]}</p>
+            <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
+            <p className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,0.38)' }}>{roleLabel[user?.role]}</p>
           </div>
         </div>
         <button onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all duration-150"
-          style={{ backgroundColor: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.1)' }}
-          onMouseEnter={e => { e.currentTarget.style.backgroundColor='#c0392b'; e.currentTarget.style.color='#fff'; e.currentTarget.style.border='1px solid #c0392b' }}
-          onMouseLeave={e => { e.currentTarget.style.backgroundColor='rgba(255,255,255,0.07)'; e.currentTarget.style.color='rgba(255,255,255,0.7)'; e.currentTarget.style.border='1px solid rgba(255,255,255,0.1)' }}>
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200"
+          style={{ backgroundColor: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.09)' }}
+          onMouseEnter={e => { e.currentTarget.style.background='linear-gradient(135deg,#e74c3c,#922b21)'; e.currentTarget.style.color='#fff'; e.currentTarget.style.border='1px solid transparent' }}
+          onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.color='rgba(255,255,255,0.6)'; e.currentTarget.style.border='1px solid rgba(255,255,255,0.09)' }}>
           <span>⏻</span><span>ออกจากระบบ</span>
         </button>
       </div>

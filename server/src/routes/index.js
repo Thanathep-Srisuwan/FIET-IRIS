@@ -9,5 +9,6 @@ router.use('/logs',       require('./log.routes'))
 router.use('/executive',     require('./executive.routes'))
 router.use('/announcements', require('./announcement.routes'))
 router.use('/doc-types',    require('./doctype.routes'))
+router.use('/admin',        require('./admin.routes'))
 
 module.exports = router

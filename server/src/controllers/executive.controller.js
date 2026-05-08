@@ -26,7 +26,8 @@ const getOverview = async (req, res) => {
       SELECT
         COUNT(*)                                                          AS total_users,
         SUM(CASE WHEN role = 'student' THEN 1 ELSE 0 END)               AS students,
-        SUM(CASE WHEN role = 'advisor' THEN 1 ELSE 0 END)               AS advisors
+        SUM(CASE WHEN role = 'advisor' THEN 1 ELSE 0 END)               AS advisors,
+        SUM(CASE WHEN role = 'staff'   THEN 1 ELSE 0 END)               AS staff
       FROM dbo.USERS WHERE is_active = 1
     `)
 
