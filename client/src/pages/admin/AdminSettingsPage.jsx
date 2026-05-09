@@ -3,16 +3,14 @@ import { settingsService } from '../../services/api'
 import toast from 'react-hot-toast'
 
 const LABELS = {
-  system_name:          { label: 'ชื่อย่อระบบ',                    type: 'text',   placeholder: 'FIET-IRIS' },
-  system_full_name:     { label: 'ชื่อเต็มระบบ',                   type: 'text',   placeholder: 'Integrity Research Information System' },
-  org_name:             { label: 'ชื่อองค์กร/คณะ',                 type: 'text',   placeholder: 'คณะ FIET มจธ.' },
-  expiry_warning_days:  { label: 'แจ้งเตือนก่อนหมดอายุ (วัน)',     type: 'number', placeholder: '90', min: 7, max: 365 },
-  trash_retention_days: { label: 'เก็บในถังขยะก่อนลบถาวร (วัน)',   type: 'number', placeholder: '30', min: 1, max: 180 },
+  'org name':             { label: 'ชื่อองค์กร/คณะ',                 type: 'text',   placeholder: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.' },
+  'expiry warning days':  { label: 'แจ้งเตือนก่อนหมดอายุ (วัน)',     type: 'number', placeholder: '90', min: 7, max: 365 },
+  'trash retention days': { label: 'เก็บในถังขยะก่อนลบถาวร (วัน)',   type: 'number', placeholder: '30', min: 1, max: 180 },
 }
 
 const GROUPS = {
-  'ข้อมูลระบบ':           ['system_name', 'system_full_name', 'org_name'],
-  'ตั้งค่าอัตโนมัติ':    ['expiry_warning_days', 'trash_retention_days'],
+  'ข้อมูลระบบ':           ['org name'],
+  'ตั้งค่าอัตโนมัติ':    ['expiry warning days', 'trash retention days'],
 }
 
 export default function AdminSettingsPage() {
@@ -77,9 +75,8 @@ export default function AdminSettingsPage() {
         <div>
           <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>ผู้ดูแลระบบ</p>
           <h1 className="text-2xl font-bold text-slate-800">ตั้งค่าระบบ</h1>
-          <p className="text-slate-400 text-sm mt-0.5">ปรับแต่งการทำงานของระบบโดยไม่ต้องแก้ไขโค้ด</p>
         </div>
-        {dirty && (
+        {/* {dirty && (
           <div className="flex gap-2">
             <button onClick={handleReset}
               className="px-4 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
@@ -91,7 +88,7 @@ export default function AdminSettingsPage() {
               {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
             </button>
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Setting Groups */}
@@ -126,7 +123,7 @@ export default function AdminSettingsPage() {
                     />
                     {settings[key] !== value && (
                       <p className="text-xs text-amber-600 mt-1">
-                        ค่าเดิม: <span className="font-mono">{settings[key]}</span>
+                        ค่าเดิม <span className="font-mono">{settings[key]}</span>
                       </p>
                     )}
                   </div>
@@ -141,9 +138,9 @@ export default function AdminSettingsPage() {
       <div className="rounded-xl p-4 text-sm" style={{ backgroundColor: '#f0f9ff', border: '1px solid #bae6fd' }}>
         <p className="font-semibold text-blue-800 mb-1">หมายเหตุ</p>
         <ul className="text-blue-700 space-y-1 text-xs">
-          <li>• ค่า <strong>expiry_warning_days</strong> มีผลกับ Scheduler และ View ใน Database ทันที</li>
-          <li>• ค่า <strong>trash_retention_days</strong> จะใช้รอบถัดไปที่ Scheduler ทำงาน (08:00 น.)</li>
-          <li>• ชื่อระบบและองค์กรจะแสดงในอีเมลแจ้งเตือนอัตโนมัติ</li>
+          <li>• ค่า <strong>expiry warning days</strong> มีจะผลทันทีหลังจากกด "บันทึกการเปลี่ยนแปลง"</li>
+          <li>• ค่า <strong>trash retention days</strong> จะมีผลหลังจากระบบเริ่มทำงานในเวลา 08:00 น. ของวันถัดไป</li>
+          <li>• ชื่อองค์กร/คณะ จะแสดงในอีเมลแจ้งเตือนอัตโนมัติ</li>
         </ul>
       </div>
 

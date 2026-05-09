@@ -25,13 +25,13 @@ const navByRole = {
     { to: '/admin/doc-types',          label: 'ประเภทใบประกาศ' },
     { to: '/admin/trash',              label: 'ถังขยะ' },
     { to: '/admin/logs',               label: 'ประวัติระบบ' },
-    // { to: '/admin/settings',           label: 'ตั้งค่าระบบ' },
+    { to: '/admin/settings',           label: 'ตั้งค่าระบบ' },
     // { to: '/admin/email-templates',    label: 'จัดการ Email' },
   ],
   executive: [
-    { to: '/executive/overview',  label: 'ภาพรวมคณะ' },
+    { to: '/executive/overview',  label: 'ข้อมูลภาพรวมในคณะ' },
     { to: '/executive/branches',  label: 'สรุปรายงานรายสาขาวิชา' },
-    { to: '/executive/documents', label: 'เอกสารทั้งคณะ' },
+    { to: '/executive/documents', label: 'เอกสารในคณะทั้งหมด' },
   ],
 }
 
