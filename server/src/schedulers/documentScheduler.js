@@ -1,8 +1,25 @@
 const cron = require('node-cron')
 const fs   = require('fs')
 const { getPool, sql } = require('../config/db')
-const { sendMail, expiryWarningTemplate, permanentDeleteTemplate } = require('../utils/mailer')
+const { sendMail, renderTemplate, loadTemplate, loadSettings } = require('../utils/mailer')
 const logger = require('../utils/logger')
+
+// โหลด threshold settings จาก SYSTEM_SETTINGS
+const loadThresholds = async (pool) => {
+  const defaults = { expiry_warning_days: 90, trash_retention_days: 30 }
+  try {
+    const result = await pool.request().query(`
+      SELECT setting_key, setting_value FROM dbo.SYSTEM_SETTINGS
+      WHERE setting_key IN ('expiry_warning_days', 'trash_retention_days')
+    `)
+    for (const row of result.recordset) {
+      defaults[row.setting_key] = parseInt(row.setting_value, 10) || defaults[row.setting_key]
+    }
+  } catch {
+    // ก่อนรัน migration ใช้ค่า default
+  }
+  return defaults
+}
 
 const runStatusAndTrash = async () => {
   const pool = await getPool()
@@ -12,7 +29,7 @@ const runStatusAndTrash = async () => {
     SET status = 'trashed',
         trashed_at = GETDATE(),
         trashed_by = NULL,
-        trash_reason = 'เอกสารหมดอายุและถูกย้ายมาโดยอัตโนมัติ',
+        trash_reason = N'เอกสารหมดอายุและถูกย้ายมาโดยอัตโนมัติ',
         updated_at = GETDATE()
     WHERE status = 'expired'
   `)
@@ -20,42 +37,53 @@ const runStatusAndTrash = async () => {
   return trashedResult.rowsAffected[0]
 }
 
-const purgeExpiredTrash = async () => {
+const purgeExpiredTrash = async (trashDays) => {
   const pool = await getPool()
+  const sysSettings = await loadSettings(pool, sql)
 
-  // ดึงเอกสารที่อยู่ในถังขยะนานเกิน 30 วัน
-  const expiredDocs = await pool.request().query(`
-    SELECT d.doc_id, d.title, d.doc_type, d.trash_reason,
-           u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email
-    FROM dbo.DOCUMENTS d
-    JOIN dbo.USERS u ON d.user_id = u.user_id
-    WHERE d.status = 'trashed'
-      AND d.trashed_at < DATEADD(DAY, -30, GETDATE())
-  `)
+  const expiredDocs = await pool.request()
+    .input('trash_days', sql.Int, trashDays)
+    .query(`
+      SELECT d.doc_id, d.title, d.doc_type, d.trash_reason,
+             u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      WHERE d.status = 'trashed'
+        AND d.trashed_at < DATEADD(DAY, -@trash_days, GETDATE())
+    `)
 
   if (expiredDocs.recordset.length === 0) return 0
 
+  const tmpl = await loadTemplate(pool, sql, 'permanent_delete')
+
   for (const doc of expiredDocs.recordset) {
     try {
-      // แจ้งเจ้าของก่อนลบ
-      const reason = 'อยู่ในถังขยะนานเกิน 30 วัน'
-      const template = permanentDeleteTemplate({
+      const reason = `อยู่ในถังขยะนานเกิน ${trashDays} วัน`
+      const vars = {
         name:        doc.owner_name,
         docTitle:    doc.title,
         docType:     doc.doc_type,
         reason,
-        deletedBy:   'ระบบอัตโนมัติ (ครบ 30 วัน)',
-      })
-      await sendMail({ to: doc.owner_email, ...template })
+        deletedBy:   `ระบบอัตโนมัติ (ครบ ${trashDays} วัน)`,
+        system_name: sysSettings.system_name,
+        org_name:    sysSettings.org_name,
+      }
 
-      // แจ้งเตือน in-app
+      await sendMail({
+        to:      doc.owner_email,
+        subject: renderTemplate(tmpl.subject, vars),
+        html:    renderTemplate(tmpl.body_html, vars),
+      })
+
+      // in-app notification
       await pool.request()
         .input('user_id', sql.Int,      doc.owner_id)
         .input('doc_id',  sql.Int,      doc.doc_id)
         .input('type',    sql.NVarChar, 'deleted')
-        .input('message', sql.NVarChar, `เอกสาร ${doc.doc_type} "${doc.title}" ถูกลบถาวรโดยอัตโนมัติ เนื่องจากอยู่ในถังขยะครบ 30 วัน`)
+        .input('message', sql.NVarChar, `เอกสาร ${doc.doc_type} "${doc.title}" ถูกลบถาวรโดยอัตโนมัติ เนื่องจากอยู่ในถังขยะครบ ${trashDays} วัน`)
         .input('channel', sql.NVarChar, 'both')
-        .query(`INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel) VALUES (@user_id, @doc_id, @type, @message, @channel)`)
+        .query(`INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel)
+                VALUES (@user_id, @doc_id, @type, @message, @channel)`)
 
       // ลบไฟล์จาก disk
       const filesResult = await pool.request()
@@ -65,12 +93,12 @@ const purgeExpiredTrash = async () => {
         if (fs.existsSync(f.file_path)) fs.unlinkSync(f.file_path)
       }
 
-      // อัปเดต status เป็น deleted
       await pool.request()
         .input('doc_id', sql.Int, doc.doc_id)
-        .query(`UPDATE dbo.DOCUMENTS SET status='deleted', deleted_at=GETDATE(), updated_at=GETDATE() WHERE doc_id=@doc_id`)
+        .query(`UPDATE dbo.DOCUMENTS
+                SET status='deleted', deleted_at=GETDATE(), updated_at=GETDATE()
+                WHERE doc_id=@doc_id`)
 
-      // บันทึก deletion log
       const firstFile = filesResult.recordset[0]
       await pool.request()
         .input('doc_id',             sql.Int,      doc.doc_id)
@@ -80,11 +108,9 @@ const purgeExpiredTrash = async () => {
         .input('original_file_name', sql.NVarChar, firstFile?.file_name || '')
         .input('doc_title',          sql.NVarChar, doc.title)
         .input('owner_email',        sql.NVarChar, doc.owner_email)
-        .query(`
-          INSERT INTO dbo.DELETION_LOGS
-            (doc_id, deleted_by, reason, original_file_path, original_file_name, doc_title, owner_email)
-          VALUES (@doc_id, @deleted_by, @reason, @original_file_path, @original_file_name, @doc_title, @owner_email)
-        `)
+        .query(`INSERT INTO dbo.DELETION_LOGS
+                  (doc_id, deleted_by, reason, original_file_path, original_file_name, doc_title, owner_email)
+                VALUES (@doc_id, @deleted_by, @reason, @original_file_path, @original_file_name, @doc_title, @owner_email)`)
 
       logger.info(`🗑️ Auto-purged doc ${doc.doc_id} "${doc.title}" (owner: ${doc.owner_email})`)
     } catch (err) {
@@ -97,91 +123,98 @@ const purgeExpiredTrash = async () => {
 }
 
 const runScheduler = () => {
-  // รันทันทีเมื่อ server เริ่ม เพื่อจัดการเอกสารที่หมดอายุขณะ server ดับอยู่
   setImmediate(async () => {
     logger.info('🕐 Startup check: ตรวจสอบเอกสารหมดอายุ')
     try {
+      const pool = await getPool()
+      const { trash_retention_days } = await loadThresholds(pool)
       await runStatusAndTrash()
-      await purgeExpiredTrash()
+      await purgeExpiredTrash(trash_retention_days)
       logger.info('✅ Startup check เสร็จสิ้น')
     } catch (err) {
       logger.error(`❌ Startup check error: ${err.message}`)
     }
   })
 
-  // รันทุกวัน 08:00 น.
   cron.schedule('0 8 * * *', async () => {
     logger.info('🕐 Scheduler เริ่มทำงาน: ตรวจสอบเอกสารหมดอายุ')
     try {
       const pool = await getPool()
+      const { expiry_warning_days, trash_retention_days } = await loadThresholds(pool)
+      const sysSettings = await loadSettings(pool, sql)
 
-      // 1 & 2. อัปเดต status และย้ายไปถังขยะ
       await runStatusAndTrash()
+      await purgeExpiredTrash(trash_retention_days)
 
-      // 3. ลบถาวรเอกสารที่อยู่ในถังนานเกิน 30 วัน
-      await purgeExpiredTrash()
+      // ดึงเอกสารที่ต้องแจ้งเตือน (อ่าน threshold จาก DB)
+      const result = await pool.request()
+        .input('expiry_days', sql.Int, expiry_warning_days)
+        .query(`
+          SELECT d.doc_id, d.title, d.doc_type, d.expire_date,
+                 DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) AS days_remaining,
+                 u.user_id, u.name AS owner_name, u.email AS owner_email
+          FROM dbo.DOCUMENTS d
+          JOIN dbo.USERS u ON d.user_id = u.user_id
+          WHERE d.status IN ('active', 'expiring_soon')
+            AND d.expire_date <= DATEADD(DAY, @expiry_days, CAST(GETDATE() AS DATE))
+            AND d.doc_id NOT IN (
+              SELECT doc_id FROM dbo.NOTIFICATIONS
+              WHERE type = 'expiry_warning'
+                AND created_at >= DATEADD(DAY, -1, GETDATE())
+            )
+        `)
 
-      // 4. ดึงเอกสารที่ต้องแจ้งเตือน (expiring_soon เท่านั้น)
-      const result = await pool.request().query(`
-        SELECT * FROM dbo.v_ExpiringDocuments
-        WHERE doc_id NOT IN (
-          SELECT doc_id FROM dbo.NOTIFICATIONS
-          WHERE type = 'expiry_warning'
-            AND created_at >= DATEADD(DAY, -1, GETDATE())
-        )
-      `)
+      const tmpl = await loadTemplate(pool, sql, 'expiry_warning')
 
       for (const doc of result.recordset) {
         const notifResult = await pool.request()
-          .input('user_id', sql.Int, doc.user_id)
-          .input('doc_id', sql.Int, doc.doc_id)
-          .input('type', sql.NVarChar, 'expiry_warning')
-          .input('message', sql.NVarChar,
-            `ใบประกาศ ${doc.doc_type} "${doc.title}" จะหมดอายุในอีก ${doc.days_remaining} วัน`)
+          .input('user_id', sql.Int,      doc.user_id)
+          .input('doc_id',  sql.Int,      doc.doc_id)
+          .input('type',    sql.NVarChar, 'expiry_warning')
+          .input('message', sql.NVarChar, `ใบประกาศ ${doc.doc_type} "${doc.title}" จะหมดอายุในอีก ${doc.days_remaining} วัน`)
           .input('channel', sql.NVarChar, 'both')
-          .query(`
-            INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel)
-            OUTPUT INSERTED.notif_id
-            VALUES (@user_id, @doc_id, @type, @message, @channel)
-          `)
+          .query(`INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel)
+                  OUTPUT INSERTED.notif_id
+                  VALUES (@user_id, @doc_id, @type, @message, @channel)`)
 
         const notifId = notifResult.recordset[0].notif_id
 
-        const template = expiryWarningTemplate({
-          name: doc.owner_name,
-          docTitle: doc.title,
-          docType: doc.doc_type,
-          expireDate: new Date(doc.expire_date).toLocaleDateString('th-TH'),
+        const vars = {
+          name:          doc.owner_name,
+          docTitle:      doc.title,
+          docType:       doc.doc_type,
+          expireDate:    new Date(doc.expire_date).toLocaleDateString('th-TH'),
           daysRemaining: doc.days_remaining,
-        })
+          system_name:   sysSettings.system_name,
+          org_name:      sysSettings.org_name,
+          clientUrl:     process.env.CLIENT_URL,
+        }
 
-        const mailResult = await sendMail({ to: doc.owner_email, ...template })
+        const subject = renderTemplate(tmpl.subject, vars)
+        const html    = renderTemplate(tmpl.body_html, vars)
+        const mailResult = await sendMail({ to: doc.owner_email, subject, html })
 
         await pool.request()
-          .input('notif_id', sql.Int, notifId)
-          .input('to_email', sql.NVarChar, doc.owner_email)
-          .input('subject', sql.NVarChar, template.subject)
-          .input('body', sql.NVarChar, template.html)
-          .input('status', sql.NVarChar, mailResult.success ? 'sent' : 'failed')
-          .input('error_message', sql.NVarChar, mailResult.error || null)
-          .input('sent_at', sql.DateTime, mailResult.success ? new Date() : null)
-          .query(`
-            INSERT INTO dbo.EMAIL_LOGS (notif_id, to_email, subject, body, status, error_message, sent_at)
-            VALUES (@notif_id, @to_email, @subject, @body, @status, @error_message, @sent_at)
-          `)
+          .input('notif_id',     sql.Int,      notifId)
+          .input('to_email',     sql.NVarChar, doc.owner_email)
+          .input('subject',      sql.NVarChar, subject)
+          .input('body',         sql.NVarChar, html)
+          .input('status',       sql.NVarChar, mailResult.success ? 'sent' : 'failed')
+          .input('error_message',sql.NVarChar, mailResult.error || null)
+          .input('sent_at',      sql.DateTime, mailResult.success ? new Date() : null)
+          .query(`INSERT INTO dbo.EMAIL_LOGS (notif_id, to_email, subject, body, status, error_message, sent_at)
+                  VALUES (@notif_id, @to_email, @subject, @body, @status, @error_message, @sent_at)`)
 
         if (mailResult.success) {
           await pool.request()
             .input('notif_id', sql.Int, notifId)
-            .query(`
-              UPDATE dbo.NOTIFICATIONS
-              SET email_sent = 1, email_sent_at = GETDATE()
-              WHERE notif_id = @notif_id
-            `)
+            .query(`UPDATE dbo.NOTIFICATIONS
+                    SET email_sent = 1, email_sent_at = GETDATE()
+                    WHERE notif_id = @notif_id`)
         }
       }
 
-      logger.info(`✅ Scheduler เสร็จ: แจ้งเตือน ${result.recordset.length} เอกสาร`)
+      logger.info(`✅ Scheduler เสร็จ: แจ้งเตือน ${result.recordset.length} เอกสาร (threshold: ${expiry_warning_days} วัน, trash: ${trash_retention_days} วัน)`)
     } catch (err) {
       logger.error(`❌ Scheduler error: ${err.message}`)
     }

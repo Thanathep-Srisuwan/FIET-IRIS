@@ -121,3 +121,11 @@ export const executiveService = {
 export const adminService = {
   getStats: () => api.get('/admin/stats'),
 }
+
+// Settings (admin only)
+export const settingsService = {
+  getAll:          ()           => api.get('/settings'),
+  bulkUpdate:      (settings)  => api.put('/settings', { settings }),
+  getTemplates:    ()           => api.get('/settings/email-templates'),
+  updateTemplate:  (key, data) => api.put(`/settings/email-templates/${key}`, data),
+}

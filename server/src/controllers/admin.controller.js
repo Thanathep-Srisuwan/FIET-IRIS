@@ -16,20 +16,31 @@ const getAdminStats = async (req, res) => {
     const pool = await getPool()
     await ensureColumns(pool)
 
+    // อ่าน expiry_warning_days จาก SYSTEM_SETTINGS
+    let expiryDays = 90
+    try {
+      const settingRow = await pool.request().query(`
+        SELECT setting_value FROM dbo.SYSTEM_SETTINGS WHERE setting_key = 'expiry_warning_days'
+      `)
+      if (settingRow.recordset.length) expiryDays = parseInt(settingRow.recordset[0].setting_value, 10) || 90
+    } catch { /* migration ยังไม่ได้รัน ใช้ default */ }
+
     // เอกสารทั้งหมด (แยกตามสถานะ — คำนวณสดจากวันหมดอายุเสมอ)
-    const docStats = await pool.request().query(`
+    const docStats = await pool.request()
+      .input('expiry_days', sql.Int, expiryDays)
+      .query(`
       SELECT
         COUNT(*) AS total,
         SUM(CASE
           WHEN no_expire = 1 THEN 1
-          WHEN expire_date IS NOT NULL AND expire_date > DATEADD(DAY, 90, CAST(GETDATE() AS DATE)) THEN 1
+          WHEN expire_date IS NOT NULL AND expire_date > DATEADD(DAY, @expiry_days, CAST(GETDATE() AS DATE)) THEN 1
           ELSE 0
         END) AS active,
         SUM(CASE
           WHEN (no_expire IS NULL OR no_expire = 0)
             AND expire_date IS NOT NULL
             AND expire_date >= CAST(GETDATE() AS DATE)
-            AND expire_date <= DATEADD(DAY, 90, CAST(GETDATE() AS DATE))
+            AND expire_date <= DATEADD(DAY, @expiry_days, CAST(GETDATE() AS DATE))
           THEN 1 ELSE 0
         END) AS expiring_soon,
         SUM(CASE
@@ -42,7 +53,7 @@ const getAdminStats = async (req, res) => {
       WHERE status NOT IN ('deleted', 'trashed')
     `)
 
-    // ผู้ใช้แยกตามกลุ่ม (ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่)
+    // ผู้ใช้แยกตามกลุ่ม (ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่) (ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่)
     const userBreakdown = await pool.request().query(`
       SELECT
         CASE
@@ -81,7 +92,9 @@ const getAdminStats = async (req, res) => {
     `)
 
     // timeline หมดอายุ (กี่ฉบับในแต่ละช่วง — คำนวณจากวันหมดอายุจริง)
-    const expiryTimeline = await pool.request().query(`
+    const expiryTimeline = await pool.request()
+      .input('expiry_days2', sql.Int, expiryDays)
+      .query(`
       SELECT
         SUM(CASE WHEN expire_date > CAST(GETDATE() AS DATE)
                   AND expire_date <= DATEADD(DAY, 30, CAST(GETDATE() AS DATE))
@@ -90,8 +103,8 @@ const getAdminStats = async (req, res) => {
                   AND expire_date <= DATEADD(DAY, 60, CAST(GETDATE() AS DATE))
              THEN 1 ELSE 0 END) AS within_60,
         SUM(CASE WHEN expire_date > DATEADD(DAY, 60, CAST(GETDATE() AS DATE))
-                  AND expire_date <= DATEADD(DAY, 90, CAST(GETDATE() AS DATE))
-             THEN 1 ELSE 0 END) AS within_90,
+                  AND expire_date <= DATEADD(DAY, @expiry_days2, CAST(GETDATE() AS DATE))
+             THEN 1 ELSE 0 END) AS within_warning,
         SUM(CASE WHEN expire_date IS NOT NULL AND expire_date < CAST(GETDATE() AS DATE)
              THEN 1 ELSE 0 END) AS already_expired
       FROM dbo.DOCUMENTS
@@ -133,11 +146,12 @@ const getAdminStats = async (req, res) => {
     `)
 
     res.json({
-      docStats:       docStats.recordset[0],
-      userBreakdown:  userBreakdown.recordset,
-      expiryTimeline: expiryTimeline.recordset[0],
-      recentActivity: recentActivity.recordset,
-      alertDocs:      alertDocs.recordset,
+      docStats:        docStats.recordset[0],
+      userBreakdown:   userBreakdown.recordset,
+      expiryTimeline:  expiryTimeline.recordset[0],
+      recentActivity:  recentActivity.recordset,
+      alertDocs:       alertDocs.recordset,
+      expiryDays,
     })
   } catch (err) {
     logger.error(`getAdminStats: ${err.message}`)

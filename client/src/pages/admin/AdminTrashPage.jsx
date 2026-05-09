@@ -1,6 +1,60 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { trashService, docTypeService } from '../../services/api'
 import toast from 'react-hot-toast'
+
+function DateInput({ value, onChange, min, max }) {
+  const pickerRef = useRef(null)
+
+  const toDisplay = (iso) => {
+    if (!iso || iso.length !== 10) return ''
+    const [y, m, d] = iso.split('-')
+    return `${d}/${m}/${y}`
+  }
+  const [display, setDisplay] = useState(toDisplay(value))
+
+  useEffect(() => { setDisplay(toDisplay(value)) }, [value])
+
+  const handleTextChange = (e) => {
+    const raw = e.target.value.replace(/[^0-9]/g, '')
+    let out = raw.slice(0, 2)
+    if (raw.length > 2) out += '/' + raw.slice(2, 4)
+    if (raw.length > 4) out += '/' + raw.slice(4, 8)
+    setDisplay(out)
+    if (out.length === 10) {
+      const [d, m, y] = out.split('/')
+      const iso = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+      if (!isNaN(new Date(iso).getTime())) onChange(iso)
+    } else if (out === '') {
+      onChange('')
+    }
+  }
+
+  const handlePickerChange = (e) => {
+    const iso = e.target.value
+    onChange(iso)
+    setDisplay(toDisplay(iso))
+  }
+
+  return (
+    <div className="relative flex items-center">
+      <input type="text" value={display} onChange={handleTextChange}
+        placeholder="dd/mm/yyyy" maxLength={10}
+        className="input-field text-sm pr-8" style={{ width: 130 }} />
+      <button type="button"
+        onClick={() => pickerRef.current?.showPicker()}
+        className="absolute right-2.5 text-slate-400 hover:text-slate-600 transition-colors leading-none">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      </button>
+      <input ref={pickerRef} type="date" value={value} onChange={handlePickerChange}
+        min={min} max={max}
+        className="sr-only" style={{ position: 'absolute', right: 0, bottom: 0, opacity: 0, width: 1, height: 1 }} />
+    </div>
+  )
+}
 
 const DEGREE_OPTIONS = [
   { value: '',         label: 'ทุกระดับ' },
@@ -172,14 +226,12 @@ export default function AdminTrashPage() {
         <div className="flex items-center gap-2">
           <div className="flex flex-col">
             <label className="text-[10px] text-slate-400 font-medium mb-0.5 uppercase tracking-wide">ย้ายตั้งแต่</label>
-            <input type="date" className="input-field text-sm" value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)} max={dateTo || undefined} />
+            <DateInput value={dateFrom} onChange={setDateFrom} max={dateTo || undefined} />
           </div>
           <span className="text-slate-400 text-sm mt-4">—</span>
           <div className="flex flex-col">
             <label className="text-[10px] text-slate-400 font-medium mb-0.5 uppercase tracking-wide">ถึงวันที่</label>
-            <input type="date" className="input-field text-sm" value={dateTo}
-              onChange={e => setDateTo(e.target.value)} min={dateFrom || undefined} />
+            <DateInput value={dateTo} onChange={setDateTo} min={dateFrom || undefined} />
           </div>
         </div>
 
