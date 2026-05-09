@@ -3,13 +3,11 @@ import { settingsService } from '../../services/api'
 import toast from 'react-hot-toast'
 
 const LABELS = {
-  'org name':             { label: 'ชื่อองค์กร/คณะ',                 type: 'text',   placeholder: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.' },
   'expiry warning days':  { label: 'แจ้งเตือนก่อนหมดอายุ (วัน)',     type: 'number', placeholder: '90', min: 7, max: 365 },
   'trash retention days': { label: 'เก็บในถังขยะก่อนลบถาวร (วัน)',   type: 'number', placeholder: '30', min: 1, max: 180 },
 }
 
 const GROUPS = {
-  'ข้อมูลระบบ':           ['org name'],
   'ตั้งค่าอัตโนมัติ':    ['expiry warning days', 'trash retention days'],
 }
 

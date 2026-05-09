@@ -26,7 +26,7 @@ const navByRole = {
     { to: '/admin/trash',              label: 'ถังขยะ' },
     { to: '/admin/logs',               label: 'ประวัติระบบ' },
     { to: '/admin/settings',           label: 'ตั้งค่าระบบ' },
-    // { to: '/admin/email-templates',    label: 'จัดการ Email' },
+    { to: '/admin/email-templates',    label: 'จัดการ Email Template' },
   ],
   executive: [
     { to: '/executive/overview',  label: 'ข้อมูลภาพรวมในคณะ' },
