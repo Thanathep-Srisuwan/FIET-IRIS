@@ -95,6 +95,9 @@ const getDocuments = async (req, res) => {
     const offset = (parsedPage - 1) * parsedLimit
 
     const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
+    await ensureDocTypeColumn(pool)
 
     // Collect params so we can reuse across count + data requests
     const filterParams = []
@@ -185,6 +188,8 @@ const getDocument = async (req, res) => {
   try {
     const { id } = req.params
     const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
 
     const result = await pool.request()
       .input('doc_id', sql.Int, id)
@@ -326,6 +331,7 @@ const getTrashedDocuments = async (req, res) => {
     const parsedLimit = Math.min(200, Math.max(1, parseInt(limit) || 20))
     const offset = (parsedPage - 1) * parsedLimit
     const pool = await getPool()
+    await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
     await ensureTrashReasonColumn(pool)
 
@@ -693,6 +699,9 @@ const previewFile = async (req, res) => {
 const getDocumentSummary = async (req, res) => {
   try {
     const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
+
     const result = await pool.request().query(`
       SELECT
         u.role AS owner_role,

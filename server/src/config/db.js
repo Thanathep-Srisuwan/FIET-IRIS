@@ -1,5 +1,10 @@
 const sql = require('mssql')
 
+const toBool = (value, fallback = false) => {
+  if (value === undefined) return fallback
+  return String(value).toLowerCase() === 'true'
+}
+
 const config = {
   server: process.env.DB_SERVER,
   port: parseInt(process.env.DB_PORT) || 1433,
@@ -7,8 +12,8 @@ const config = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   options: {
-    encrypt: false,
-    trustServerCertificate: true,
+    encrypt: toBool(process.env.DB_ENCRYPT, false),
+    trustServerCertificate: toBool(process.env.DB_TRUST_SERVER_CERTIFICATE, true),
     useUTC: false,
   },
   pool: {

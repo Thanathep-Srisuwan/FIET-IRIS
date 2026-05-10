@@ -19,7 +19,7 @@ function renderWithLinks(text) {
   return parts.map((part, i) =>
     /^https?:\/\//.test(part) ? (
       <a key={i} href={part} target="_blank" rel="noopener noreferrer"
-        className="text-blue-600 underline break-all hover:text-blue-800">
+        className="text-blue-700 dark:text-sky-300 underline break-all hover:text-blue-900 dark:hover:text-sky-200">
         {part}
       </a>
     ) : part
@@ -35,19 +35,19 @@ function AnnouncementModal({ item, onClose }) {
       onMouseDown={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden border border-transparent dark:border-slate-700"
         onMouseDown={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="flex gap-3.5 items-start">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-sky-500/15 flex items-center justify-center text-blue-600 dark:text-sky-300 flex-shrink-0">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
-              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider flex items-center gap-1.5">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-300 mt-1 uppercase tracking-wider flex items-center gap-1.5">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
                 </svg>
@@ -59,7 +59,7 @@ function AnnouncementModal({ item, onClose }) {
             </div>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
             ✕
           </button>
         </div>
@@ -71,7 +71,7 @@ function AnnouncementModal({ item, onClose }) {
               className="w-full h-auto rounded-2xl mb-6 shadow-sm"
             />
           )}
-          <div className="text-[15px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-body">
+          <div className="text-[15px] text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed font-body">
             {renderWithLinks(item.content)}
           </div>
         </div>
@@ -89,7 +89,7 @@ function AnnouncementModal({ item, onClose }) {
         )}
         <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex justify-end">
           <button onClick={onClose}
-            className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+            className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             ปิดหน้าต่าง
           </button>
         </div>
@@ -231,7 +231,7 @@ export default function LandingPage() {
             <div className="w-px h-8 bg-[#dde5ee] dark:bg-slate-800 hidden md:block" />
             <div className="hidden md:block">
               <p className="text-[15px] font-bold text-[#1a2d45] dark:text-slate-100 tracking-wide leading-tight">FIET IRIS</p>
-              <p className="text-[11px] text-[#7a96b0] dark:text-slate-500 mt-0.5 leading-tight font-medium">Faculty of Industrial Education and Technology</p>
+              <p className="text-[11px] text-[#5f7892] dark:text-slate-300 mt-0.5 leading-tight font-medium">Faculty of Industrial Education and Technology</p>
             </div>
           </div>
 
@@ -246,7 +246,7 @@ export default function LandingPage() {
               { label: 'ติดต่อเรา', href: '#contact' },
             ].map(n => (
               <a key={n.label} href={n.href} target={n.target} rel={n.target ? 'noopener noreferrer' : undefined}
-                className="px-3 py-1.5 text-sm font-bold text-gray-600 dark:text-slate-400 hover:text-[#1262a0] dark:hover:text-primary-400 rounded-md hover:bg-blue-50 dark:hover:bg-primary-900/20 transition-all duration-200">
+                className="px-3 py-1.5 text-sm font-bold text-gray-700 dark:text-slate-200 hover:text-[#1262a0] dark:hover:text-sky-300 rounded-md hover:bg-blue-50 dark:hover:bg-primary-900/20 transition-all duration-200">
                 {n.label}
               </a>
             ))}
@@ -263,7 +263,7 @@ export default function LandingPage() {
           <div className="md:hidden flex items-center gap-2">
             <ThemeToggle />
             <button
-              className="p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+              className="p-2 rounded-md text-gray-600 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
               onClick={() => setMobileMenuOpen(v => !v)}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -288,7 +288,7 @@ export default function LandingPage() {
             ].map(n => (
               <a key={n.label} href={n.href} target={n.target} rel={n.target ? 'noopener noreferrer' : undefined}
                 onClick={() => setMobileMenuOpen(false)}
-                className="py-2 text-sm text-gray-700 dark:text-slate-300 hover:text-[#1262a0] dark:hover:text-primary-400">
+                className="py-2 text-sm text-gray-700 dark:text-slate-100 hover:text-[#1262a0] dark:hover:text-sky-300">
                 {n.label}
               </a>
             ))}
@@ -321,10 +321,10 @@ export default function LandingPage() {
           <h1 className="text-6xl md:text-8xl font-black text-white tracking-tighter mb-6 drop-shadow-2xl">
             FIET IRIS
           </h1>
-          <p className="text-white/70 text-sm md:text-lg tracking-[0.3em] uppercase mb-8 font-black">
+          <p className="text-white/85 text-sm md:text-lg tracking-[0.3em] uppercase mb-8 font-black">
             Integrity Research Information System
           </p>
-          <p className="text-white/90 text-lg md:text-2xl max-w-3xl mx-auto leading-relaxed mb-12 font-medium">
+          <p className="text-white/95 text-lg md:text-2xl max-w-3xl mx-auto leading-relaxed mb-12 font-medium">
             แพลตฟอร์มเพื่อการบริหารจัดการเอกสารงานวิจัยอย่างเป็นระบบ<br className="hidden md:block"/>
             สำหรับคณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.
           </p>
@@ -356,7 +356,7 @@ export default function LandingPage() {
           <h2 className="text-3xl md:text-4xl font-black text-[#1a2d45] dark:text-slate-100 text-center mb-4 tracking-tight">
             6 ฟีเจอร์หลักที่จะช่วยยกระดับการจัดการเอกสารงานวิจัยของคุณ
           </h2>
-          <p className="text-sm md:text-base text-gray-500 dark:text-slate-400 text-center max-w-2xl mx-auto mb-16 leading-relaxed font-medium">
+          <p className="text-sm md:text-base text-gray-600 dark:text-slate-300 text-center max-w-2xl mx-auto mb-16 leading-relaxed font-medium">
             เร่งกระบวนการจัดการเอกสารงานวิจัยให้รวดเร็ว แม่นยำ และตรวจสอบได้ง่ายขึ้น สำหรับนักศึกษา บุคลากร คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -365,7 +365,7 @@ export default function LandingPage() {
                 className="group bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 p-8 flex flex-col items-start hover:shadow-2xl hover:-translate-y-2 hover:border-[#42b5e1]/30 transition-all duration-500">
                 <div className="mb-6 transform group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500">{f.icon}</div>
                 <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 mb-3 group-hover:text-[#1262a0] dark:group-hover:text-primary-400 transition-colors">{f.title}</h3>
-                <p className="text-sm text-gray-500 dark:text-slate-400 leading-relaxed font-medium">{f.desc}</p>
+                <p className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed font-medium">{f.desc}</p>
               </div>
             ))}
           </div>
@@ -383,7 +383,7 @@ export default function LandingPage() {
             <h2 className="text-3xl md:text-4xl font-black text-[#1a2d45] dark:text-slate-100 mb-4 leading-tight tracking-tight">
               เชื่อมต่อกลุ่มงานวิจัย<br/>และจริยธรรม มจธ.
             </h2>
-            <p className="text-sm md:text-base text-gray-500 dark:text-slate-400 mb-10 leading-relaxed font-medium">
+            <p className="text-sm md:text-base text-gray-600 dark:text-slate-300 mb-10 leading-relaxed font-medium">
               บูรณาการร่วมกับระบบส่วนกลางเพื่อให้ข้อมูลงานวิจัยลื่นไหลและเป็นปัจจุบันที่สุด
             </p>
             <div className="flex flex-col gap-5">
@@ -423,10 +423,10 @@ export default function LandingPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-base font-bold text-gray-800 dark:text-slate-100 group-hover:text-[#1262a0] dark:group-hover:text-primary-400 transition-colors">{link.title}</p>
-                    <p className="text-[11px] font-bold text-gray-400 dark:text-slate-500 mt-1 mb-2 uppercase tracking-wide">{link.sub}</p>
-                    <p className="text-sm text-gray-500 dark:text-slate-400 leading-relaxed font-medium">{link.desc}</p>
+                    <p className="text-[11px] font-bold text-gray-500 dark:text-slate-300 mt-1 mb-2 uppercase tracking-wide">{link.sub}</p>
+                    <p className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed font-medium">{link.desc}</p>
                   </div>
-                  <svg className="w-5 h-5 text-gray-300 dark:text-slate-700 group-hover:text-[#42b5e1] flex-shrink-0 mt-1 transition-colors"
+                  <svg className="w-5 h-5 text-gray-400 dark:text-slate-400 group-hover:text-[#42b5e1] flex-shrink-0 mt-1 transition-colors"
                     viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clipRule="evenodd"/>
                   </svg>
@@ -442,7 +442,7 @@ export default function LandingPage() {
             <h2 className="text-3xl md:text-4xl font-black text-[#1a2d45] dark:text-slate-100 mb-4 leading-tight tracking-tight">
               คณะครุศาสตร์อุตสาหกรรม<br/>และเทคโนโลยี มจธ.
             </h2>
-            <p className="text-sm md:text-base text-gray-500 dark:text-slate-400 mb-10 leading-relaxed font-medium">
+            <p className="text-sm md:text-base text-gray-600 dark:text-slate-300 mb-10 leading-relaxed font-medium">
               ศูนย์รวมนวัตกรรมการศึกษาและเทคโนโลยี เพื่อสร้างบัณฑิตคุณภาพสู่สังคม
             </p>
             <a href={FIET_URL} target="_blank" rel="noopener noreferrer"
@@ -461,8 +461,8 @@ export default function LandingPage() {
                   </svg>
                 </div>
                 <p className="text-2xl font-black text-white mb-1 tracking-tight">FIET KMUTT</p>
-                <p className="text-sm text-white/70 mb-5 font-bold uppercase tracking-widest">Faculty of Industrial Education and Technology</p>
-                <p className="text-base text-white/80 leading-relaxed mb-8 font-medium">
+                <p className="text-sm text-white/85 mb-5 font-bold uppercase tracking-widest">Faculty of Industrial Education and Technology</p>
+                <p className="text-base text-white/90 leading-relaxed mb-8 font-medium">
                   สร้างวัฒนธรรมการเรียนรู้ตลอดชีวิต มีกระบวนการคิดแบบผู้ประกอบการ
                   สร้างผู้นำด้านนวัตกรรม วิชาการ งานวิจัย และมีคุณธรรม <br/>
                   สร้างองค์กรใฝ่การเรียนรู้ สู่ความยั่งยืน
@@ -489,14 +489,14 @@ export default function LandingPage() {
           <h2 className="text-3xl md:text-4xl font-black text-[#1a2d45] dark:text-slate-100 text-center mb-4 tracking-tight">
             ติดตามข่าวสารและประกาศ
           </h2>
-          <p className="text-sm md:text-base text-gray-500 dark:text-slate-400 text-center max-w-2xl mx-auto mb-16 leading-relaxed font-medium">
+          <p className="text-sm md:text-base text-gray-600 dark:text-slate-300 text-center max-w-2xl mx-auto mb-16 leading-relaxed font-medium">
             ไม่พลาดทุกความเคลื่อนไหวและกิจกรรม จากทางคณะ
           </p>
 
           {loadingAnn ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <div className="w-12 h-12 border-4 border-[#42b5e1] border-t-transparent rounded-full animate-spin"/>
-              <p className="text-sm font-bold text-slate-400 animate-pulse uppercase tracking-widest">กำลังโหลดข้อมูล...</p>
+              <p className="text-sm font-bold text-slate-500 dark:text-slate-300 animate-pulse uppercase tracking-widest">กำลังโหลดข้อมูล...</p>
             </div>
           ) : announcements.length === 0 ? (
             <div className="text-center py-24 bg-white dark:bg-slate-900 rounded-[40px] border border-gray-100 dark:border-slate-800 shadow-sm">
@@ -505,7 +505,7 @@ export default function LandingPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
                 </svg>
               </div>
-              <p className="text-slate-400 dark:text-slate-500 text-base font-bold">ยังไม่มีประกาศในขณะนี้</p>
+              <p className="text-slate-500 dark:text-slate-300 text-base font-bold">ยังไม่มีประกาศในขณะนี้</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -528,7 +528,7 @@ export default function LandingPage() {
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-[10px] font-black text-white px-3 py-1 rounded-full uppercase tracking-[0.15em]" style={{ background: '#42b5e1' }}>Update</span>
-                        <span className="text-[11px] text-gray-400 dark:text-slate-500 font-bold flex items-center gap-1.5 uppercase tracking-wider">
+                        <span className="text-[11px] text-gray-500 dark:text-slate-300 font-bold flex items-center gap-1.5 uppercase tracking-wider">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
                           </svg>
@@ -540,7 +540,7 @@ export default function LandingPage() {
                       <h3 className="text-lg font-bold text-gray-800 dark:text-slate-100 group-hover:text-[#1262a0] dark:group-hover:text-primary-400 transition-colors line-clamp-1 mb-3">
                         {item.title}
                       </h3>
-                      <p className="text-sm text-gray-500 dark:text-slate-400 line-clamp-2 leading-relaxed font-medium mb-6">
+                      <p className="text-sm text-gray-600 dark:text-slate-300 line-clamp-2 leading-relaxed font-medium mb-6">
                         {item.content}
                       </p>
                     </div>
@@ -574,7 +574,7 @@ export default function LandingPage() {
               </div>
               <div>
                 <p className="text-lg font-black tracking-tight text-white mb-1">FIET IRIS</p>
-                <p className="text-xs text-white/50 leading-relaxed font-medium">
+                <p className="text-xs text-white/75 leading-relaxed font-medium">
                   Integrity Research Information System<br/>
                   คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี<br/>
                   มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี
@@ -583,7 +583,7 @@ export default function LandingPage() {
             </div>
             {/* Nav */}
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/30 mb-6">เมนูหลัก</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55 mb-6">เมนูหลัก</p>
               <ul className="space-y-3">
                 {[
                   { label: 'หน้าแรก', href: '#top' },
@@ -593,8 +593,8 @@ export default function LandingPage() {
                   { label: 'ตรวจสอบสถานะ IRB', href: TRACK_IRB_URL, target: '_blank' },
                 ].map(({ label, href }) => (
                   <li key={label}>
-                    <a href={href} className="text-sm font-bold text-white/60 hover:text-primary-400 transition-colors flex items-center gap-2 group">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white/20 group-hover:bg-primary-400 transition-colors" />
+                    <a href={href} className="text-sm font-bold text-white/75 hover:text-sky-300 transition-colors flex items-center gap-2 group">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/40 group-hover:bg-sky-300 transition-colors" />
                       {label}
                     </a>
                   </li>
@@ -603,7 +603,7 @@ export default function LandingPage() {
             </div>
             {/* External */}
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/30 mb-6">ระบบที่เกี่ยวข้อง</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55 mb-6">ระบบที่เกี่ยวข้อง</p>
               <ul className="space-y-4">
                 <li>
                   <a href={RI_URL} target="_blank" rel="noopener noreferrer"
@@ -615,7 +615,7 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold group-hover:text-primary-400 transition-colors">ระบบ RI</p>
-                      <p className="text-[10px] text-white/40 font-medium">Research Integrity</p>
+                      <p className="text-[10px] text-white/65 font-medium">Research Integrity</p>
                     </div>
                   </a>
                 </li>
@@ -629,7 +629,7 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold group-hover:text-emerald-400 transition-colors">ระบบ IRB</p>
-                      <p className="text-[10px] text-white/40 font-medium">Institutional Review Board</p>
+                      <p className="text-[10px] text-white/65 font-medium">Institutional Review Board</p>
                     </div>
                   </a>
                 </li>
@@ -637,21 +637,21 @@ export default function LandingPage() {
             </div>
             {/* Contact */}
             <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/30 mb-6">ติดต่อเรา</p>
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55 mb-6">ติดต่อเรา</p>
               <div className="space-y-5">
                 <div className="flex gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white/70 shrink-0">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 112.828-2.828l4.243 4.242z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </div>
-                  <p className="text-xs text-white/60 leading-relaxed font-medium">
+                  <p className="text-xs text-white/75 leading-relaxed font-medium">
                     สำนักงานคณบดี คณะครุศาสตร์อุตสาหกรรมฯ<br/>อาคารเรียนรวม 3 (S13) ชั้น 2 มจธ.
                   </p>
                 </div>
                 <a href="mailto:irb.fiet@kmutt.ac.th" className="flex items-center gap-4 group">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 group-hover:bg-primary-500/20 flex items-center justify-center text-white/40 group-hover:text-primary-400 shrink-0 transition-all">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 group-hover:bg-primary-500/20 flex items-center justify-center text-white/70 group-hover:text-sky-300 shrink-0 transition-all">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
@@ -677,7 +677,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t border-white/5 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/20 text-center sm:text-left">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/45 text-center sm:text-left">
               © {new Date().getFullYear()} Faculty of Industrial Education and Technology, KMUTT. ALL RIGHTS RESERVED.
             </p>
           </div>
