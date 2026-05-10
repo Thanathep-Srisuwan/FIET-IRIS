@@ -11,6 +11,31 @@ const ensureNoExpireColumn = async (pool) => {
       WHERE object_id = OBJECT_ID('dbo.DOCUMENTS') AND name = 'no_expire'
     )
     ALTER TABLE dbo.DOCUMENTS ADD no_expire BIT NOT NULL DEFAULT 0
+
+    IF EXISTS (
+      SELECT 1 FROM sys.columns
+      WHERE object_id = OBJECT_ID('dbo.DOCUMENTS') AND name = 'expire_date' AND is_nullable = 0
+    )
+    BEGIN
+      DECLARE @dateConstraint NVARCHAR(200)
+      SELECT @dateConstraint = cc.name
+      FROM sys.check_constraints cc
+      WHERE cc.parent_object_id = OBJECT_ID('dbo.DOCUMENTS')
+        AND cc.definition LIKE '%expire_date%'
+
+      IF @dateConstraint IS NOT NULL
+        EXEC('ALTER TABLE dbo.DOCUMENTS DROP CONSTRAINT [' + @dateConstraint + ']')
+
+      ALTER TABLE dbo.DOCUMENTS ALTER COLUMN expire_date DATE NULL
+
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.check_constraints
+        WHERE parent_object_id = OBJECT_ID('dbo.DOCUMENTS') AND name = 'CHK_DOCUMENTS_dates_nullable'
+      )
+      ALTER TABLE dbo.DOCUMENTS
+      ADD CONSTRAINT CHK_DOCUMENTS_dates_nullable
+      CHECK (expire_date IS NULL OR expire_date >= issue_date)
+    END
   `)
 }
 
