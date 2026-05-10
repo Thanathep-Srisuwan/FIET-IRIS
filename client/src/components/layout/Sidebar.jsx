@@ -56,35 +56,30 @@ export default function Sidebar({ onClose }) {
   }
 
   return (
-    <aside className="w-64 flex flex-col font-sans text-white select-none transition-colors duration-300"
-      style={{ backgroundColor: '#0d2d3e', minHeight: '100vh' }}>
+    <aside className="w-64 flex flex-col font-sans text-white select-none transition-colors duration-300 h-screen overflow-hidden"
+      style={{ backgroundColor: '#0d2d3e' }}>
 
-      {/* Logo */}
-      <div className="px-5 py-6 border-b border-white/5">
-        <div className="flex items-center gap-3.5 group cursor-pointer" onClick={() => navigate('/')}>
-          <div className="bg-white/10 p-2 rounded-xl backdrop-blur-sm group-hover:bg-white/20 transition-colors shadow-lg">
-            <img src={irisLogo} alt="FIET-IRIS Logo" className="h-9 w-auto object-contain flex-shrink-0 brightness-110" />
-          </div>
+      {/* Logo Section - No background frame, no navigation */}
+      <div className="px-5 py-5 border-b border-white/5 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <img src={irisLogo} alt="FIET-IRIS Logo" className="h-9 w-auto object-contain flex-shrink-0 brightness-110" />
           <div className="flex-1 min-w-0">
-            <p className="text-xl font-black tracking-tighter text-white">FIET-IRIS</p>
-            <div className="w-8 h-0.5 my-1 rounded-full bg-primary-400 shadow-[0_0_8px_#42b5e1]" />
-            <p className="text-[9px] font-bold leading-tight text-white/30 uppercase tracking-widest">Research System</p>
+            <p className="text-xl font-black tracking-tighter text-white">FIET IRIS</p>
+            <div className="w-8 h-0.5 my-0.5 rounded-full bg-primary-400" />
+            <p className="text-[9px] font-bold leading-tight text-white/30 uppercase tracking-widest">Integrity Research Information System</p>
           </div>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-6 overflow-y-auto custom-scrollbar">
-        <p className="text-[10px] font-black uppercase tracking-[0.2em] px-4 mb-4 text-white/20">
-          Main Navigation
-        </p>
-        <div className="space-y-1.5">
+      {/* Navigation Area - Scrollable but hidden scrollbar */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-hide">
+        <div className="space-y-1">
           {items.map(item => (
             <NavLink key={item.to} to={item.to}
               onClick={onClose}
               className={({ isActive }) =>
-                `group flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all duration-300 ${
-                  isActive ? 'text-white shadow-xl shadow-primary-900/20' : 'text-white/40 hover:text-white hover:bg-white/5'
+                `group flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 ${
+                  isActive ? 'text-white shadow-lg' : 'text-white/40 hover:text-white hover:bg-white/5'
                 }`
               }
               style={({ isActive }) =>
@@ -92,7 +87,7 @@ export default function Sidebar({ onClose }) {
               }>
               {({ isActive }) => (
                 <>
-                  <div className={`transition-all duration-300 transform ${isActive ? 'scale-110 rotate-3' : 'group-hover:scale-110 group-hover:rotate-3'}`}>
+                  <div className="transition-all duration-300 transform group-hover:scale-110">
                     {getIcon(item.to, isActive)}
                   </div>
                   <span className="tracking-tight">{item.label}</span>
@@ -103,24 +98,24 @@ export default function Sidebar({ onClose }) {
         </div>
       </nav>
 
-      {/* User */}
-      <div className="px-5 py-6 border-t border-white/5 bg-black/10 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-5 px-1">
-          <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-black flex-shrink-0 shadow-xl border border-white/10"
+      {/* User & Logout Section - Fixed at the bottom */}
+      <div className="px-5 py-4 border-t border-white/5 bg-black/10 backdrop-blur-sm flex-shrink-0">
+        <div className="flex items-center gap-3 mb-4 px-1">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 shadow-lg border border-white/10"
             style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)', color: '#fff' }}>
             {user?.name?.[0] || 'U'}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-white truncate tracking-tight">{user?.name}</p>
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/20 mt-0.5">{roleLabel[user?.role]}</p>
+            <p className="text-xs font-bold text-white truncate tracking-tight">{user?.name}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mt-0.5">{roleLabel[user?.role]}</p>
           </div>
         </div>
         <button onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2.5 py-3 rounded-2xl text-sm font-black transition-all duration-300 bg-white/5 border border-white/10 text-white/50 hover:bg-red-500 hover:text-white hover:border-red-400 hover:shadow-lg hover:shadow-red-900/20 group active:scale-95">
-          <svg className="w-4 h-4 transition-transform group-hover:scale-125" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black transition-all duration-300 bg-white/5 border border-white/10 text-white/50 hover:bg-red-500 hover:text-white hover:border-red-400 group active:scale-95">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          <span className="uppercase tracking-widest text-[10px]">Logout</span>
+          <span className="uppercase tracking-widest">Logout</span>
         </button>
       </div>
     </aside>
@@ -196,7 +191,7 @@ function getIcon(to, isActive) {
   if (to.includes('admin/email-templates')) {
     return (
       <svg {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v10a2 2 0 002 2z" />
       </svg>
     )
   }

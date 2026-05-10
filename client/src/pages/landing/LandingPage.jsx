@@ -229,7 +229,7 @@ export default function LandingPage() {
             </div>
             <div className="w-px h-8 bg-[#dde5ee] dark:bg-slate-800 hidden md:block" />
             <div className="hidden md:block">
-              <p className="text-[15px] font-bold text-[#1a2d45] dark:text-slate-100 tracking-wide leading-tight">FIET-IRIS</p>
+              <p className="text-[15px] font-bold text-[#1a2d45] dark:text-slate-100 tracking-wide leading-tight">FIET IRIS</p>
               <p className="text-[11px] text-[#7a96b0] dark:text-slate-500 mt-0.5 leading-tight font-medium">Faculty of Industrial Education and Technology</p>
             </div>
           </div>
@@ -314,14 +314,14 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-6xl md:text-8xl font-black text-white tracking-tighter mb-6 drop-shadow-2xl">
-            FIET-IRIS
+            FIET IRIS
           </h1>
           <p className="text-white/70 text-sm md:text-lg tracking-[0.3em] uppercase mb-8 font-black">
             Integrity Research Information System
           </p>
           <p className="text-white/90 text-lg md:text-2xl max-w-3xl mx-auto leading-relaxed mb-12 font-medium">
-            แพลตฟอร์มอัจฉริยะเพื่อการบริหารจัดการงานวิจัยอย่างเป็นระบบ<br className="hidden md:block"/>
-            ยกระดับมาตรฐานความโปร่งใสและประสิทธิภาพสูงสุด
+            แพลตฟอร์มเพื่อการบริหารจัดการเอกสารงานวิจัยอย่างเป็นระบบ<br className="hidden md:block"/>
+            สำหรับคณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
@@ -349,10 +349,10 @@ export default function LandingPage() {
           <p className="text-[11px] font-black uppercase tracking-[0.2em] text-center mb-3"
             style={{ color: '#42b5e1' }}>ฟีเจอร์แนะนำ</p>
           <h2 className="text-3xl md:text-4xl font-black text-[#1a2d45] dark:text-slate-100 text-center mb-4 tracking-tight">
-            ระบบที่ออกแบบเพื่อความเป็นเลิศทางวิจัย
+            6 ฟีเจอร์หลักที่จะช่วยยกระดับการจัดการเอกสารงานวิจัยของคุณ
           </h2>
           <p className="text-sm md:text-base text-gray-500 dark:text-slate-400 text-center max-w-2xl mx-auto mb-16 leading-relaxed font-medium">
-            เร่งกระบวนการจัดการเอกสารงานวิจัยให้รวดเร็ว แม่นยำ และตรวจสอบได้ง่ายขึ้น สำหรับบุคลากรคณะครุศาสตร์อุตสาหกรรมฯ
+            เร่งกระบวนการจัดการเอกสารงานวิจัยให้รวดเร็ว แม่นยำ และตรวจสอบได้ง่ายขึ้น สำหรับนักศึกษา บุคลากร คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {FEATURES.map(f => (
@@ -386,28 +386,28 @@ export default function LandingPage() {
                 {
                   href: RI_URL,
                   icon: (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
                     </svg>
                   ),
                   bg: '#e0f2fe',
                   color: '#0284c7',
                   title: 'ระบบ RI',
                   sub: 'Research Integrity · มจธ.',
-                  desc: 'คณะทำงานจัดทำนโยบายจริยธรรมการวิจัยและส่งเสริมจริยธรรมการวิจัย',
+                  desc: 'คณะทำงานจัดทำนโยบายจริยธรรมการวิจัยและส่งเสริมจริยธรรมการวิจัย มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี',
                 },
                 {
                   href: IRB_URL,
                   icon: (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a2 2 0 00-1.96 1.414l-.727 2.903a2 2 0 01-3.664 0l-.727-2.903a2 2 0 00-1.96-1.414l-2.387.477a2 2 0 00-1.022.547l-2.387 2.387a2 2 0 11-2.828-2.828l2.387-2.387a2 2 0 00.547-1.022l.477-2.387a2 2 0 00-1.414-1.96L4.053 7.05a2 2 0 110-3.664l2.903-.727a2 2 0 001.414-1.96L8.847.312a2 2 0 113.664 0l.727 2.903a2 2 0 001.96 1.414l2.387-.477a2 2 0 001.022-.547l2.387-2.387a2 2 0 112.828 2.828l-2.387 2.387a2 2 0 00-.547 1.022l-.477 2.387a2 2 0 001.414 1.96l2.903.727a2 2 0 110 3.664l-2.903.727a2 2 0 00-1.414 1.96l-.727 2.903z" />
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H5a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
                   ),
                   bg: '#f0fdf4',
                   color: '#16a34a',
                   title: 'ระบบ IRB',
                   sub: 'Institutional Review Board · มจธ.',
-                  desc: 'คณะกรรมการจริยธรรมการวิจัยในมนุษย์',
+                  desc: 'คณะกรรมการจริยธรรมการวิจัยในมนุษย์ มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี',
                 },
               ].map(link => (
                 <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer"
@@ -455,10 +455,12 @@ export default function LandingPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222" />
                   </svg>
                 </div>
-                <p className="text-2xl font-black text-white mb-1 tracking-tight">FIET มจธ.</p>
+                <p className="text-2xl font-black text-white mb-1 tracking-tight">FIET KMUTT</p>
                 <p className="text-sm text-white/70 mb-5 font-bold uppercase tracking-widest">Faculty of Industrial Education and Technology</p>
                 <p className="text-base text-white/80 leading-relaxed mb-8 font-medium">
-                  ก้าวสู่ความเป็นเลิศในด้านการจัดการศึกษาและวิจัย พัฒนาศักยภาพกำลังคนสู่ยุคดิจิทัลอย่างยั่งยืน
+                  สร้างวัฒนธรรมการเรียนรู้ตลอดชีวิต มีกระบวนการคิดแบบผู้ประกอบการ
+                  สร้างผู้นำด้านนวัตกรรม วิชาการ งานวิจัย และมีคุณธรรม <br/>
+                  สร้างองค์กรใฝ่การเรียนรู้ สู่ความยั่งยืน
                 </p>
                 <span className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-white text-base font-black transition-all group-hover:shadow-xl group-hover:-translate-y-0.5 active:translate-y-0 shadow-lg"
                   style={{ color: '#1262a0' }}>
@@ -483,7 +485,7 @@ export default function LandingPage() {
             ติดตามข่าวสารและประกาศ
           </h2>
           <p className="text-sm md:text-base text-gray-500 dark:text-slate-400 text-center max-w-2xl mx-auto mb-16 leading-relaxed font-medium">
-            ไม่พลาดทุกความเคลื่อนไหว กิจกรรม และระเบียบปฏิบัติใหม่ๆ จากทางคณะ
+            ไม่พลาดทุกความเคลื่อนไหวและกิจกรรม จากทางคณะ
           </p>
 
           {loadingAnn ? (
@@ -563,12 +565,13 @@ export default function LandingPage() {
               <div className="flex items-center gap-4">
                 <img src={kmuttLogo} alt="KMUTT" className="h-12 w-auto object-contain brightness-0 invert opacity-90" />
                 <img src={fietLogo} alt="FIET" className="h-14 w-auto object-contain brightness-0 invert opacity-90" />
+                <img src={irisLogo} alt="IRIS" className="h-10 w-auto object-contain brightness-0 invert opacity-90" />
               </div>
               <div>
-                <p className="text-lg font-black tracking-tight text-white mb-1">FIET-IRIS</p>
+                <p className="text-lg font-black tracking-tight text-white mb-1">FIET IRIS</p>
                 <p className="text-xs text-white/50 leading-relaxed font-medium">
                   Integrity Research Information System<br/>
-                  Faculty of Industrial Education and Technology<br/>
+                  คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี<br/>
                   มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี
                 </p>
               </div>
@@ -600,7 +603,11 @@ export default function LandingPage() {
                 <li>
                   <a href={RI_URL} target="_blank" rel="noopener noreferrer"
                     className="group bg-white/5 hover:bg-white/10 p-3 rounded-2xl transition-all flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-xl shadow-inner">🔬</div>
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400 shadow-inner">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                      </svg>
+                    </div>
                     <div>
                       <p className="text-sm font-bold group-hover:text-primary-400 transition-colors">ระบบ RI</p>
                       <p className="text-[10px] text-white/40 font-medium">Research Integrity</p>
@@ -610,7 +617,11 @@ export default function LandingPage() {
                 <li>
                   <a href={IRB_URL} target="_blank" rel="noopener noreferrer"
                     className="group bg-white/5 hover:bg-white/10 p-3 rounded-2xl transition-all flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-xl shadow-inner">🏥</div>
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 shadow-inner">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H5a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
                     <div>
                       <p className="text-sm font-bold group-hover:text-emerald-400 transition-colors">ระบบ IRB</p>
                       <p className="text-[10px] text-white/40 font-medium">Institutional Review Board</p>
@@ -647,7 +658,7 @@ export default function LandingPage() {
                 {[
                   { href: "https://www.facebook.com/fiet.kmutt", color: "#1877f2", icon: "M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073c0 6.031 4.437 11.028 10.125 11.927v-8.437H7.078v-3.49h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.49h-2.796v8.437C19.563 23.101 24 18.104 24 12.073z" },
                   { href: "https://www.youtube.com/@FIETkmutt", color: "#ff0000", icon: "M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" },
-                  { href: "https://line.me/R/ti/p/@fietkmutt", color: "#06c755", icon: "M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" }
+                  { href: "https://line.me/R/ti/p/@413kjbml", color: "#06c755", icon: "M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314" }
                 ].map(social => (
                   <a key={social.href} href={social.href} target="_blank" rel="noopener noreferrer"
                     className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg"
