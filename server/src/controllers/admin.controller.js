@@ -7,6 +7,12 @@ const ensureColumns = async (pool) => {
       ALTER TABLE dbo.USERS ADD student_id NVARCHAR(50) NULL;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='degree_level')
       ALTER TABLE dbo.USERS ADD degree_level NVARCHAR(20) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='no_expire')
+      ALTER TABLE dbo.DOCUMENTS ADD no_expire BIT NOT NULL DEFAULT 0;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='trashed_at')
+      ALTER TABLE dbo.DOCUMENTS ADD trashed_at DATETIME NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='trashed_by')
+      ALTER TABLE dbo.DOCUMENTS ADD trashed_by INT NULL;
   `)
 }
 
