@@ -2,19 +2,29 @@ import { useEffect, useState, useRef } from 'react'
 import { notificationService, announcementService } from '../../services/api'
 import toast from 'react-hot-toast'
 
-const docTypeIcon = {
-  expiry_warning: '⚠️',
-  expired:        '🔴',
-  deleted:        '🗑️',
-  replaced:       '🔄',
+const docTypeIcon = (type) => {
+  const props = { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24", strokeWidth: 2 };
+  switch (type) {
+    case 'expiry_warning':
+      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
+    case 'expired':
+      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+    case 'deleted':
+      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+    case 'replaced':
+      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>;
+    default:
+      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>;
+  }
 }
+
 const docTypeColor = {
-  expiry_warning: { bg: '#fffbeb', border: '#fde68a',  text: '#92400e' },
-  expired:        { bg: '#fff1f2', border: '#fecdd3',  text: '#881337' },
-  deleted:        { bg: '#f8fafc', border: '#e2e8f0',  text: '#475569' },
-  replaced:       { bg: '#f0f9ff', border: '#bae6fd',  text: '#0c4a6e' },
+  expiry_warning: 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800',
+  expired:        'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
+  deleted:        'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-slate-700',
+  replaced:       'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
 }
-const announcementColor = { bg: '#f0f9ff', border: '#bae6fd', text: '#0369a1' }
+const announcementColorClass = 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
 
 function renderWithLinks(text) {
   if (!text) return null
@@ -22,7 +32,7 @@ function renderWithLinks(text) {
   return parts.map((part, i) =>
     /^https?:\/\//.test(part) ? (
       <a key={i} href={part} target="_blank" rel="noopener noreferrer"
-        className="text-blue-600 underline break-all hover:text-blue-800"
+        className="text-blue-600 dark:text-primary-400 underline break-all hover:text-blue-800 dark:hover:text-primary-300"
         onClick={e => e.stopPropagation()}>
         {part}
       </a>
@@ -39,16 +49,23 @@ function AnnouncementModal({ item, onClose }) {
       onMouseDown={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden transition-colors"
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100">
-          <div className="flex gap-3 items-start">
-            <span className="text-2xl flex-shrink-0">📢</span>
+        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+          <div className="flex gap-3.5 items-start">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 flex-shrink-0">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
             <div>
-              <h2 className="text-base font-semibold text-slate-800">{item.title}</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
+              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
+                </svg>
                 {new Date(item.created_at).toLocaleString('th-TH', {
                   year: 'numeric', month: 'long', day: 'numeric',
                   hour: '2-digit', minute: '2-digit',
@@ -58,50 +75,52 @@ function AnnouncementModal({ item, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 flex-shrink-0 ml-3 text-lg leading-none"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
           >
             ✕
           </button>
         </div>
 
         {/* Content + Image */}
-        <div className="px-6 py-5 overflow-y-auto flex-1">
+        <div className="px-6 py-6 overflow-y-auto flex-1 custom-scrollbar">
           {item.image_url && (
             <img
               src={item.image_url}
               alt={item.title}
-              className="w-full h-auto rounded-xl mb-4"
+              className="w-full h-auto rounded-2xl mb-6 shadow-sm"
             />
           )}
-          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+          <div className="text-[15px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-body">
             {renderWithLinks(item.content)}
-          </p>
+          </div>
         </div>
 
         {/* Link button */}
         {item.link_url && (
-          <div className="px-6 pt-2 pb-4 border-t border-slate-100">
+          <div className="px-6 pt-2 pb-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
             <a
               href={item.link_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm font-medium text-white transition-opacity hover:opacity-90"
-              style={{ backgroundColor: '#42b5e1' }}
+              className="flex items-center justify-center gap-2.5 w-full py-3 rounded-2xl text-[15px] font-bold text-white transition-all hover:opacity-90 shadow-lg hover:shadow-xl active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}
               onClick={e => e.stopPropagation()}
             >
-              🔗 ดูลิ้งค์เพิ่มเติม
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              ดูรายละเอียดเพิ่มเติม
             </a>
           </div>
         )}
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-slate-100 flex justify-end">
+        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end">
           <button
             onClick={onClose}
-            className="text-sm px-5 py-2 rounded-lg font-medium text-white"
-            style={{ backgroundColor: '#42b5e1' }}
+            className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           >
-            ปิด
+            ปิดหน้าต่าง
           </button>
         </div>
       </div>
@@ -183,9 +202,9 @@ export default function NotificationPanel({ onCountChange }) {
     try {
       await announcementService.markRead(id)
       setAnnouncements(prev => prev.map(a => a.announcement_id === id ? { ...a, is_read: true } : a))
-      const docUnread = notifs.filter(n => !n.in_app_read).length
-      const annUnread = announcements.filter(a => !a.is_read && a.announcement_id !== id).length
-      const total = docUnread + annUnread
+      const docU = notifs.filter(n => !n.in_app_read).length
+      const annU = announcements.filter(a => !a.is_read && a.announcement_id !== id).length
+      const total = docU + annU
       setBadgeCount(total)
       onCountChange?.(total)
     } catch { toast.error('เกิดข้อผิดพลาด') }
@@ -228,34 +247,36 @@ export default function NotificationPanel({ onCountChange }) {
         {/* Bell button */}
         <button
           onClick={() => setOpen(!open)}
-          className="relative p-2 rounded-lg transition-colors hover:bg-slate-100"
+          className="relative p-2 rounded-xl transition-all hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95"
         >
-          <span className="text-xl">🔔</span>
+          <svg className={`w-5 h-5 ${badgeCount > 0 ? 'text-amber-500 animate-swing' : 'text-slate-500 dark:text-slate-400'}`} fill="currentColor" viewBox="0 0 20 20">
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+          </svg>
           {badgeCount > 0 && (
             <span
-              className="absolute -top-0.5 -right-0.5 w-5 h-5 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+              className="absolute top-1 right-1 w-4 h-4 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-sm"
               style={{ backgroundColor: '#f7924a' }}
             >
-              {badgeCount > 9 ? '9+' : badgeCount}
+              {badgeCount > 9 ? '9' : badgeCount}
             </span>
           )}
         </button>
 
         {/* Panel */}
         {open && (
-          <div className="absolute right-0 top-12 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+          <div className="absolute right-0 top-12 w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden transition-all duration-300">
             {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
               <div>
-                <h3 className="text-sm font-semibold text-slate-800">การแจ้งเตือน</h3>
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">การแจ้งเตือน</h3>
                 {unreadCount > 0 && (
-                  <p className="text-xs text-slate-400 mt-0.5">ยังไม่ได้อ่าน {unreadCount} รายการ</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-1">ยังไม่ได้อ่าน {unreadCount} รายการ</p>
                 )}
               </div>
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllRead}
-                  className="text-xs font-medium transition-colors"
+                  className="text-xs font-bold transition-all hover:opacity-80 active:scale-95"
                   style={{ color: '#42b5e1' }}
                 >
                   อ่านทั้งหมด
@@ -264,13 +285,32 @@ export default function NotificationPanel({ onCountChange }) {
             </div>
 
             {/* List */}
-            <div className="max-h-96 overflow-y-auto divide-y divide-slate-50">
+            <div className="max-h-96 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800 custom-scrollbar">
               {loading ? (
-                <div className="text-center py-10 text-slate-400 text-sm">กำลังโหลด...</div>
+                <div className="flex flex-col gap-4 p-5">
+                  <div className="flex gap-4 animate-pulse">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
+                    <div className="flex-1 space-y-2 py-1">
+                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/2" />
+                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded" />
+                    </div>
+                  </div>
+                  <div className="flex gap-4 animate-pulse opacity-60">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
+                    <div className="flex-1 space-y-2 py-1">
+                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/3" />
+                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded" />
+                    </div>
+                  </div>
+                </div>
               ) : merged.length === 0 ? (
-                <div className="text-center py-10">
-                  <p className="text-3xl mb-2">✅</p>
-                  <p className="text-slate-400 text-sm">ไม่มีการแจ้งเตือน</p>
+                <div className="text-center py-12 px-6">
+                  <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                  </div>
+                  <p className="text-slate-400 dark:text-slate-500 text-sm font-bold">ไม่มีการแจ้งเตือนในขณะนี้</p>
                 </div>
               ) : merged.map(item => {
                 if (item._kind === 'announcement') {
@@ -278,35 +318,30 @@ export default function NotificationPanel({ onCountChange }) {
                   return (
                     <div
                       key={`ann-${item.announcement_id}`}
-                      className="px-5 py-4 transition-colors cursor-pointer hover:bg-blue-50"
-                      style={{ backgroundColor: isUnread ? '#f0f9ff' : '#fff' }}
+                      className={`px-5 py-4 transition-all cursor-pointer border-l-4 ${isUnread ? 'bg-primary-50/40 dark:bg-primary-900/10 border-primary-400' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
                       onClick={() => handleAnnClick(item)}
                     >
-                      <div className="flex gap-3">
-                        <span className="text-lg flex-shrink-0 mt-0.5">📢</span>
+                      <div className="flex gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                          </svg>
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-medium truncate ${isUnread ? 'text-slate-800' : 'text-slate-500'}`}>
+                          <p className={`text-[13px] font-bold truncate ${isUnread ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
                             {item.title}
                           </p>
-                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{item.content}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span
-                              className="text-xs px-2 py-0.5 rounded-full font-medium"
-                              style={{ backgroundColor: announcementColor.bg, color: announcementColor.text, border: `1px solid ${announcementColor.border}` }}
-                            >
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed font-medium">{item.content}</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${announcementColorClass}`}>
                               ประกาศ
                             </span>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
                               {new Date(item.created_at).toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </span>
-                            {isUnread ? (
-                              <span
-                                className="w-2 h-2 rounded-full flex-shrink-0 ml-auto"
-                                style={{ backgroundColor: '#42b5e1' }}
-                              />
-                            ) : (
-                              <span className="text-xs text-slate-400 ml-auto">คลิกเพื่ออ่าน</span>
-                            )}
                           </div>
                         </div>
                       </div>
@@ -315,38 +350,33 @@ export default function NotificationPanel({ onCountChange }) {
                 }
 
                 // document notification
-                const c = docTypeColor[item.type] || docTypeColor.expiry_warning
+                const cClass = docTypeColor[item.type] || docTypeColor.expiry_warning
                 return (
                   <div
                     key={`doc-${item.notif_id}`}
-                    className="px-5 py-4 transition-colors cursor-pointer"
-                    style={{ backgroundColor: item.in_app_read ? '#fff' : '#f8fafc' }}
+                    className={`px-5 py-4 transition-all cursor-pointer border-l-4 ${!item.in_app_read ? 'bg-primary-50/40 dark:bg-primary-900/10 border-primary-400' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
                     onClick={() => !item.in_app_read && handleMarkDocRead(item.notif_id)}
                   >
-                    <div className="flex gap-3">
-                      <span className="text-lg flex-shrink-0 mt-0.5">{docTypeIcon[item.type] || '🔔'}</span>
+                    <div className="flex gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${cClass.split(' ').slice(0, 2).join(' ')}`}>
+                        {docTypeIcon(item.type)}
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-medium truncate ${item.in_app_read ? 'text-slate-500' : 'text-slate-800'}`}>
+                        <p className={`text-[13px] font-bold truncate ${!item.in_app_read ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
                           {item.doc_title}
                         </p>
-                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{item.message}</p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: c.bg, color: c.text, border: `1px solid ${c.border}` }}
-                          >
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed font-medium">{item.message}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${cClass}`}>
                             {item.doc_type}
                           </span>
-                          <span className="text-xs text-slate-400">
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             {new Date(new Date(item.created_at).getTime() + 7 * 60 * 60 * 1000)
                               .toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          {!item.in_app_read && (
-                            <span
-                              className="w-2 h-2 rounded-full flex-shrink-0 ml-auto"
-                              style={{ backgroundColor: '#42b5e1' }}
-                            />
-                          )}
                         </div>
                       </div>
                     </div>
@@ -357,8 +387,8 @@ export default function NotificationPanel({ onCountChange }) {
 
             {/* Footer */}
             {merged.length > 0 && (
-              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 text-center">
-                <p className="text-xs text-slate-400">แสดง {merged.length} รายการล่าสุด</p>
+              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-center">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">แสดง {merged.length} รายการล่าสุด</p>
               </div>
             )}
           </div>

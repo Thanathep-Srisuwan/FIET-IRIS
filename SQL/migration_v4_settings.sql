@@ -6,6 +6,9 @@
 -- ============================================================
 --  SYSTEM_SETTINGS
 -- ============================================================
+USE FIET_IRIS;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'SYSTEM_SETTINGS')
 BEGIN
     CREATE TABLE dbo.SYSTEM_SETTINGS (

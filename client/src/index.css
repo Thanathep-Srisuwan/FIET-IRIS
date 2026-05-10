@@ -6,36 +6,33 @@
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-800;
+    @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200 transition-colors duration-300;
     font-family: 'IBM Plex Sans Thai', sans-serif;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-fiet-blue text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-sm;
+    @apply bg-fiet-blue text-white font-bold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:brightness-110 active:scale-95;
   }
-  .btn-primary:hover { background-color: #2a9bc7; }
 
   .btn-secondary {
-    @apply bg-white text-slate-700 font-medium px-4 py-2 rounded-lg border border-slate-200 transition-all duration-200;
+    @apply bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95;
   }
-  .btn-secondary:hover { background-color: #f8fafc; }
 
   .btn-orange {
-    @apply bg-fiet-orange text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-sm;
+    @apply bg-fiet-orange text-white font-bold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:brightness-110 active:scale-95;
   }
-  .btn-orange:hover { background-color: #e07a35; }
 
   .input-field {
-    @apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-fiet-blue focus:border-transparent transition-all bg-white;
+    @apply w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 focus:ring-fiet-blue/20 dark:focus:ring-fiet-blue/10 focus:border-fiet-blue transition-all bg-white dark:bg-slate-800 dark:text-white;
   }
+
   .card {
-    @apply bg-white rounded-2xl border border-slate-100 p-6;
-    box-shadow: 0 2px 12px 0 rgba(13,45,62,0.08);
+    @apply bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-6 shadow-card transition-all;
   }
+
   .stat-card {
-    @apply bg-white rounded-2xl border border-slate-100 p-5 flex items-center gap-4;
-    box-shadow: 0 2px 12px 0 rgba(13,45,62,0.08);
+    @apply bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-5 flex items-center gap-4 shadow-card transition-all;
   }
 }
