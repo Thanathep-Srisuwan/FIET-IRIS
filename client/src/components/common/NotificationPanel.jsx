@@ -103,7 +103,7 @@ function AnnouncementModal({ item, onClose }) {
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2.5 w-full py-3 rounded-2xl text-[15px] font-bold text-white transition-all hover:opacity-90 shadow-lg hover:shadow-xl active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}
+              style={{ backgroundColor: '#1262a0' }}
               onClick={e => e.stopPropagation()}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

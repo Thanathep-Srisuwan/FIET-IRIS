@@ -82,7 +82,7 @@ export default function AdminSettingsPage() {
             </button>
             <button onClick={handleSave} disabled={saving}
               className="px-4 py-2 text-sm rounded-xl text-white font-semibold transition-colors disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}>
+              style={{ backgroundColor: '#1262a0' }}>
               {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
             </button>
           </div>
@@ -151,7 +151,7 @@ export default function AdminSettingsPage() {
           </button>
           <button onClick={handleSave} disabled={saving}
             className="px-6 py-2 text-sm rounded-xl text-white font-semibold transition-colors disabled:opacity-60"
-            style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}>
+            style={{ backgroundColor: '#1262a0' }}>
             {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
           </button>
         </div>

@@ -1,59 +1,97 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import NotificationPanel from '../common/NotificationPanel'
+import ThemeToggle from '../common/ThemeToggle'
 
-export default function Topbar({ onMenuClick, isDark, toggleDarkMode }) {
+const roleLabel = {
+  student: 'นักศึกษา',
+  advisor: 'อาจารย์ที่ปรึกษา',
+  staff: 'เจ้าหน้าที่',
+  admin: 'ผู้ดูแลระบบ',
+  executive: 'ผู้บริหาร',
+}
+
+const pageMeta = [
+  { match: /^\/dashboard/, title: 'ภาพรวมระบบ', eyebrow: 'Dashboard' },
+  { match: /^\/documents/, title: 'เอกสารรับรอง', eyebrow: 'Documents' },
+  { match: /^\/admin\/users/, title: 'จัดการผู้ใช้งาน', eyebrow: 'Admin' },
+  { match: /^\/admin\/announcements/, title: 'จัดการประกาศ', eyebrow: 'Admin' },
+  { match: /^\/admin\/doc-types/, title: 'ประเภทเอกสาร', eyebrow: 'Admin' },
+  { match: /^\/admin\/trash/, title: 'ถังขยะ', eyebrow: 'Admin' },
+  { match: /^\/admin\/logs/, title: 'ประวัติระบบ', eyebrow: 'Admin' },
+  { match: /^\/admin\/settings/, title: 'ตั้งค่าระบบ', eyebrow: 'Admin' },
+  { match: /^\/admin\/email-templates/, title: 'Email Templates', eyebrow: 'Admin' },
+  { match: /^\/executive\/overview/, title: 'ภาพรวมคณะ', eyebrow: 'Executive' },
+  { match: /^\/executive\/branches/, title: 'สรุปรายสาขา', eyebrow: 'Executive' },
+  { match: /^\/executive\/documents/, title: 'เอกสารทั้งคณะ', eyebrow: 'Executive' },
+]
+
+function getPageMeta(pathname) {
+  return pageMeta.find(item => item.match.test(pathname)) || { title: 'FIET IRIS', eyebrow: 'Workspace' }
+}
+
+export default function Topbar({ onMenuClick }) {
   const { user } = useAuthStore()
-  const [unreadCount, setUnreadCount] = useState(0)
+  const location = useLocation()
+  const [, setUnreadCount] = useState(0)
+  const meta = getPageMeta(location.pathname)
 
   const today = new Date().toLocaleDateString('th-TH', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   })
 
   return (
-    <header className="h-14 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-700 flex items-center justify-between px-4 md:px-6 sticky top-0 z-30 transition-colors duration-300">
-      <div className="flex items-center gap-4">
+    <header className="min-h-16 bg-white/85 dark:bg-slate-950/85 backdrop-blur-xl border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 px-4 md:px-6 sticky top-0 z-30 transition-colors duration-300">
+      <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onMenuClick}
-          className="md:hidden p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all duration-200"
-          aria-label="เปิดเมนู">
+          className="md:hidden w-10 h-10 rounded-xl text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-all duration-200 flex items-center justify-center"
+          aria-label="เปิดเมนู"
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <div className="hidden sm:flex items-center gap-2 text-slate-400 dark:text-slate-500">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
-          </svg>
-          <p className="text-[11px] font-semibold uppercase tracking-wider">{today}</p>
+
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-[11px] font-semibold text-primary-600 dark:text-primary-400">{meta.eyebrow}</p>
+            <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-700" />
+            <p className="hidden sm:block text-[11px] font-medium text-slate-400 dark:text-slate-500">{today}</p>
+          </div>
+          <h1 className="text-base md:text-lg font-bold text-slate-900 dark:text-slate-100 truncate leading-tight">{meta.title}</h1>
         </div>
       </div>
-      <div className="flex items-center gap-4">
-        <button
-          onClick={toggleDarkMode}
-          className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
-          aria-label="Toggle Dark Mode"
-        >
-          {isDark ? (
-            <svg className="w-5 h-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-            </svg>
-          )}
-        </button>
-        <NotificationPanel onCountChange={setUnreadCount} />
-        <div className="h-8 w-px bg-slate-100 dark:bg-slate-700 mx-1" />
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden xs:block">
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-none">{user?.name}</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-1 uppercase tracking-tighter">เข้าใช้งานระบบแล้ว</p>
+
+      <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+        <div className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+          <svg className="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span className="text-xs font-semibold">{roleLabel[user?.role] || 'ผู้ใช้'}</span>
+        </div>
+
+        <div className="flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1 shadow-sm">
+          <ThemeToggle className="w-9 h-9" />
+          <NotificationPanel onCountChange={setUnreadCount} />
+        </div>
+
+        <div className="hidden sm:flex items-center gap-3 pl-2">
+          <div className="text-right max-w-44">
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 leading-none truncate">{user?.name}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-1 truncate">{user?.email || 'เข้าใช้งานระบบแล้ว'}</p>
           </div>
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+          <div className="w-10 h-10 rounded-xl bg-primary-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
             {user?.name?.[0] || 'U'}
           </div>
+        </div>
+
+        <div className="sm:hidden w-10 h-10 rounded-xl bg-primary-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
+          {user?.name?.[0] || 'U'}
         </div>
       </div>
     </header>

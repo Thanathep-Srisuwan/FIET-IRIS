@@ -28,8 +28,9 @@ export default {
         },
       },
       fontFamily: {
-        display: ['"Noto Serif Thai"', 'serif'],
-        body:    ['"IBM Plex Sans Thai"', 'sans-serif'],
+        sans:    ['"Noto Sans Thai"', '"Noto Sans"', 'system-ui', 'sans-serif'],
+        display: ['"Noto Sans Thai"', '"Noto Sans"', 'system-ui', 'sans-serif'],
+        body:    ['"Noto Sans Thai"', '"Noto Sans"', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'card':  '0 2px 12px 0 rgba(13,45,62,0.08)',

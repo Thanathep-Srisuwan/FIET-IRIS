@@ -1,230 +1,263 @@
 # FIET-IRIS
 
-**FIET Integrity Research Information System**  
-ระบบจัดเก็บใบประกาศ RI/IRB — คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.
+FIET-IRIS (FIET Integrity Research Information System) คือระบบจัดการเอกสารและใบรับรองด้าน Research Integrity / IRB สำหรับคณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี ใช้สำหรับอัปโหลด ติดตามอายุเอกสาร แจ้งเตือนผู้ใช้งาน จัดการประกาศ และดูภาพรวมสำหรับผู้บริหาร
 
----
+## สถานะปัจจุบัน
+
+- Frontend เป็น React + Vite + Tailwind CSS พร้อม light/dark theme ระดับ root
+- ระบบจำค่า theme ด้วย `localStorage.theme` และ bootstrap `html.dark` ก่อน React render เพื่อลด flash
+- ใช้ฟอนต์ `Noto Sans Thai` / `Noto Sans` เพื่อให้อ่านภาษาไทยชัดขึ้นทั้ง light และ dark mode
+- ปรับ Sidebar, Topbar, landing, login, dashboard, documents, admin และ executive pages ให้รองรับ dark mode สม่ำเสมอขึ้น
+- หน้า Admin สำคัญถูกออกแบบใหม่ ได้แก่ Announcements, Email Templates, Document Types, Settings, Users, Trash และ Logs
+- Backend เป็น Express + SQL Server พร้อม JWT auth, upload files, notification, email scheduler และ audit logs
 
 ## Tech Stack
 
-| Layer     | เทคโนโลยี                      |
-| --------- | ------------------------------ |
-| Frontend  | React 18 + Vite + Tailwind CSS |
-| Backend   | Node.js + Express              |
-| Database  | MSSQL (SQL Server)             |
-| Auth      | JWT (Access + Refresh Token)   |
-| Scheduler | node-cron                      |
-| Email     | Nodemailer + Winston           |
+### Client
 
-## โครงสร้างโปรเจ็ค
+- React 18
+- Vite 5
+- Tailwind CSS
+- React Router
+- Axios
+- Zustand
+- Lucide React
+- React Hot Toast
+- React Quill
+- XLSX / ExcelJS
 
-```
+### Server
+
+- Node.js
+- Express
+- Microsoft SQL Server (`mssql`)
+- JWT
+- bcrypt
+- multer
+- nodemailer
+- node-cron
+- winston
+- helmet / cors / express-rate-limit
+
+## โครงสร้างโปรเจกต์
+
+```text
 FIET-IRIS/
-├── client/                  # React + Vite Frontend
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── common/      # StatCard, NotificationPanel
-│   │   │   └── layout/      # Sidebar, Topbar, MainLayout
-│   │   ├── pages/
-│   │   │   ├── landing/     # LandingPage (หน้าแรก)
-│   │   │   ├── auth/        # LoginPage, ChangePasswordPage
-│   │   │   ├── dashboard/   # DashboardPage (router), StudentDashboard, AdvisorDashboard, AdminDashboard, StaffDashboard
-│   │   │   ├── documents/   # DocumentsPage, UploadPage
-│   │   │   ├── admin/       # AdminUsersPage, AdminLogsPage, AdminAnnouncementsPage, AdminDocTypesPage, AdminTrashPage
-│   │   │   └── executive/   # ExecutiveDashboard, BranchSummaryPage, ExecutiveDocumentsPage
-│   │   ├── services/        # api.js (axios)
-│   │   └── stores/          # authStore.js (Zustand)
-│   └── package.json
-│
-├── server/                  # Express Backend
-│   ├── src/
-│   │   ├── config/          # db.js, seed.js
-│   │   ├── controllers/     # Business logic แยกตาม resource
-│   │   ├── middlewares/     # auth.js, validate.js
-│   │   ├── routes/          # API routes แยกตาม resource
-│   │   ├── schedulers/      # documentScheduler.js (node-cron)
-│   │   ├── utils/           # logger.js (Winston), mailer.js
-│   │   └── app.js           # Express entry point
-│   ├── uploads/
-│   │   ├── ri/              # ไฟล์ RI
-│   │   ├── irb/             # ไฟล์ IRB
-│   │   └── announcements/   # รูปภาพประกาศ
-│   └── package.json
-│
-└── README.md
+|-- client/
+|   |-- index.html
+|   `-- src/
+|       |-- components/
+|       |   |-- common/          # ThemeToggle, NotificationPanel, StatCard, Skeleton
+|       |   `-- layout/          # MainLayout, Sidebar, Topbar
+|       |-- contexts/            # AuthContext, ThemeContext
+|       |-- pages/
+|       |   |-- admin/           # Users, Announcements, Doc Types, Settings, Email Templates, Trash, Logs
+|       |   |-- auth/            # Login, Change Password
+|       |   |-- dashboard/       # Role-based dashboards
+|       |   |-- documents/       # Document list and upload
+|       |   |-- executive/       # Overview, branches, executive documents
+|       |   `-- landing/
+|       |-- services/            # API service layer
+|       `-- utils/
+|-- server/
+|   `-- src/
+|       |-- config/              # Database connection and seed
+|       |-- controllers/
+|       |-- middlewares/
+|       |-- routes/
+|       |-- schedulers/          # Document expiry / trash / email scheduler
+|       |-- uploads/
+|       `-- utils/
+`-- SQL/                         # Initial schema and migrations
 ```
 
-## เริ่มต้นใช้งาน
+## Prerequisites
 
-### 1. ติดตั้ง dependencies
+- Node.js 18 หรือใหม่กว่า
+- npm
+- Microsoft SQL Server
+- SMTP account สำหรับส่งอีเมลแจ้งเตือน
+
+## การติดตั้ง
+
+ติดตั้ง dependencies ทั้ง root, server และ client:
 
 ```bash
-# ติดตั้งทุก layer พร้อมกัน (แนะนำ)
 npm run install:all
+```
 
-# หรือติดตั้งแยก
+หรือแยกติดตั้ง:
+
+```bash
 npm install
 cd server && npm install
-cd client && npm install
+cd ../client && npm install
 ```
 
-### 2. ตั้งค่า Environment
+## Database
+
+สร้างฐานข้อมูล SQL Server แล้วรันไฟล์ SQL ตามลำดับ:
+
+1. `SQL/ri_irb_database_v2.sql`
+2. `SQL/migration_v3.sql`
+3. `SQL/migration_trash.sql`
+4. `SQL/migration_v4_settings.sql`
+
+หลังจากสร้าง schema แล้ว สามารถ seed ข้อมูลเริ่มต้นได้:
 
 ```bash
-cp server/.env.example server/.env
-# แก้ไขค่าใน server/.env ให้ตรงกับระบบ
+cd server
+npm run seed
 ```
 
-### 3. รัน Database Script
+## Environment Variables
 
-```
-รัน ri_irb_database_v2.sql ใน SSMS ก่อน
+สร้างไฟล์ `server/.env`:
+
+```env
+PORT=5000
+CLIENT_URL=http://localhost:5173
+
+DB_SERVER=localhost
+DB_PORT=1433
+DB_NAME=FIET_IRIS
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+
+JWT_SECRET=change_this_access_secret
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=change_this_refresh_secret
+JWT_REFRESH_EXPIRES_IN=7d
+
+MAIL_HOST=smtp.example.com
+MAIL_PORT=587
+MAIL_USER=your_mail_user
+MAIL_PASS=your_mail_password
+MAIL_FROM="FIET-IRIS <noreply@example.com>"
 ```
 
-### 4. Seed Admin คนแรก
+## การรันระหว่างพัฒนา
+
+รัน client และ server พร้อมกันจาก root:
 
 ```bash
-cd server && npm run seed
-```
-
-### 5. รันระบบ
-
-```bash
-# รัน Frontend + Backend พร้อมกัน (จาก root)
 npm run dev
 ```
 
-## API Endpoints
+หรือรันแยก:
 
-### Auth
-
-| Method | Endpoint                  | คำอธิบาย        |
-| ------ | ------------------------- | --------------- |
-| POST   | /api/auth/login           | เข้าสู่ระบบ    |
-| POST   | /api/auth/logout          | ออกจากระบบ      |
-| POST   | /api/auth/refresh         | Refresh token   |
-| PUT    | /api/auth/change-password | เปลี่ยนรหัสผ่าน |
-
-### Documents
-
-| Method | Endpoint                              | คำอธิบาย                         | สิทธิ์      |
-| ------ | ------------------------------------- | --------------------------------- | ----------- |
-| GET    | /api/documents                        | ดูรายการเอกสาร                   | ทุก role    |
-| GET    | /api/documents/:id                    | ดูเอกสารรายชิ้น                  | ทุก role    |
-| POST   | /api/documents                        | อัปโหลดเอกสาร (multipart/form-data, max 5 files, 10 MB) | ทุก role |
-| DELETE | /api/documents/:id                    | ย้ายเอกสารไปถังขยะ               | admin       |
-| GET    | /api/documents/:id/files/:fileId/download | ดาวน์โหลดไฟล์                | ทุก role    |
-| GET    | /api/documents/:id/files/:fileId/preview  | พรีวิวไฟล์                   | ทุก role    |
-| GET    | /api/documents/summary                | สรุปสถิติเอกสาร                  | admin       |
-| GET    | /api/documents/trash                  | ดูเอกสารในถังขยะ                 | admin       |
-| PUT    | /api/documents/:id/restore            | กู้คืนเอกสาร                     | admin       |
-| DELETE | /api/documents/:id/permanent          | ลบถาวร                           | admin       |
-| PUT    | /api/documents/trash/bulk-restore     | กู้คืนหลายเอกสารพร้อมกัน        | admin       |
-| DELETE | /api/documents/trash/bulk-permanent   | ลบถาวรหลายเอกสารพร้อมกัน        | admin       |
-
-### Users
-
-| Method | Endpoint                    | คำอธิบาย                    | สิทธิ์ |
-| ------ | --------------------------- | --------------------------- | ------ |
-| GET    | /api/users                  | ดูรายชื่อผู้ใช้ทั้งหมด     | admin  |
-| GET    | /api/users/search           | ค้นหาผู้ใช้                 | admin  |
-| GET    | /api/users/advisors         | ดูรายชื่ออาจารย์ที่ปรึกษา   | ทุก role |
-| POST   | /api/users                  | สร้างผู้ใช้ใหม่             | admin  |
-| POST   | /api/users/import           | Import ผู้ใช้จาก Excel      | admin  |
-| PUT    | /api/users/:id              | แก้ไขข้อมูลผู้ใช้           | admin  |
-| PATCH  | /api/users/:id/toggle       | เปิด/ปิดบัญชีผู้ใช้         | admin  |
-| POST   | /api/users/:id/reset-password | รีเซ็ตรหัสผ่าน            | admin  |
-| DELETE | /api/users/bulk             | ลบผู้ใช้หลายคนพร้อมกัน      | admin  |
-| PATCH  | /api/users/bulk/toggle      | เปิด/ปิดบัญชีหลายคนพร้อมกัน | admin |
-
-### Notifications
-
-| Method | Endpoint                      | คำอธิบาย                    |
-| ------ | ----------------------------- | --------------------------- |
-| GET    | /api/notifications            | ดูการแจ้งเตือนทั้งหมด       |
-| GET    | /api/notifications/unread     | ดูการแจ้งเตือนที่ยังไม่อ่าน |
-| PUT    | /api/notifications/read-all   | อ่านทั้งหมด                 |
-| PUT    | /api/notifications/:id/read   | อ่านรายการ                   |
-
-### Announcements
-
-| Method | Endpoint                       | คำอธิบาย               | สิทธิ์  |
-| ------ | ------------------------------ | ----------------------- | ------- |
-| GET    | /api/announcements/public      | ดูประกาศสาธารณะ (ไม่ต้อง login) | - |
-| GET    | /api/announcements             | ดูประกาศทั้งหมด         | ทุก role |
-| POST   | /api/announcements             | สร้างประกาศ (รูปภาพ max 5 MB) | admin |
-| PUT    | /api/announcements/read-all    | อ่านทั้งหมด             | ทุก role |
-| PUT    | /api/announcements/:id/read    | อ่านรายการ              | ทุก role |
-| DELETE | /api/announcements/:id         | ลบประกาศ               | admin   |
-
-### Doc Types
-
-| Method | Endpoint            | คำอธิบาย                  | สิทธิ์  |
-| ------ | ------------------- | ------------------------- | ------- |
-| GET    | /api/doc-types      | ดูประเภทเอกสารทั้งหมด     | ทุก role |
-| POST   | /api/doc-types      | เพิ่มประเภทเอกสาร         | admin   |
-| DELETE | /api/doc-types/:id  | ลบประเภทเอกสาร            | admin   |
-
-### Executive
-
-| Method | Endpoint                   | คำอธิบาย                        | สิทธิ์            |
-| ------ | -------------------------- | ------------------------------- | ----------------- |
-| GET    | /api/executive/overview    | ภาพรวมสถิติทั้งระบบ             | admin, executive  |
-| GET    | /api/executive/branches    | สรุปสถิติตามสาขา                | admin, executive  |
-| GET    | /api/executive/documents   | ดูเอกสารทั้งหมดในระบบ           | admin, executive  |
-
-### Admin
-
-| Method | Endpoint           | คำอธิบาย            | สิทธิ์ |
-| ------ | ------------------ | ------------------- | ------ |
-| GET    | /api/admin/stats   | สถิติภาพรวม admin   | admin  |
-| GET    | /api/logs/deletions | ประวัติการลบเอกสาร | admin  |
-
-## Roles
-
-| Role      | สิทธิ์                                              |
-| --------- | --------------------------------------------------- |
-| student   | อัปโหลด/ดูเอกสารของตัวเอง                         |
-| advisor   | ดูเอกสารของนักศึกษาในที่ปรึกษา                     |
-| staff     | อัปโหลด/ดูเอกสารของตัวเอง (บุคลากร)               |
-| executive | ดูภาพรวมสถิติและเอกสารทั้งระบบ                     |
-| admin     | จัดการทุกอย่างในระบบ                               |
-
-## Scheduler (node-cron)
-
-ระบบรันทุกวัน **08:00 น. (เวลาไทย)** และทันทีเมื่อ server เริ่มต้น:
-
-1. อัปเดตสถานะเอกสารผ่าน `sp_UpdateDocumentStatus`
-2. ย้ายเอกสารหมดอายุไปถังขยะโดยอัตโนมัติ
-3. ลบถาวรเอกสารที่อยู่ในถังขยะนานเกิน **30 วัน** (พร้อมส่ง email + in-app notification)
-4. ส่ง email + in-app notification เตือนเอกสารที่ใกล้หมดอายุ
-
-## Email && Password สำหรับเทสระบบ
-
-### Admin
-
-```
-Email   : admin@kmutt.ac.th
-Password: Admin@1234
+```bash
+npm run dev:server
+npm run dev:client
 ```
 
-### Student
+ค่าเริ่มต้น:
 
-```
-Email   : student.test@kmutt.ac.th
-Password: Test@1234
+- Client: `http://localhost:5173`
+- Server: `http://localhost:5000`
+- Health check: `http://localhost:5000/api/health`
+
+## การ Build
+
+```bash
+cd client
+npm run build
 ```
 
-### Advisor
+ถ้าเครื่องมีปัญหา global npm path สามารถใช้ Vite โดยตรงจาก dependency ในโปรเจกต์:
 
-```
-Email   : advisor.test@kmutt.ac.th
-Password: Test@1234
+```bash
+cd client
+node node_modules/vite/bin/vite.js build
 ```
 
-### Executive
+## บัญชีทดสอบ
 
-```
-Email   : executive.test@kmutt.ac.th
-Password: Test@1234
-```
+ถ้ารัน seed/test data ตาม SQL แล้ว สามารถใช้บัญชีตัวอย่างเหล่านี้:
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@kmutt.ac.th` | `Admin@1234` |
+| Student | `student.test@kmutt.ac.th` | `Test@1234` |
+| Advisor | `advisor.test@kmutt.ac.th` | `Test@1234` |
+| Executive | `executive.test@kmutt.ac.th` | `Test@1234` |
+
+## บทบาทผู้ใช้งาน
+
+- `student`: อัปโหลดและติดตามเอกสารของตนเอง
+- `advisor`: ดูแลและติดตามเอกสารของนักศึกษาในความรับผิดชอบ
+- `staff`: ช่วยจัดการข้อมูลและเอกสารในระดับปฏิบัติการ
+- `admin`: จัดการผู้ใช้ ประกาศ ประเภทเอกสาร การตั้งค่า เทมเพลตอีเมล ถังขยะ และ logs
+- `executive`: ดูภาพรวม สรุปตามสาขา และรายการเอกสารเพื่อประกอบการตัดสินใจ
+
+## ฟีเจอร์หลัก
+
+- Authentication ด้วย access token และ refresh token
+- Role-based routing และ role-based dashboards
+- Upload, preview, download และ delete เอกสาร
+- Trash workflow สำหรับ restore และ permanent delete
+- Notification center พร้อม unread/read state
+- Announcement management พร้อม public/authenticated announcements และรูปภาพประกอบ
+- Document type management พร้อมป้องกันการลบประเภทที่ถูกใช้งานอยู่
+- System settings สำหรับชื่อระบบ ชื่อหน่วยงาน และค่าแจ้งเตือน
+- Email template management ที่เชื่อมกับ settings และ scheduler
+- Executive overview, branch summary และ document explorer
+- Audit logs และ admin statistics
+- Light/dark theme ทั้ง public และ authenticated pages
+
+## Theme System
+
+Theme ถูกจัดการที่ client root ผ่าน `ThemeProvider` และ `useTheme()`:
+
+- `client/src/contexts/ThemeContext.jsx`
+- `client/src/components/common/ThemeToggle.jsx`
+- `client/src/main.jsx`
+- `client/index.html`
+
+ค่า theme ใช้ key เดิมคือ `localStorage.theme` และรองรับค่า `light` / `dark` ถ้าไม่มีค่าใน storage ระบบจะใช้ค่าเริ่มต้นจาก `prefers-color-scheme`
+
+## API Overview
+
+Base path ของ API คือ `/api`
+
+| Module | Path |
+| --- | --- |
+| Auth | `/api/auth` |
+| Users | `/api/users` |
+| Documents | `/api/documents` |
+| Notifications | `/api/notifications` |
+| Announcements | `/api/announcements` |
+| Document Types | `/api/doc-types` |
+| Executive | `/api/executive` |
+| Admin Stats | `/api/admin` |
+| Settings / Email Templates | `/api/settings` |
+| Logs | `/api/logs` |
+
+## Scheduler และ Email
+
+`server/src/schedulers/documentScheduler.js` จะทำงานเมื่อ server start และตั้งเวลาเช็กเอกสารทุกวันเวลา 08:00 ตามเวลาไทย เพื่อ:
+
+- อัปเดตสถานะเอกสารใกล้หมดอายุ / หมดอายุ
+- ส่ง notification และ email ตาม template
+- ย้ายเอกสารเข้าถังขยะอัตโนมัติตามเงื่อนไข
+- ลบถาวรเมื่อครบกำหนด
+- บันทึก email logs
+
+Email template และ system settings ถูกเก็บในฐานข้อมูล โดยมี fallback template ในโค้ดสำหรับกรณีที่ยังไม่ได้รัน migration
+
+## แนวทางตรวจสอบหลังแก้ UI
+
+- เปิด landing และ login แล้ว toggle theme ได้ก่อน login
+- Login แล้วตรวจ Sidebar / Topbar / Dashboard / Documents
+- ตรวจ Admin pages: Users, Announcements, Doc Types, Settings, Email Templates, Trash, Logs
+- ตรวจ Executive pages: Overview, Branch Summary, Documents
+- Refresh หน้าแล้ว theme ยังจำค่าเดิม
+- ลบ `localStorage.theme` แล้วตรวจว่าค่าเริ่มต้นตาม system preference
+- ตรวจ mobile และ desktop ว่า navigation, modal, table และ form อ่านง่ายใน dark mode
+
+## Notes
+
+- โปรเจกต์นี้ยังใช้ Tailwind `darkMode: 'class'`
+- การตั้งค่า theme อยู่ฝั่ง client เท่านั้น ยังไม่บันทึก preference ลงฐานข้อมูล
+- ไฟล์ upload ถูก serve ผ่าน `/uploads`
+- งาน build หลักอยู่ที่ `client`

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { authService } from '../../services/api'
+import ThemeToggle from '../../components/common/ThemeToggle'
 import toast from 'react-hot-toast'
 
 export default function ChangePasswordPage() {
@@ -48,7 +49,10 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-900 via-primary-800 to-primary-700 flex items-center justify-center p-4">
+    <div className="relative min-h-screen bg-primary-900 flex items-center justify-center p-4">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle className="bg-white/10 text-white hover:bg-white/20 dark:bg-slate-900/70 dark:hover:bg-slate-800" />
+      </div>
       <div className="w-full max-w-md">
 
         <div className="text-center mb-8">
@@ -61,7 +65,7 @@ export default function ChangePasswordPage() {
           </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
 
           {/* แจ้งเตือน */}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-800">
@@ -71,7 +75,7 @@ export default function ChangePasswordPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                 รหัสผ่านปัจจุบัน
               </label>
               <input
@@ -86,7 +90,7 @@ export default function ChangePasswordPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                 รหัสผ่านใหม่
               </label>
               <input
@@ -101,7 +105,7 @@ export default function ChangePasswordPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
                 ยืนยันรหัสผ่านใหม่
               </label>
               <input

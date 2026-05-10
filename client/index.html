@@ -8,6 +8,16 @@
     <link rel="apple-touch-icon" href="/src/assets/fiet-logo.png" />
   </head>
   <body>
+    <script>
+      (() => {
+        const stored = localStorage.getItem('theme');
+        const theme = stored === 'dark' || stored === 'light'
+          ? stored
+          : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

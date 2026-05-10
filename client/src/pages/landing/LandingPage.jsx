@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { announcementService } from '../../services/api'
+import ThemeToggle from '../../components/common/ThemeToggle'
 
 import fietLogo  from '../../assets/fiet-logo.png'
 import kmuttLogo from '../../assets/kmutt-logo.png'
@@ -34,10 +35,10 @@ function AnnouncementModal({ item, onClose }) {
       onMouseDown={onClose}
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
+        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
         onMouseDown={e => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="flex gap-3.5 items-start">
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -45,8 +46,8 @@ function AnnouncementModal({ item, onClose }) {
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800 leading-snug">{item.title}</h2>
-              <p className="text-[11px] font-semibold text-slate-400 mt-1 uppercase tracking-wider flex items-center gap-1.5">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
+              <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider flex items-center gap-1.5">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
                 </svg>
@@ -58,7 +59,7 @@ function AnnouncementModal({ item, onClose }) {
             </div>
           </div>
           <button onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
             ✕
           </button>
         </div>
@@ -70,7 +71,7 @@ function AnnouncementModal({ item, onClose }) {
               className="w-full h-auto rounded-2xl mb-6 shadow-sm"
             />
           )}
-          <div className="text-[15px] text-slate-700 whitespace-pre-wrap leading-relaxed font-body">
+          <div className="text-[15px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-body">
             {renderWithLinks(item.content)}
           </div>
         </div>
@@ -78,7 +79,7 @@ function AnnouncementModal({ item, onClose }) {
           <div className="px-6 pb-4 pt-2">
             <a href={item.link_url} target="_blank" rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl text-[15px] font-bold text-white transition-all hover:opacity-90 shadow-lg hover:shadow-xl active:scale-[0.98]"
-              style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}>
+              style={{ backgroundColor: '#1262a0' }}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
@@ -86,9 +87,9 @@ function AnnouncementModal({ item, onClose }) {
             </a>
           </div>
         )}
-        <div className="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex justify-end">
+        <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex justify-end">
           <button onClick={onClose}
-            className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-600 hover:bg-slate-200 transition-colors">
+            className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             ปิดหน้าต่าง
           </button>
         </div>
@@ -201,7 +202,7 @@ export default function LandingPage() {
       {/* ===== Top announcement banner ===== */}
       {!loadingAnn && announcements.length > 0 && (
         <div className="w-full py-2.5 px-4 text-center text-[11px] text-white font-bold flex items-center justify-center gap-2 shadow-sm relative z-[60]"
-          style={{ background: 'linear-gradient(90deg,#1262a0,#42b5e1)' }}>
+          style={{ backgroundColor: '#1262a0' }}>
           <svg className="w-4 h-4 flex-shrink-0 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
           </svg>
@@ -250,29 +251,33 @@ export default function LandingPage() {
               </a>
             ))}
             <div className="w-px h-5 bg-gray-200 dark:bg-slate-800 mx-2" />
+            <ThemeToggle />
             <Link to="/login"
               className="px-5 py-2 rounded-lg text-sm font-bold text-white transition-all hover:opacity-90 hover:shadow-[0_4px_12px_rgba(66,181,225,0.4)] hover:-translate-y-0.5 active:translate-y-0"
-              style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}>
+              style={{ backgroundColor: '#1262a0' }}>
               เข้าสู่ระบบ
             </Link>
           </nav>
 
           {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 rounded-md text-gray-500 hover:bg-gray-100"
-            onClick={() => setMobileMenuOpen(v => !v)}
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              {mobileMenuOpen
-                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/>}
-            </svg>
-          </button>
+          <div className="md:hidden flex items-center gap-2">
+            <ThemeToggle />
+            <button
+              className="p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-800"
+              onClick={() => setMobileMenuOpen(v => !v)}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {mobileMenuOpen
+                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16"/>}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-100 bg-white px-6 py-3 flex flex-col gap-1">
+          <div className="md:hidden border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 flex flex-col gap-1">
             {[
               { label: 'หน้าแรก', href: '#top' },
               { label: 'ฟีเจอร์', href: '#features' },
@@ -283,14 +288,14 @@ export default function LandingPage() {
             ].map(n => (
               <a key={n.label} href={n.href} target={n.target} rel={n.target ? 'noopener noreferrer' : undefined}
                 onClick={() => setMobileMenuOpen(false)}
-                className="py-2 text-sm text-gray-700 hover:text-[#1262a0]">
+                className="py-2 text-sm text-gray-700 dark:text-slate-300 hover:text-[#1262a0] dark:hover:text-primary-400">
                 {n.label}
               </a>
             ))}
             <Link to="/login"
               onClick={() => setMobileMenuOpen(false)}
               className="mt-2 py-2.5 text-center rounded-lg text-sm font-semibold text-white"
-              style={{ background: 'linear-gradient(135deg,#42b5e1,#1262a0)' }}>
+              style={{ backgroundColor: '#1262a0' }}>
               เข้าสู่ระบบ
             </Link>
           </div>
@@ -442,7 +447,7 @@ export default function LandingPage() {
             </p>
             <a href={FIET_URL} target="_blank" rel="noopener noreferrer"
               className="group relative overflow-hidden rounded-3xl border border-gray-100 dark:border-slate-800 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500"
-              style={{ background: 'linear-gradient(135deg,#0d4f8c 0%,#1a7db8 60%,#42b5e1 100%)' }}>
+              style={{ backgroundColor: '#0d4f8c' }}>
               {/* Decorative circles */}
               <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/5 pointer-events-none transition-transform group-hover:scale-150 duration-700" />
               <div className="absolute -bottom-8 -left-8 w-40 h-40 rounded-full bg-white/5 pointer-events-none transition-transform group-hover:scale-150 duration-700" />

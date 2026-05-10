@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { authService } from '../../services/api'
+import ThemeToggle from '../../components/common/ThemeToggle'
 import toast from 'react-hot-toast'
 
 import fietLogo from '../../assets/fiet-logo.png'
@@ -38,7 +39,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#f0f4f8] dark:bg-slate-950 flex flex-col transition-colors duration-300">
 
       {/* Topbar */}
-      <header className="bg-white dark:bg-slate-900 border-b border-[#e8edf2] dark:border-slate-800 h-[60px] flex items-center px-10">
+      <header className="bg-white dark:bg-slate-900 border-b border-[#e8edf2] dark:border-slate-800 h-[60px] flex items-center justify-between px-4 sm:px-10">
         <div className="flex items-center gap-3">
 
           {/* KMUTT Logo */}
@@ -60,6 +61,7 @@ export default function LoginPage() {
             <p className="text-[11px] text-[#7a96b0] dark:text-slate-500 mt-1.5 font-medium leading-none">Faculty of Industrial Education and Technology</p>
           </div>
         </div>
+        <ThemeToggle />
       </header>
 
       {/* Main */}
@@ -144,7 +146,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="group w-full h-12 rounded-[14px] text-white text-[15px] font-bold tracking-wide transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 bg-gradient-to-br from-[#42b5e1] to-[#1a90c0] shadow-[0_8px_20px_rgba(66,181,225,0.4)] hover:shadow-[0_12px_28px_rgba(66,181,225,0.5)] hover:-translate-y-1 active:translate-y-0"
+              className="group w-full h-12 rounded-[14px] text-white text-[15px] font-semibold transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 bg-primary-600 shadow-sm hover:bg-primary-700 hover:-translate-y-0.5 active:translate-y-0"
             >
               {loading ? (
                 <>

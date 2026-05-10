@@ -1,31 +1,53 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=Noto+Serif+Thai:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Noto+Sans:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-family: 'Noto Sans Thai', 'Noto Sans', system-ui, sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-200 transition-colors duration-300;
-    font-family: 'IBM Plex Sans Thai', sans-serif;
+    font-family: 'Noto Sans Thai', 'Noto Sans', system-ui, sans-serif;
+    font-weight: 400;
+    line-height: 1.65;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-slate-900 dark:text-slate-100;
+    font-family: 'Noto Sans Thai', 'Noto Sans', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.25;
+  }
+
+  button, input, select, textarea {
+    font: inherit;
+    letter-spacing: 0;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-fiet-blue text-white font-bold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:brightness-110 active:scale-95;
+    @apply bg-fiet-blue text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:brightness-110 active:scale-95;
   }
 
   .btn-secondary {
-    @apply bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95;
+    @apply bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 transition-all duration-200 hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-95;
   }
 
   .btn-orange {
-    @apply bg-fiet-orange text-white font-bold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:brightness-110 active:scale-95;
+    @apply bg-fiet-orange text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-sm hover:brightness-110 active:scale-95;
   }
 
   .input-field {
-    @apply w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-4 focus:ring-fiet-blue/20 dark:focus:ring-fiet-blue/10 focus:border-fiet-blue transition-all bg-white dark:bg-slate-800 dark:text-white;
+    @apply w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-fiet-blue/20 dark:focus:ring-fiet-blue/10 focus:border-fiet-blue transition-all bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500;
   }
 
   .card {
@@ -52,6 +74,27 @@
 }
 
 @layer utilities {
+  .font-sans,
+  .font-body,
+  .font-display {
+    font-family: 'Noto Sans Thai', 'Noto Sans', system-ui, sans-serif;
+  }
+
+  .font-black {
+    font-weight: 800;
+  }
+
+  .tracking-tighter,
+  .tracking-tight,
+  .tracking-wide,
+  .tracking-wider,
+  .tracking-widest,
+  .tracking-\[0\.15em\],
+  .tracking-\[0\.2em\],
+  .tracking-\[0\.3em\] {
+    letter-spacing: 0;
+  }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -59,4 +102,78 @@
     -ms-overflow-style: none;  /* IE and Edge */
     scrollbar-width: none;  /* Firefox */
   }
+}
+
+/*
+  Dark compatibility for older screens that were built before the shared theme
+  layer. :where keeps these rules weaker than explicit Tailwind dark:* classes,
+  so component-level dark styling still wins wherever it exists.
+*/
+.dark :where(.bg-white) {
+  background-color: rgb(15 23 42);
+}
+.dark :where(.bg-white\/80) {
+  background-color: rgb(15 23 42 / 0.8);
+}
+.dark :where(.bg-slate-50, .bg-gray-50) {
+  background-color: rgb(15 23 42 / 0.65);
+}
+.dark :where(.bg-slate-50\/50) {
+  background-color: rgb(30 41 59 / 0.3);
+}
+.dark :where(.bg-slate-100, .bg-gray-100) {
+  background-color: rgb(30 41 59);
+}
+.dark :where(.bg-blue-50) {
+  background-color: rgb(30 64 175 / 0.18);
+}
+.dark :where(.bg-amber-50) {
+  background-color: rgb(146 64 14 / 0.2);
+}
+.dark :where(.bg-emerald-50) {
+  background-color: rgb(6 78 59 / 0.22);
+}
+.dark :where(.bg-red-50, .bg-rose-50) {
+  background-color: rgb(127 29 29 / 0.22);
+}
+.dark :where(.text-slate-900, .text-slate-800, .text-gray-900, .text-gray-800) {
+  color: rgb(241 245 249);
+}
+.dark :where(.text-slate-700, .text-gray-700) {
+  color: rgb(203 213 225);
+}
+.dark :where(.text-slate-600, .text-gray-600) {
+  color: rgb(148 163 184);
+}
+.dark :where(.text-slate-500, .text-gray-500) {
+  color: rgb(148 163 184);
+}
+.dark :where(.text-slate-400, .text-gray-400) {
+  color: rgb(148 163 184);
+}
+.dark :where(.border-slate-50, .border-slate-100, .border-gray-100) {
+  border-color: rgb(30 41 59);
+}
+.dark :where(.border-slate-200, .border-gray-200) {
+  border-color: rgb(51 65 85);
+}
+.dark :where(.divide-slate-50 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.divide-gray-100 > :not([hidden]) ~ :not([hidden])) {
+  border-color: rgb(30 41 59);
+}
+.dark :where(.placeholder-slate-400::placeholder, .placeholder-gray-400::placeholder) {
+  color: rgb(100 116 139);
+}
+.dark :where(.hover\:bg-white:hover) {
+  background-color: rgb(30 41 59);
+}
+.dark :where(.hover\:bg-slate-50:hover, .hover\:bg-gray-50:hover) {
+  background-color: rgb(30 41 59 / 0.7);
+}
+.dark :where(.hover\:bg-slate-100:hover, .hover\:bg-gray-100:hover) {
+  background-color: rgb(51 65 85);
+}
+.dark :where(.hover\:text-slate-700:hover, .hover\:text-gray-700:hover) {
+  color: rgb(226 232 240);
 }
