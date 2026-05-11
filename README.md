@@ -175,12 +175,12 @@ node node_modules/vite/bin/vite.js build
 
 ถ้ารัน seed/test data ตาม SQL แล้ว สามารถใช้บัญชีตัวอย่างเหล่านี้:
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Admin | `admin@kmutt.ac.th` | `Admin@1234` |
-| Student | `student.test@kmutt.ac.th` | `Test@1234` |
-| Advisor | `advisor.test@kmutt.ac.th` | `Test@1234` |
-| Executive | `executive.test@kmutt.ac.th` | `Test@1234` |
+| Role      | Email                        | Password     |
+| --------- | ---------------------------- | ------------ |
+| Admin     | `admin@kmutt.ac.th`          | `Admin@1234` |
+| Student   | `student.test@kmutt.ac.th`   | `Test@1234`  |
+| Advisor   | `advisor.test@kmutt.ac.th`   | `Test@1234`  |
+| Executive | `executive.test@kmutt.ac.th` | `Test@1234`  |
 
 ## บทบาทผู้ใช้งาน
 
@@ -220,18 +220,18 @@ Theme ถูกจัดการที่ client root ผ่าน `ThemeProvid
 
 Base path ของ API คือ `/api`
 
-| Module | Path |
-| --- | --- |
-| Auth | `/api/auth` |
-| Users | `/api/users` |
-| Documents | `/api/documents` |
-| Notifications | `/api/notifications` |
-| Announcements | `/api/announcements` |
-| Document Types | `/api/doc-types` |
-| Executive | `/api/executive` |
-| Admin Stats | `/api/admin` |
-| Settings / Email Templates | `/api/settings` |
-| Logs | `/api/logs` |
+| Module                     | Path                 |
+| -------------------------- | -------------------- |
+| Auth                       | `/api/auth`          |
+| Users                      | `/api/users`         |
+| Documents                  | `/api/documents`     |
+| Notifications              | `/api/notifications` |
+| Announcements              | `/api/announcements` |
+| Document Types             | `/api/doc-types`     |
+| Executive                  | `/api/executive`     |
+| Admin Stats                | `/api/admin`         |
+| Settings / Email Templates | `/api/settings`      |
+| Logs                       | `/api/logs`          |
 
 ## Scheduler และ Email
 
@@ -261,3 +261,6 @@ Email template และ system settings ถูกเก็บในฐานข
 - การตั้งค่า theme อยู่ฝั่ง client เท่านั้น ยังไม่บันทึก preference ลงฐานข้อมูล
 - ไฟล์ upload ถูก serve ผ่าน `/uploads`
 - งาน build หลักอยู่ที่ `client`
+
+claude plugin marketplace add kerlos/pordee
+claude plugin install pordee@pordee
