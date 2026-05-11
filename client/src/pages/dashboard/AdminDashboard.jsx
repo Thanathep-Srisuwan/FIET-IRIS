@@ -12,9 +12,9 @@ const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หม
 const TYPE_COLORS = ['#42b5e1', '#f7924a', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4', '#84cc16']
 
 const USER_GROUPS = [
-  { key: 'bachelor', label: 'ปริญญาตรี',      color: '#42b5e1' },
-  { key: 'master',   label: 'ปริญญาโท',       color: '#8b5cf6' },
-  { key: 'doctoral', label: 'ปริญญาเอก',      color: '#f43f5e' },
+  { key: 'bachelor', label: 'นักศึกษาปริญญาตรี',      color: '#42b5e1' },
+  { key: 'master',   label: 'นักศึกษาปริญญาโท',       color: '#8b5cf6' },
+  { key: 'doctoral', label: 'นักศึกษาปริญญาเอก',      color: '#f43f5e' },
   { key: 'advisor',  label: 'อาจารย์',    color: '#10b981' },
   { key: 'staff',    label: 'เจ้าหน้าที่', color: '#f7924a' },
 ]
@@ -74,7 +74,7 @@ export default function AdminDashboard() {
     const count = recentActivity.filter(a => a.doc_type === t.type_code).length
     return { label: t.type_code, color: TYPE_COLORS[i % TYPE_COLORS.length] }
   })
-  // ใช้ userBreakdown doc_count รวม แทน
+  // ใช้ userBreakdown doc_count รวม 
   const totalDocsByType = docTypes.map((t, i) => ({
     label: t.type_code,
     color: TYPE_COLORS[i % TYPE_COLORS.length],

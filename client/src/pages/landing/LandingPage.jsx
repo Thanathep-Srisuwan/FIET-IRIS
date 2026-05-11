@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { 
   MapPin, Mail, Phone, Bell, ShieldCheck, BarChart3, 
   Users, Search, Link as LinkIcon, Zap, X, ExternalLink,
-  Info, ChevronDown, Facebook, Youtube, MessageCircle, ArrowRight, Menu,
+  Info, ChevronDown, MessageCircle, ArrowRight, Menu,
   Calendar, Globe
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
@@ -19,6 +19,34 @@ const RI_URL   = 'https://ethics.kmutt.ac.th/riservice/'
 const IRB_URL  = 'https://ethics.kmutt.ac.th/irb/'
 const FIET_URL = 'https://www.fiet.kmutt.ac.th/'
 const TRACK_IRB_URL = 'https://www.kmutt.me/FIET.IRB.Tracking.Report'
+
+function FacebookIcon({ size = 20 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M14 8.5V6.75c0-.58.47-.75.8-.75H17V2h-3.2C10.25 2 9.5 4.67 9.5 6.38V8.5H7v4h2.5V22H14v-9.5h3l.5-4H14Z" />
+    </svg>
+  )
+}
+
+function YoutubeIcon({ size = 20 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M23.5 6.2a3 3 0 0 0-2.1-2.12C19.55 3.6 12 3.6 12 3.6s-7.55 0-9.4.48A3 3 0 0 0 .5 6.2 31.3 31.3 0 0 0 0 12a31.3 31.3 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.12c1.85.48 9.4.48 9.4.48s7.55 0 9.4-.48a3 3 0 0 0 2.1-2.12A31.3 31.3 0 0 0 24 12a31.3 31.3 0 0 0-.5-5.8ZM9.6 15.6V8.4L15.85 12 9.6 15.6Z" />
+    </svg>
+  )
+}
 
 function renderWithLinks(text) {
   if (!text) return null
@@ -574,11 +602,11 @@ export default function LandingPage() {
               <div className="flex gap-3 mt-8">
                 <a href="https://www.facebook.com/fiet.kmutt" target="_blank" rel="noopener noreferrer"
                   className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg bg-[#1877f2]">
-                  <Facebook size={20} fill="currentColor" />
+                  <FacebookIcon size={20} />
                 </a>
                 <a href="https://www.youtube.com/@FIETkmutt" target="_blank" rel="noopener noreferrer"
                   className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg bg-[#ff0000]">
-                  <Youtube size={20} fill="currentColor" />
+                  <YoutubeIcon size={20} />
                 </a>
                 <a href="https://line.me/R/ti/p/@413kjbml" target="_blank" rel="noopener noreferrer"
                   className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg bg-[#06c755]">

@@ -53,10 +53,20 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ message: err.message || 'เกิดข้อผิดพลาดภายในระบบ' })
 })
 
-const PORT = process.env.PORT || 5000
-app.listen(PORT, () => {
+const PORT = parseInt(process.env.PORT, 10) || 5000
+const server = app.listen(PORT, () => {
   logger.info(`🚀 FIET-IRIS Server รันที่ port ${PORT}`)
   runScheduler()
+})
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    logger.error(`Port ${PORT} is already in use. Stop the process using it or set PORT to another value.`)
+    process.exit(1)
+  }
+
+  logger.error(err.message)
+  process.exit(1)
 })
 
 module.exports = app
