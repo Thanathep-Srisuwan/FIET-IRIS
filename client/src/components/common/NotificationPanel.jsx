@@ -1,20 +1,34 @@
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
+import { 
+  Bell, 
+  AlertTriangle, 
+  AlertCircle, 
+  Trash2, 
+  RefreshCw, 
+  Calendar, 
+  X, 
+  ExternalLink, 
+  Megaphone, 
+  Clock 
+} from 'lucide-react'
 import { notificationService, announcementService } from '../../services/api'
 import toast from 'react-hot-toast'
 
 const docTypeIcon = (type) => {
-  const props = { className: "w-5 h-5", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24", strokeWidth: 2 };
+  const iconProps = { size: 20, strokeWidth: 2 };
   switch (type) {
     case 'expiry_warning':
-      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>;
+      return <AlertTriangle {...iconProps} />;
     case 'expired':
-      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+      return <AlertCircle {...iconProps} />;
     case 'deleted':
-      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+      return <Trash2 {...iconProps} />;
     case 'replaced':
-      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>;
+      return <RefreshCw {...iconProps} />;
     default:
-      return <svg {...props}><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>;
+      return <Bell {...iconProps} />;
   }
 }
 
@@ -42,30 +56,26 @@ function renderWithLinks(text) {
 
 function AnnouncementModal({ item, onClose }) {
   if (!item) return null
-  return (
+  
+  const modalContent = (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
       onMouseDown={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden transition-colors"
+        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden transition-colors border border-slate-200 dark:border-slate-800"
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="flex gap-3.5 items-start">
             <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 flex-shrink-0">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
+              <Bell size={24} strokeWidth={2} />
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
               <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider flex items-center gap-1.5">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
-                </svg>
+                <Calendar size={14} strokeWidth={2.5} />
                 {new Date(item.created_at).toLocaleString('th-TH', {
                   year: 'numeric', month: 'long', day: 'numeric',
                   hour: '2-digit', minute: '2-digit',
@@ -77,18 +87,24 @@ function AnnouncementModal({ item, onClose }) {
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
           >
-            ✕
+            <X size={20} />
           </button>
         </div>
 
         {/* Content + Image */}
         <div className="px-6 py-6 overflow-y-auto flex-1 custom-scrollbar">
           {item.image_url && (
-            <img
-              src={item.image_url}
-              alt={item.title}
-              className="w-full h-auto rounded-2xl mb-6 shadow-sm"
-            />
+            <div className="relative w-full h-auto min-h-[200px] bg-slate-100 dark:bg-slate-800 overflow-hidden mb-6 shadow-md border border-slate-100 dark:border-slate-800">
+              {/* Modern blurred background effect for aspect ratio gaps */}
+              <div className="absolute inset-0 opacity-20 blur-3xl scale-125">
+                <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+              </div>
+              <img
+                src={item.image_url}
+                alt={item.title}
+                className="relative z-10 w-full h-auto max-h-[800px] object-contain mx-auto shadow-sm"
+              />
+            </div>
           )}
           <div className="text-[15px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-body">
             {renderWithLinks(item.content)}
@@ -106,9 +122,7 @@ function AnnouncementModal({ item, onClose }) {
               style={{ backgroundColor: '#1262a0' }}
               onClick={e => e.stopPropagation()}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
+              <ExternalLink size={20} strokeWidth={2} />
               ดูรายละเอียดเพิ่มเติม
             </a>
           </div>
@@ -126,9 +140,12 @@ function AnnouncementModal({ item, onClose }) {
       </div>
     </div>
   )
+
+  return createPortal(modalContent, document.body)
 }
 
 export default function NotificationPanel({ onCountChange }) {
+  const navigate = useNavigate()
   const [open, setOpen]             = useState(false)
   const [notifs, setNotifs]         = useState([])
   const [announcements, setAnnouncements] = useState([])
@@ -137,21 +154,23 @@ export default function NotificationPanel({ onCountChange }) {
   const [badgeCount, setBadgeCount] = useState(0)
   const panelRef                    = useRef(null)
 
-  useEffect(() => {
-    const loadCount = () =>
-      Promise.all([
+  const loadBadgeCount = async () => {
+    try {
+      const [nRes, aRes] = await Promise.all([
         notificationService.getUnread().catch(() => ({ data: [] })),
         announcementService.getAll().catch(() => ({ data: [] })),
-      ]).then(([nRes, aRes]) => {
-        const docUnread = Array.isArray(nRes.data) ? nRes.data.length : 0
-        const annUnread = (aRes.data || []).filter(a => !a.is_read).length
-        const total = docUnread + annUnread
-        setBadgeCount(total)
-        onCountChange?.(total)
-      })
+      ])
+      const docUnread = Array.isArray(nRes.data) ? nRes.data.length : 0
+      const annUnread = (aRes.data || []).filter(a => !a.is_read).length
+      const total = docUnread + annUnread
+      setBadgeCount(total)
+      onCountChange?.(total)
+    } catch {}
+  }
 
-    loadCount()
-    const interval = setInterval(loadCount, 60000)
+  useEffect(() => {
+    loadBadgeCount()
+    const interval = setInterval(loadBadgeCount, 30000) // Poll every 30s
     return () => clearInterval(interval)
   }, [])
 
@@ -162,11 +181,13 @@ export default function NotificationPanel({ onCountChange }) {
         notificationService.getAll(),
         announcementService.getAll(),
       ])
-      setNotifs(nRes.data || [])
-      setAnnouncements(aRes.data || [])
+      const fetchedNotifs = nRes.data || []
+      const fetchedAnn = aRes.data || []
+      setNotifs(fetchedNotifs)
+      setAnnouncements(fetchedAnn)
 
-      const docUnread = (nRes.data || []).filter(n => !n.in_app_read).length
-      const annUnread = (aRes.data || []).filter(a => !a.is_read).length
+      const docUnread = fetchedNotifs.filter(n => !n.in_app_read).length
+      const annUnread = fetchedAnn.filter(a => !a.is_read).length
       const total = docUnread + annUnread
       setBadgeCount(total)
       onCountChange?.(total)
@@ -189,24 +210,30 @@ export default function NotificationPanel({ onCountChange }) {
   const handleMarkDocRead = async (id) => {
     try {
       await notificationService.markRead(id)
-      setNotifs(prev => prev.map(n => n.notif_id === id ? { ...n, in_app_read: true } : n))
-      const docUnread = notifs.filter(n => !n.in_app_read && n.notif_id !== id).length
-      const annUnread = announcements.filter(a => !a.is_read).length
-      const total = docUnread + annUnread
-      setBadgeCount(total)
-      onCountChange?.(total)
+      setNotifs(prev => {
+        const next = prev.map(n => n.notif_id === id ? { ...n, in_app_read: true } : n)
+        const docUnread = next.filter(n => !n.in_app_read).length
+        const annUnread = announcements.filter(a => !a.is_read).length
+        const total = docUnread + annUnread
+        setBadgeCount(total)
+        onCountChange?.(total)
+        return next
+      })
     } catch { toast.error('เกิดข้อผิดพลาด') }
   }
 
   const handleMarkAnnRead = async (id) => {
     try {
       await announcementService.markRead(id)
-      setAnnouncements(prev => prev.map(a => a.announcement_id === id ? { ...a, is_read: true } : a))
-      const docU = notifs.filter(n => !n.in_app_read).length
-      const annU = announcements.filter(a => !a.is_read && a.announcement_id !== id).length
-      const total = docU + annU
-      setBadgeCount(total)
-      onCountChange?.(total)
+      setAnnouncements(prev => {
+        const next = prev.map(a => a.announcement_id === id ? { ...a, is_read: true } : a)
+        const docUnread = notifs.filter(n => !n.in_app_read).length
+        const annUnread = next.filter(a => !a.is_read).length
+        const total = docUnread + annUnread
+        setBadgeCount(total)
+        onCountChange?.(total)
+        return next
+      })
     } catch { toast.error('เกิดข้อผิดพลาด') }
   }
 
@@ -214,6 +241,12 @@ export default function NotificationPanel({ onCountChange }) {
     setOpen(false)
     setSelectedAnn(item)
     if (!item.is_read) handleMarkAnnRead(item.announcement_id)
+  }
+
+  const handleDocClick = (item) => {
+    setOpen(false)
+    if (!item.in_app_read) handleMarkDocRead(item.notif_id)
+    navigate('/documents')
   }
 
   const handleMarkAllRead = async () => {
@@ -249,9 +282,11 @@ export default function NotificationPanel({ onCountChange }) {
           onClick={() => setOpen(!open)}
           className="relative p-2 rounded-xl transition-all hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95"
         >
-          <svg className={`w-5 h-5 ${badgeCount > 0 ? 'text-amber-500 animate-swing' : 'text-slate-500 dark:text-slate-400'}`} fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-          </svg>
+          <Bell 
+            size={20} 
+            className={badgeCount > 0 ? 'text-amber-500 animate-swing' : 'text-slate-500 dark:text-slate-400'} 
+            fill={badgeCount > 0 ? 'currentColor' : 'none'}
+          />
           {badgeCount > 0 && (
             <span
               className="absolute top-1 right-1 w-4 h-4 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-sm"
@@ -306,9 +341,7 @@ export default function NotificationPanel({ onCountChange }) {
               ) : merged.length === 0 ? (
                 <div className="text-center py-12 px-6">
                   <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
+                    <Bell size={32} className="text-slate-300 dark:text-slate-600" />
                   </div>
                   <p className="text-slate-400 dark:text-slate-500 text-sm font-bold">ไม่มีการแจ้งเตือนในขณะนี้</p>
                 </div>
@@ -323,9 +356,7 @@ export default function NotificationPanel({ onCountChange }) {
                     >
                       <div className="flex gap-4">
                         <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                          </svg>
+                          <Megaphone size={20} strokeWidth={2} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className={`text-[13px] font-bold truncate ${isUnread ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
@@ -337,9 +368,7 @@ export default function NotificationPanel({ onCountChange }) {
                               ประกาศ
                             </span>
                             <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
+                              <Clock size={12} strokeWidth={2} />
                               {new Date(item.created_at).toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
@@ -355,7 +384,7 @@ export default function NotificationPanel({ onCountChange }) {
                   <div
                     key={`doc-${item.notif_id}`}
                     className={`px-5 py-4 transition-all cursor-pointer border-l-4 ${!item.in_app_read ? 'bg-primary-50/40 dark:bg-primary-900/10 border-primary-400' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                    onClick={() => !item.in_app_read && handleMarkDocRead(item.notif_id)}
+                    onClick={() => handleDocClick(item)}
                   >
                     <div className="flex gap-4">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${cClass.split(' ').slice(0, 2).join(' ')}`}>
@@ -371,11 +400,8 @@ export default function NotificationPanel({ onCountChange }) {
                             {item.doc_type}
                           </span>
                           <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {new Date(new Date(item.created_at).getTime() + 7 * 60 * 60 * 1000)
-                              .toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            <Clock size={12} strokeWidth={2} />
+                            {new Date(item.created_at).toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </div>

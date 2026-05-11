@@ -142,12 +142,12 @@ export default function StudentDashboard() {
           ) : (
             <div className="space-y-2">
               {notifs.slice(0, 5).map(n => (
-                <div key={n.notif_id}
-                  className="p-3 rounded-lg border text-xs"
+                <Link key={n.notif_id} to="/documents"
+                  className="block p-3 rounded-lg border text-xs hover:shadow-md transition-shadow"
                   style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
                   <p className="font-semibold text-amber-800 truncate">{n.doc_title}</p>
                   <p className="text-amber-600 mt-0.5">{n.message}</p>
-                </div>
+                </Link>
               ))}
             </div>
           )}

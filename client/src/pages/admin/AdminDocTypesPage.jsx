@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { docTypeService } from '../../services/api'
 import toast from 'react-hot-toast'
+import { FileText, Search } from 'lucide-react'
 
 function formatDate(value) {
   if (!value) return '-'
@@ -23,9 +24,7 @@ function EmptyState({ hasQuery }) {
   return (
     <div className="text-center py-16">
       <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 7h.01M7 11h.01M7 15h.01M11 7h.01M11 11h.01M11 15h.01M15 7h.01M15 11h.01M15 15h.01M19 7h.01M19 11h.01M19 15h.01M3 3h18v18H3V3z" />
-        </svg>
+        <FileText size={32} />
       </div>
       <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{hasQuery ? 'ไม่พบประเภทเอกสารที่ค้นหา' : 'ยังไม่มีประเภทเอกสาร'}</p>
       <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">เพิ่มประเภทใหม่เพื่อให้ผู้ใช้เลือกตอนอัปโหลดเอกสาร</p>
@@ -249,9 +248,7 @@ export default function AdminDocTypesPage() {
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">แสดง {filteredTypes.length} จาก {types.length} ประเภท</p>
             </div>
             <div className="relative w-full md:w-80">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 value={query}
                 onChange={event => setQuery(event.target.value)}

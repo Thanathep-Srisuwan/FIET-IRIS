@@ -26,7 +26,7 @@ const imageFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter: imageFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
 })
 
 router.get('/public',     getPublic)

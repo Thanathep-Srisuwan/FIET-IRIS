@@ -2,6 +2,23 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { documentService, docTypeService, userService } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import toast from 'react-hot-toast'
+import {
+  Calendar,
+  X,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
+  ClipboardList,
+  Users,
+  GraduationCap,
+  School,
+  Paperclip,
+  Download,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MoreHorizontal
+} from 'lucide-react'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
@@ -175,8 +192,8 @@ function PaginationBar({ page, total, limit, onPageChange }) {
       </p>
       <div className="flex items-center gap-1">
         <button disabled={page <= 1} onClick={() => onPageChange(page - 1)}
-          className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
-          ← ก่อนหน้า
+          className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+          <ChevronLeft size={14} /> ก่อนหน้า
         </button>
         {pages.map(p => (
           <button key={p} onClick={() => onPageChange(p)}
@@ -186,8 +203,8 @@ function PaginationBar({ page, total, limit, onPageChange }) {
           </button>
         ))}
         <button disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}
-          className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
-          ถัดไป →
+          className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+          ถัดไป <ChevronRight size={14} />
         </button>
       </div>
     </div>
@@ -494,10 +511,7 @@ function DateInput({ display, iso, onChange }) {
         maxLength={10}
       />
       <div className="absolute right-0 top-0 h-full w-9 flex items-center justify-center">
-        <svg className="w-4 h-4 text-slate-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
+        <Calendar size={16} className="text-slate-400 pointer-events-none" />
         <input
           type="date"
           tabIndex={-1}
@@ -730,13 +744,15 @@ const handleExport = async () => {
             style={{ backgroundColor: '#42b5e1' }}>
             {loading ? (
               <>
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-                </svg>
+                <Loader2 size={16} className="animate-spin" />
                 กำลังส่งออก...
               </>
-            ) : '⬇ ดาวน์โหลด Excel'}
+            ) : (
+              <>
+                <Download size={16} />
+                ดาวน์โหลด Excel
+              </>
+            )}
           </button>
         </div>
       </div>

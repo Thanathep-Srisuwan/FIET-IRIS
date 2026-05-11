@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { authService } from '../../services/api'
 import ThemeToggle from '../../components/common/ThemeToggle'
 import toast from 'react-hot-toast'
+import { Mail, Eye, EyeOff, LogIn } from 'lucide-react'
 
 import fietLogo from '../../assets/fiet-logo.png'
 import kmuttLogo from '../../assets/kmutt-logo.png'
@@ -95,10 +96,7 @@ export default function LoginPage() {
                   className="w-full h-12 border-[1.5px] border-[#dde5ee] dark:border-slate-800 rounded-xl pl-4 pr-11 text-sm text-[#1a2d45] dark:text-slate-200 bg-[#fafcfe] dark:bg-slate-800 placeholder-[#b8c8d8] dark:placeholder-slate-600 outline-none transition-all focus:border-[#42b5e1] dark:focus:border-primary-500 focus:ring-4 focus:ring-[#42b5e1]/10 dark:focus:ring-primary-500/10 focus:bg-white dark:focus:bg-slate-900 disabled:opacity-60"
                 />
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#b8c8d8] dark:text-slate-600 transition-colors group-focus-within:text-[#42b5e1]">
-                  <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"/>
-                    <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"/>
-                  </svg>
+                  <Mail size={20} />
                 </div>
               </div>
               <p className="flex items-center gap-2 mt-2 text-[11px] text-[#8fa5bc] dark:text-slate-500 font-medium">
@@ -127,17 +125,7 @@ export default function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-[#b8c8d8] dark:text-slate-600 hover:text-[#7a96b0] dark:hover:text-slate-400 transition-colors"
                 >
-                  {showPassword ? (
-                    <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-                      <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd"/>
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd"/>
-                      <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z"/>
-                    </svg>
-                  )}
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
@@ -155,9 +143,7 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <svg className="w-5 h-5 opacity-90 transition-transform group-hover:translate-x-1" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z" clipRule="evenodd"/>
-                  </svg>
+                  <LogIn size={20} className="opacity-90 transition-transform group-hover:translate-x-1" />
                   Sign In
                 </>
               )}

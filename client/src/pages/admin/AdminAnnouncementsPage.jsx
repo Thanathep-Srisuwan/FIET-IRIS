@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { 
+  Megaphone, 
+  Image as ImageIcon, 
+  Link as LinkIcon, 
+  X, 
+  Search 
+} from 'lucide-react'
 import { announcementService } from '../../services/api'
 import toast from 'react-hot-toast'
 
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024
 
 function formatDate(value) {
   if (!value) return '-'
@@ -28,21 +35,19 @@ function AnnouncementPreview({ form, preview }) {
       {!hasContent ? (
         <div className="p-8 text-center">
           <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-            </svg>
+            <Megaphone size={28} strokeWidth={1.8} />
           </div>
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">เริ่มกรอกข้อมูลเพื่อดูตัวอย่าง</p>
         </div>
       ) : (
         <div className="p-5">
           {preview ? (
-            <img src={preview} alt="preview" className="w-full aspect-[16/9] object-cover rounded-xl border border-slate-100 dark:border-slate-800 mb-4" />
+            <div className="relative overflow-hidden border border-slate-100 dark:border-slate-800 mb-4 bg-slate-100 dark:bg-slate-800 shadow-inner">
+              <img src={preview} alt="preview" className="w-full h-auto max-h-[600px] object-contain mx-auto" />
+            </div>
           ) : (
             <div className="w-full aspect-[16/9] rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 mb-4 flex items-center justify-center text-slate-400">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+              <ImageIcon size={32} strokeWidth={1.8} />
             </div>
           )}
           <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-2">ประกาศล่าสุด</p>
@@ -54,9 +59,7 @@ function AnnouncementPreview({ form, preview }) {
           </p>
           {form.link_url.trim() && (
             <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary-700 dark:text-primary-300">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 015.657 5.657l-1.414 1.414a4 4 0 01-5.657-5.657M10.172 13.828a4 4 0 01-5.657-5.657l1.414-1.414a4 4 0 015.657 5.657" />
-              </svg>
+              <LinkIcon size={16} strokeWidth={2} />
               เปิดลิงก์ประกอบ
             </div>
           )}
@@ -172,27 +175,28 @@ function AnnouncementForm({ onSaved }) {
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">รูปภาพประกอบ <span className="text-slate-400">(ไม่บังคับ)</span></label>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 mb-2">แนะนำ 1200 x 630 px, JPG/PNG/WebP, ไม่เกิน 5 MB</p>
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-200">รูปภาพประกอบ <span className="text-slate-400 font-normal">(ไม่บังคับ)</span></label>
+          <div className="mt-1 mb-3 space-y-1">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              <span className="font-bold text-primary-600 dark:text-primary-400">คำแนะนำ:</span> อัตราส่วน <span className="font-bold">16:9</span> (เช่น 1200 x 630 px) จะแสดงผลได้สวยงามที่สุด
+            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">รองรับไฟล์ JPG/PNG/WebP, ขนาดไม่เกิน 20 MB</p>
+          </div>
           {preview ? (
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-              <img src={preview} alt="preview" className="w-full aspect-[16/9] object-cover" />
+            <div className="relative overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/50 shadow-inner group/img">
+              <img src={preview} alt="preview" className="w-full h-auto max-h-80 object-contain mx-auto" />
               <button
                 type="button"
                 onClick={clearImage}
-                className="absolute right-3 top-3 w-8 h-8 rounded-full bg-white/90 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-red-600 transition-colors flex items-center justify-center"
+                className="absolute right-3 top-3 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-red-600 transition-all flex items-center justify-center shadow-lg active:scale-90"
                 aria-label="ลบรูปภาพ"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X size={20} />
               </button>
             </div>
           ) : (
             <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors">
-              <svg className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+              <ImageIcon size={32} strokeWidth={1.7} className="text-slate-300 dark:text-slate-600 mb-2" />
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">คลิกเพื่อเลือกรูปภาพ</span>
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageChange} />
             </label>
@@ -250,16 +254,24 @@ function AnnouncementCard({ item, onDelete }) {
   }
 
   return (
-    <article className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-      <div className="grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="bg-slate-100 dark:bg-slate-800 min-h-44 md:min-h-full">
+    <article className="group bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-xl hover:border-primary-200 dark:hover:border-primary-900/50 transition-all duration-500 text-left">
+      <div className="grid grid-cols-1 md:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="relative bg-slate-100 dark:bg-slate-800/40 flex items-center justify-center border-r border-slate-100 dark:border-slate-800 h-56 md:h-auto overflow-hidden">
           {item.image_url ? (
-            <img src={item.image_url} alt={item.title} className="w-full h-full min-h-44 object-cover" />
+            <>
+              {/* Subtle background blur for modern feel */}
+              <div className="absolute inset-0 opacity-10 blur-2xl scale-150">
+                <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+              </div>
+              <img 
+                src={item.image_url} 
+                alt={item.title} 
+                className="relative z-10 w-full h-full object-contain p-2" 
+              />
+            </>
           ) : (
-            <div className="h-full min-h-44 flex items-center justify-center text-slate-300 dark:text-slate-600">
-              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-              </svg>
+            <div className="relative z-10 h-full flex items-center justify-center text-slate-300 dark:text-slate-600">
+              <Megaphone size={48} strokeWidth={1.7} />
             </div>
           )}
         </div>

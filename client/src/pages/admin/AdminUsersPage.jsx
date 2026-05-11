@@ -42,7 +42,6 @@ const COLUMNS = [
   { key: null,           label: 'อาจารย์ที่ปรึกษา',  sort: false },
   { key: 'department',   label: 'สาขาวิชา',          sort: true  },
   { key: 'doc_count',    label: 'เอกสาร',            sort: true  },
-  { key: 'is_active',    label: 'สถานะ',             sort: true  },
   { key: null,           label: '',                   sort: false },
 ]
 
@@ -427,7 +426,6 @@ export default function AdminUsersPage() {
   const [search, setSearch]             = useState('')
   const [roleFilter, setRoleFilter]     = useState('')
   const [deptFilter, setDeptFilter]     = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [sortBy, setSortBy]             = useState('created_at')
   const [sortDir, setSortDir]           = useState('desc')
@@ -444,14 +442,14 @@ export default function AdminUsersPage() {
     try {
       const { data } = await userService.getAll({
         search, role: roleFilter, department: deptFilter,
-        status: statusFilter, degree_level: degreeFilter,
+        degree_level: degreeFilter,
         sortBy, sortDir, page, limit: LIMIT,
       })
       setUsers(data.users || [])
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [search, roleFilter, deptFilter, statusFilter, degreeFilter, sortBy, sortDir, page])
+  }, [search, roleFilter, deptFilter, degreeFilter, sortBy, sortDir, page])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
@@ -460,14 +458,6 @@ export default function AdminUsersPage() {
       .then(r => setAdvisors(r.data?.advisors || []))
       .catch(() => {})
   }, [])
-
-  const handleToggle = async (user) => {
-    try {
-      const { data } = await userService.toggle(user.user_id)
-      toast.success(data.message)
-      fetchUsers()
-    } catch { toast.error('เกิดข้อผิดพลาด') }
-  }
 
   const handleReset = async (user) => {
     if (!confirm(`รีเซ็ตรหัสผ่านของ ${user.name}?`)) return
@@ -497,24 +487,12 @@ export default function AdminUsersPage() {
     } finally { setDeleteLoading(false) }
   }
 
-  const handleBulkToggle = async (activate) => {
-    try {
-      const ids = Array.from(selectedIds)
-      const { data } = await userService.bulkToggle(ids, activate)
-      toast.success(data.message)
-      setSelectedIds(new Set())
-      fetchUsers()
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
-    }
-  }
-
   const exportExcel = async () => {
     setExportLoading(true)
     try {
       const { data } = await userService.getAll({
         search, role: roleFilter, department: deptFilter,
-        status: statusFilter, degree_level: degreeFilter,
+        degree_level: degreeFilter,
         sortBy, sortDir, limit: 9999, page: 1,
       })
       const all = data.users || []
@@ -524,11 +502,11 @@ export default function AdminUsersPage() {
       const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
       worksheet.columns = [
         { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
-        { width: 25 }, { width: 30 }, { width: 18 }, { width: 12 }, { width: 15 },
+        { width: 25 }, { width: 30 }, { width: 18 }, { width: 15 },
       ]
       const headerRow = worksheet.addRow([
         'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
-        'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา', 'สถานะ', 'วันที่สร้าง',
+        'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา', 'วันที่สร้าง',
       ])
       headerRow.eachCell(cell => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF42B5E1' } }
@@ -544,7 +522,6 @@ export default function AdminUsersPage() {
           u.advisor_name            || '',
           u.department              || '',
           degreeLabel[u.degree_level] || '',
-          u.is_active ? 'ใช้งาน' : 'ระงับ',
           new Date(u.created_at).toLocaleDateString('th-TH'),
         ])
         row.eachCell({ includeEmpty: true }, cell => {
@@ -654,12 +631,6 @@ export default function AdminUsersPage() {
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-        <select className="input-field w-full sm:w-auto" value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value); setPage(1) }}>
-          <option value="">ทุกสถานะ</option>
-          <option value="active">ใช้งาน</option>
-          <option value="inactive">ระงับ</option>
-        </select>
       </div>
 
       {/* Bulk Action Bar */}
@@ -667,14 +638,6 @@ export default function AdminUsersPage() {
         <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-800 text-white rounded-xl">
           <span className="text-sm font-medium">เลือกแล้ว {selectedIds.size} คน</span>
           <div className="flex items-center gap-2 ml-auto">
-            <button onClick={() => handleBulkToggle(true)}
-              className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-xs font-medium transition-colors">
-              เปิดใช้งาน
-            </button>
-            <button onClick={() => handleBulkToggle(false)}
-              className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-xs font-medium transition-colors">
-              ระงับ
-            </button>
             <button onClick={() => { setPendingDelete(selectedUsers); setModal('delete') }}
               className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-xs font-medium transition-colors">
               ลบที่เลือก
@@ -717,12 +680,12 @@ export default function AdminUsersPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
+                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
               ) : users.map(u => (
                 <tr key={u.user_id}
-                  className={`hover:bg-slate-50 transition-colors ${!u.is_active ? 'opacity-50' : ''} ${selectedIds.has(u.user_id) ? 'bg-blue-50/40' : ''}`}>
+                  className={`hover:bg-slate-50 transition-colors ${selectedIds.has(u.user_id) ? 'bg-blue-50/40' : ''}`}>
                   <td className="px-4 py-3">
                     <input type="checkbox"
                       checked={selectedIds.has(u.user_id)}
@@ -749,26 +712,10 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 text-slate-500 text-xs max-w-[120px] truncate">{u.department || '—'}</td>
                   <td className="px-4 py-3 text-center text-slate-600 text-xs tabular-nums">{u.doc_count}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                      u.is_active
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-slate-100 text-slate-500 border border-slate-200'
-                    }`}>
-                      {u.is_active ? 'ใช้งาน' : 'ระงับ'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
                     <div className="flex items-center gap-2 whitespace-nowrap">
                       <button onClick={() => { setSelected(u); setModal('edit') }}
                         className="text-xs text-slate-500 hover:text-fiet-blue transition-colors font-medium">
                         แก้ไข
-                      </button>
-                      <span className="text-slate-200">|</span>
-                      <button onClick={() => handleToggle(u)}
-                        className={`text-xs font-medium transition-colors ${
-                          u.is_active ? 'text-slate-500 hover:text-red-500' : 'text-slate-500 hover:text-emerald-600'
-                        }`}>
-                        {u.is_active ? 'ระงับ' : 'เปิด'}
                       </button>
                       <span className="text-slate-200">|</span>
                       <button onClick={() => handleReset(u)}

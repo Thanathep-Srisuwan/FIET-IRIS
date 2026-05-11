@@ -3,6 +3,7 @@ import ReactQuill from 'react-quill'
 import toast from 'react-hot-toast'
 import { settingsService } from '../../services/api'
 import 'react-quill/dist/quill.snow.css'
+import { Trash2, AlertTriangle, Mail } from 'lucide-react'
 
 const TEMPLATE_META = {
   expiry_warning: {
@@ -98,13 +99,9 @@ function TemplateIcon({ tone }) {
   return (
     <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
       {tone === 'red' ? (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m-5 0V5a1 1 0 011-1h2a1 1 0 011 1v2" />
-        </svg>
+        <Trash2 size={20} />
       ) : (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-        </svg>
+        <AlertTriangle size={20} />
       )}
     </span>
   )
@@ -114,9 +111,7 @@ function EmptyState() {
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-10 text-center">
       <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
-        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8m-18 8h18M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
+        <Mail size={32} />
       </div>
       <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">ยังไม่มี Email Template</p>
       <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">โปรดตรวจสอบ migration หรือข้อมูลในตาราง EMAIL_TEMPLATES</p>
