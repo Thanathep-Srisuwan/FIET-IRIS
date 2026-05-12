@@ -4,9 +4,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { 
   MapPin, Mail, Phone, Bell, ShieldCheck, BarChart3, 
   Users, Search, Link as LinkIcon, Zap, X, ExternalLink,
-  Info, ChevronDown, MessageCircle, ArrowRight, Menu,
+  Info, ChevronDown, ArrowRight, Menu,
   Calendar, Globe
 } from 'lucide-react'
+import { FaFacebookF, FaYoutube, FaLine } from 'react-icons/fa6'
 import { useAuthStore } from '../../stores/authStore'
 import { announcementService } from '../../services/api'
 import ThemeToggle from '../../components/common/ThemeToggle'
@@ -19,34 +20,6 @@ const RI_URL   = 'https://ethics.kmutt.ac.th/riservice/'
 const IRB_URL  = 'https://ethics.kmutt.ac.th/irb/'
 const FIET_URL = 'https://www.fiet.kmutt.ac.th/'
 const TRACK_IRB_URL = 'https://www.kmutt.me/FIET.IRB.Tracking.Report'
-
-function FacebookIcon({ size = 20 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M14 8.5V6.75c0-.58.47-.75.8-.75H17V2h-3.2C10.25 2 9.5 4.67 9.5 6.38V8.5H7v4h2.5V22H14v-9.5h3l.5-4H14Z" />
-    </svg>
-  )
-}
-
-function YoutubeIcon({ size = 20 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M23.5 6.2a3 3 0 0 0-2.1-2.12C19.55 3.6 12 3.6 12 3.6s-7.55 0-9.4.48A3 3 0 0 0 .5 6.2 31.3 31.3 0 0 0 0 12a31.3 31.3 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.12c1.85.48 9.4.48 9.4.48s7.55 0 9.4-.48a3 3 0 0 0 2.1-2.12A31.3 31.3 0 0 0 24 12a31.3 31.3 0 0 0-.5-5.8ZM9.6 15.6V8.4L15.85 12 9.6 15.6Z" />
-    </svg>
-  )
-}
 
 function renderWithLinks(text) {
   if (!text) return null
@@ -62,6 +35,17 @@ function renderWithLinks(text) {
 }
 
 function AnnouncementModal({ item, onClose }) {
+  useEffect(() => {
+    if (!item) return undefined
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [item, onClose])
+
   if (!item) return null
 
   const modalContent = (
@@ -72,6 +56,9 @@ function AnnouncementModal({ item, onClose }) {
       <div
         className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden border border-transparent dark:border-slate-700"
         onMouseDown={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="announcement-modal-title"
       >
         <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
           <div className="flex gap-3.5 items-start">
@@ -79,7 +66,7 @@ function AnnouncementModal({ item, onClose }) {
               <Bell size={24} strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
+              <h2 id="announcement-modal-title" className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
               <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-300 mt-1 uppercase tracking-wider flex items-center gap-1.5">
                 <Info size={14} strokeWidth={2.5} />
                 {new Date(item.created_at).toLocaleString('th-TH', {
@@ -89,7 +76,7 @@ function AnnouncementModal({ item, onClose }) {
               </p>
             </div>
           </div>
-          <button onClick={onClose}
+          <button type="button" onClick={onClose} aria-label="ปิดหน้าต่างประกาศ"
             className="w-8 h-8 flex items-center justify-center rounded-full text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
             <X size={18} />
           </button>
@@ -122,7 +109,7 @@ function AnnouncementModal({ item, onClose }) {
           </div>
         )}
         <div className="px-6 py-4 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-          <button onClick={onClose}
+          <button type="button" onClick={onClose}
             className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
             ปิดหน้าต่าง
           </button>
@@ -177,7 +164,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     if (token) navigate('/dashboard', { replace: true })
-  }, [token])
+  }, [navigate, token])
 
   useEffect(() => {
     announcementService.getPublic()
@@ -223,7 +210,7 @@ export default function LandingPage() {
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-1">
             {[
               { label: 'หน้าแรก', href: '#top' },
               { label: 'ฟีเจอร์', href: '#features' },
@@ -246,11 +233,15 @@ export default function LandingPage() {
             </Link>
           </nav>
 
-          <div className="md:hidden flex items-center gap-2">
+          <div className="lg:hidden flex items-center gap-2">
             <ThemeToggle />
             <button
+              type="button"
               className="p-2 rounded-md text-gray-600 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800"
               onClick={() => setMobileMenuOpen(v => !v)}
+              aria-label={mobileMenuOpen ? 'ปิดเมนูหลัก' : 'เปิดเมนูหลัก'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="landing-mobile-menu"
             >
               {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
@@ -258,7 +249,7 @@ export default function LandingPage() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 flex flex-col gap-1">
+          <div id="landing-mobile-menu" className="lg:hidden border-t border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 flex flex-col gap-1">
             {[
               { label: 'หน้าแรก', href: '#top' },
               { label: 'ฟีเจอร์', href: '#features' },
@@ -317,11 +308,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 pointer-events-none">
-          <svg viewBox="0 0 1440 100" fill="none" preserveAspectRatio="none" className="w-full h-12 md:h-20">
-            <path d="M0 100L1440 100L1440 20C1200 80 960 0 720 20C480 40 240 0 0 20Z" className="fill-white dark:fill-slate-950 transition-colors duration-300"/>
-          </svg>
-        </div>
+        <div className="absolute -bottom-10 left-1/2 h-20 w-[120vw] -translate-x-1/2 rounded-t-[50%] bg-white transition-colors duration-300 dark:bg-slate-950 md:-bottom-14 md:h-28" />
       </section>
 
       <section id="features" className="py-24 px-6 bg-white dark:bg-slate-950 transition-colors">
@@ -463,6 +450,15 @@ export default function LandingPage() {
                   key={item.announcement_id}
                   className="group bg-white dark:bg-slate-900 rounded-[32px] border border-gray-100 dark:border-slate-800 overflow-hidden cursor-pointer hover:shadow-2xl hover:-translate-y-1.5 hover:border-[#42b5e1]/30 transition-all duration-500 flex flex-col md:flex-row"
                   onClick={() => setSelected(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setSelected(item)
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`อ่านประกาศ ${item.title}`}
                 >
                   {item.image_url && (
                     <div className="relative md:w-56 lg:w-64 shrink-0 h-52 md:h-auto overflow-hidden bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center border-r border-gray-50 dark:border-slate-800 group/thumb">
@@ -536,9 +532,10 @@ export default function LandingPage() {
                   { label: 'ระบบที่เกี่ยวข้อง', href: '#links' },
                   { label: 'ประกาศ / ข่าวสาร', href: '#announcements' },
                   { label: 'ตรวจสอบสถานะ IRB', href: TRACK_IRB_URL, target: '_blank' },
-                ].map(({ label, href }) => (
+                ].map(({ label, href, target }) => (
                   <li key={label}>
-                    <a href={href} className="text-sm font-bold text-white/75 hover:text-sky-300 transition-colors flex items-center gap-2 group">
+                    <a href={href} target={target} rel={target ? 'noopener noreferrer' : undefined}
+                      className="text-sm font-bold text-white/75 hover:text-sky-300 transition-colors flex items-center gap-2 group">
                       <span className="w-1.5 h-1.5 rounded-full bg-white/40 group-hover:bg-sky-300 transition-colors" />
                       {label}
                     </a>
@@ -601,16 +598,19 @@ export default function LandingPage() {
               </div>
               <div className="flex gap-3 mt-8">
                 <a href="https://www.facebook.com/fiet.kmutt" target="_blank" rel="noopener noreferrer"
+                  aria-label="Facebook FIET KMUTT"
                   className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg bg-[#1877f2]">
-                  <FacebookIcon size={20} />
+                  <FaFacebookF size={18} />
                 </a>
                 <a href="https://www.youtube.com/@FIETkmutt" target="_blank" rel="noopener noreferrer"
+                  aria-label="YouTube FIET KMUTT"
                   className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg bg-[#ff0000]">
-                  <YoutubeIcon size={20} />
+                  <FaYoutube size={20} />
                 </a>
                 <a href="https://line.me/R/ti/p/@413kjbml" target="_blank" rel="noopener noreferrer"
+                  aria-label="LINE FIET KMUTT"
                   className="w-10 h-10 rounded-2xl flex items-center justify-center hover:opacity-80 transition-all hover:-translate-y-1 shadow-lg bg-[#06c755]">
-                  <MessageCircle size={20} fill="currentColor" />
+                  <FaLine size={20} />
                 </a>
               </div>
             </div>

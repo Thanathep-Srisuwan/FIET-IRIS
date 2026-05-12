@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { adminService, docTypeService } from '../../services/api'
+import { adminService, documentService } from '../../services/api'
 
 const statusColor = {
   active:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
@@ -8,8 +7,6 @@ const statusColor = {
   expired:       'bg-red-50 text-red-600 border border-red-200',
 }
 const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
-
-const TYPE_COLORS = ['#42b5e1', '#f7924a', '#10b981', '#8b5cf6', '#f43f5e', '#f59e0b', '#06b6d4', '#84cc16']
 
 const USER_GROUPS = [
   { key: 'bachelor', label: 'นักศึกษาปริญญาตรี',      color: '#42b5e1' },
@@ -41,19 +38,121 @@ function StatCard({ label, value, color, sub, onClick }) {
   )
 }
 
+function DetailListModal({ title, subtitle, items, type, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
+      <div className="w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">{title}</h2>
+            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          </div>
+          <button onClick={onClose} className="rounded-lg px-2 py-1 text-xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
+        </div>
+        <div className="max-h-[65vh] overflow-y-auto p-4">
+          {!items?.length ? (
+            <div className="rounded-xl bg-slate-50 py-12 text-center text-sm text-slate-400">ไม่มีข้อมูลในกลุ่มนี้</div>
+          ) : (
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+              {items.map(item => (
+                <div key={`${type}-${item.doc_id || item.user_id}`} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800">{item.doc_title || item.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {type === 'user'
+                        ? [item.email, item.student_id, item.department, item.advisor_name && `อาจารย์: ${item.advisor_name}`].filter(Boolean).join(' • ')
+                        : [item.owner_name, item.owner_student_id, item.doc_type].filter(Boolean).join(' • ')}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 sm:justify-end">
+                    {type === 'user' ? (
+                      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{item.doc_count || 0} เอกสาร</span>
+                    ) : (
+                      <>
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">{item.doc_type}</span>
+                        {item.days_remaining != null && (
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.days_remaining < 0 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                            {item.days_remaining < 0 ? `เกิน ${Math.abs(item.days_remaining)} วัน` : `อีก ${item.days_remaining} วัน`}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RecentDocumentModal({ doc, loading, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[#42b5e1]">รายละเอียดเอกสาร</p>
+            <h2 className="mt-1 truncate text-base font-bold text-slate-900">{doc?.title || doc?.doc_title || 'กำลังโหลด...'}</h2>
+          </div>
+          <button onClick={onClose} className="rounded-lg px-2 py-1 text-xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
+        </div>
+        {loading ? (
+          <div className="py-16 text-center text-sm text-slate-400">กำลังโหลดรายละเอียด...</div>
+        ) : (
+          <div className="space-y-4 p-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {[
+                ['ประเภท', doc?.doc_type],
+                ['เจ้าของ', doc?.owner_name],
+                ['อีเมล', doc?.owner_email],
+                ['วันที่อัปโหลด', doc?.created_at ? new Date(doc.created_at).toLocaleDateString('th-TH') : '-'],
+                ['วันที่ออก', doc?.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '-'],
+                ['วันหมดอายุ', doc?.no_expire ? 'ไม่มีวันหมดอายุ' : (doc?.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : '-')],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-400">{label}</p>
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-700">{value || '-'}</p>
+                </div>
+              ))}
+            </div>
+            {doc?.description && (
+              <div className="rounded-xl bg-slate-50 p-3">
+                <p className="text-xs font-semibold text-slate-400">คำอธิบาย</p>
+                <p className="mt-1 text-sm text-slate-700">{doc.description}</p>
+              </div>
+            )}
+            {doc?.files?.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-400">ไฟล์แนบ</p>
+                <div className="space-y-2">
+                  {doc.files.map(file => (
+                    <div key={file.file_id} className="rounded-xl border border-slate-100 bg-white px-3 py-2 text-sm text-slate-600">
+                      {file.file_name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminDashboard() {
-  const navigate = useNavigate()
   const [stats, setStats]       = useState(null)
-  const [docTypes, setDocTypes] = useState([])
   const [loading, setLoading]   = useState(true)
+  const [detailModal, setDetailModal] = useState(null)
+  const [recentDocModal, setRecentDocModal] = useState(null)
+  const [recentDocLoading, setRecentDocLoading] = useState(false)
 
   useEffect(() => {
-    Promise.all([
-      adminService.getStats(),
-      docTypeService.getAll(),
-    ]).then(([s, t]) => {
+    adminService.getStats().then((s) => {
       setStats(s.data)
-      setDocTypes(t.data || [])
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
@@ -62,6 +161,48 @@ export default function AdminDashboard() {
   const expiryTimeline = stats?.expiryTimeline || {}
   const recentActivity = stats?.recentActivity || []
   const alertDocs      = stats?.alertDocs      || []
+  const docStatusDetails = stats?.docStatusDetails || []
+  const expiryDetails = stats?.expiryDetails || []
+  const userDetails = stats?.userDetails || []
+
+  const openDocStatus = (statusKey, title) => {
+    const items = statusKey === 'all'
+      ? docStatusDetails
+      : docStatusDetails.filter(d => d.status_group === statusKey)
+    setDetailModal({ title, subtitle: `แสดง ${items.length} รายการ`, items, type: 'document' })
+  }
+
+  const openExpiryGroup = (groupKey, title) => {
+    const items = expiryDetails.filter(d => d.timeline_group === groupKey)
+    setDetailModal({ title, subtitle: `แสดง ${items.length} รายการ`, items, type: 'document' })
+  }
+
+  const openUserGroup = (groupKey, title) => {
+    const items = userDetails.filter(u => u.grp === groupKey)
+    setDetailModal({ title, subtitle: `แสดง ${items.length} ผู้ใช้งาน`, items, type: 'user' })
+  }
+
+  const openRecentDocs = () => {
+    setDetailModal({
+      title: 'เอกสารอัปโหลดล่าสุด',
+      subtitle: `แสดง ${recentActivity.length} รายการล่าสุด`,
+      items: recentActivity,
+      type: 'document',
+    })
+  }
+
+  const openRecentDocDetail = async (doc) => {
+    setRecentDocModal(doc)
+    setRecentDocLoading(true)
+    try {
+      const { data } = await documentService.getById(doc.doc_id)
+      setRecentDocModal(data)
+    } catch {
+      setRecentDocModal(doc)
+    } finally {
+      setRecentDocLoading(false)
+    }
+  }
 
   // จับคู่กับ USER_GROUPS เพื่อให้ลำดับคงที่
   const groupData = USER_GROUPS.map(g => {
@@ -69,21 +210,10 @@ export default function AdminDashboard() {
     return { ...g, user_count: found?.user_count ?? 0, doc_count: found?.doc_count ?? 0 }
   })
 
-  // doc type chart data
-  const typeCounts = docTypes.map((t, i) => {
-    const count = recentActivity.filter(a => a.doc_type === t.type_code).length
-    return { label: t.type_code, color: TYPE_COLORS[i % TYPE_COLORS.length] }
-  })
-  // ใช้ userBreakdown doc_count รวม 
-  const totalDocsByType = docTypes.map((t, i) => ({
-    label: t.type_code,
-    color: TYPE_COLORS[i % TYPE_COLORS.length],
-  }))
-
   const maxTimeline = Math.max(
     expiryTimeline.within_30 || 0,
     expiryTimeline.within_60 || 0,
-    expiryTimeline.within_90 || 0,
+    expiryTimeline.within_warning || expiryTimeline.within_90 || 0,
     expiryTimeline.already_expired || 0,
     1,
   )
@@ -101,20 +231,21 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="เอกสารทั้งหมด" value={docStats.total}
-          color="blue" onClick={() => navigate('/documents')}
+          color="blue" onClick={() => openDocStatus('all', 'เอกสารทั้งหมด')}
         />
         <StatCard
           label="ใกล้หมดอายุ" value={docStats.expiring_soon}
-          color="orange" onClick={() => navigate('/documents')}
+          color="orange" onClick={() => openDocStatus('expiring_soon', 'เอกสารใกล้หมดอายุ')}
         />
         <StatCard
           label="หมดอายุแล้ว" value={docStats.expired}
-          color="red" onClick={() => navigate('/documents')}
+          color="red" onClick={() => openDocStatus('expired', 'เอกสารหมดอายุแล้ว')}
         />
         <StatCard
           label="ปกติ" value={docStats.active}
           color="slate"
           sub={`จากทั้งหมด ${docStats.total ?? 0} ฉบับ`}
+          onClick={() => openDocStatus('active', 'เอกสารสถานะปกติ')}
         />
       </div>
 
@@ -125,7 +256,7 @@ export default function AdminDashboard() {
           {groupData.map(g => (
             <div key={g.key}
               className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => navigate('/admin/users')}>
+              onClick={() => openUserGroup(g.key, g.label)}>
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: g.color }} />
                 <p className="text-xs font-semibold text-slate-500">{g.label}</p>
@@ -141,9 +272,9 @@ export default function AdminDashboard() {
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-semibold text-slate-700">เอกสารอัปโหลดล่าสุด</h2>
-            <Link to="/documents" className="text-xs font-medium" style={{ color: '#42b5e1' }}>
+            <button type="button" onClick={openRecentDocs} className="text-xs font-medium" style={{ color: '#42b5e1' }}>
               ดูทั้งหมด →
-            </Link>
+            </button>
           </div>
           {loading ? (
             <div className="text-center py-12 text-slate-400 text-sm">กำลังโหลดข้อมูล...</div>
@@ -168,7 +299,7 @@ export default function AdminDashboard() {
                   {recentActivity.map(doc => (
                     <tr key={doc.doc_id}
                       className="hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => navigate('/documents')}>
+                      onClick={() => openRecentDocDetail(doc)}>
                       <td className="px-5 py-3.5 font-medium text-slate-700 max-w-[180px] truncate">
                         {doc.doc_title}
                       </td>
@@ -211,12 +342,14 @@ export default function AdminDashboard() {
                 { label: 'หมดอายุแล้ว',       value: expiryTimeline.already_expired, color: '#ef4444', bg: '#fef2f2' },
                 { label: 'หมดอายุใน 30 วัน',  value: expiryTimeline.within_30,       color: '#f97316', bg: '#fff7ed' },
                 { label: 'หมดอายุใน 31-60 วัน', value: expiryTimeline.within_60,     color: '#eab308', bg: '#fefce8' },
-                { label: 'หมดอายุใน 61-90 วัน', value: expiryTimeline.within_90,     color: '#22c55e', bg: '#f0fdf4' },
+                { label: 'หมดอายุใน 61-90 วัน', value: expiryTimeline.within_warning ?? expiryTimeline.within_90, key: 'within_warning', color: '#22c55e', bg: '#f0fdf4' },
               ].map(item => (
                 <div key={item.label}
                   className="flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:brightness-95"
                   style={{ backgroundColor: item.bg }}
-                  onClick={() => navigate('/documents')}>
+                  onClick={() => openExpiryGroup(item.key || (
+                    item.label.includes('30') ? 'within_30' : item.label.includes('31') ? 'within_60' : 'already_expired'
+                  ), item.label)}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1.5">
                       <p className="text-xs font-semibold text-slate-700">{item.label}</p>
@@ -268,7 +401,7 @@ export default function AdminDashboard() {
                     style={expired
                       ? { backgroundColor: '#fff1f2', borderColor: '#fecdd3' }
                       : { backgroundColor: '#fffbeb', borderColor: '#fde68a' }}
-                    onClick={() => navigate('/documents')}>
+                    onClick={() => openRecentDocDetail(doc)}>
                     <div className="flex items-center justify-between gap-2">
                       <p className={`font-semibold truncate ${expired ? 'text-red-800' : 'text-amber-800'}`}>
                         {doc.doc_title}
@@ -290,6 +423,21 @@ export default function AdminDashboard() {
         </div>
 
       </div>
+
+      {detailModal && (
+        <DetailListModal
+          {...detailModal}
+          onClose={() => setDetailModal(null)}
+        />
+      )}
+
+      {recentDocModal && (
+        <RecentDocumentModal
+          doc={recentDocModal}
+          loading={recentDocLoading}
+          onClose={() => setRecentDocModal(null)}
+        />
+      )}
 
     </div>
   )

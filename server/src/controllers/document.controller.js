@@ -105,6 +105,88 @@ const ensureDocTypeColumn = async (pool) => {
   `)
 }
 
+const ensureDocumentVersioningSchema = async (pool) => {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENT_FILES') AND name='version_no')
+      ALTER TABLE dbo.DOCUMENT_FILES ADD version_no INT NOT NULL DEFAULT 1
+
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENT_FILES') AND name='is_current')
+      ALTER TABLE dbo.DOCUMENT_FILES ADD is_current BIT NOT NULL DEFAULT 1
+
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENT_FILES') AND name='uploaded_by')
+      ALTER TABLE dbo.DOCUMENT_FILES ADD uploaded_by INT NULL
+
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENT_FILES') AND name='replaced_at')
+      ALTER TABLE dbo.DOCUMENT_FILES ADD replaced_at DATETIME NULL
+
+    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IDX_DOCFILES_current' AND object_id=OBJECT_ID('dbo.DOCUMENT_FILES'))
+      CREATE INDEX IDX_DOCFILES_current ON dbo.DOCUMENT_FILES(doc_id, file_type, is_current, version_no)
+  `)
+
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.DOCUMENT_TIMELINE', 'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.DOCUMENT_TIMELINE (
+        timeline_id INT IDENTITY(1,1) PRIMARY KEY,
+        doc_id INT NOT NULL,
+        actor_id INT NULL,
+        event_type NVARCHAR(40) NOT NULL,
+        title NVARCHAR(200) NOT NULL,
+        detail NVARCHAR(1000) NULL,
+        metadata NVARCHAR(MAX) NULL,
+        created_at DATETIME NOT NULL DEFAULT GETDATE(),
+        CONSTRAINT FK_DOCTIMELINE_doc FOREIGN KEY (doc_id) REFERENCES dbo.DOCUMENTS(doc_id),
+        CONSTRAINT FK_DOCTIMELINE_actor FOREIGN KEY (actor_id) REFERENCES dbo.USERS(user_id)
+      )
+      CREATE INDEX IDX_DOCTIMELINE_doc_created ON dbo.DOCUMENT_TIMELINE(doc_id, created_at DESC)
+    END
+  `)
+}
+
+const logDocumentTimeline = async (pool, { doc_id, actor_id = null, event_type, title, detail = null, metadata = null }) => {
+  try {
+    await ensureDocumentVersioningSchema(pool)
+    await pool.request()
+      .input('doc_id', sql.Int, doc_id)
+      .input('actor_id', sql.Int, actor_id)
+      .input('event_type', sql.NVarChar, event_type)
+      .input('title', sql.NVarChar, title)
+      .input('detail', sql.NVarChar, detail)
+      .input('metadata', sql.NVarChar, metadata ? JSON.stringify(metadata) : null)
+      .query(`
+        INSERT INTO dbo.DOCUMENT_TIMELINE (doc_id, actor_id, event_type, title, detail, metadata)
+        VALUES (@doc_id, @actor_id, @event_type, @title, @detail, @metadata)
+      `)
+  } catch (err) {
+    logger.error(`logDocumentTimeline: ${err.message}`)
+  }
+}
+
+const getAccessibleDocument = async (pool, docId, user) => {
+  const result = await pool.request()
+    .input('doc_id', sql.Int, docId)
+    .input('user_id', sql.Int, user.user_id)
+    .input('role', sql.NVarChar, user.role)
+    .query(`
+      SELECT d.*, u.name AS owner_name, u.email AS owner_email,
+             u.student_id AS owner_student_id, u.role AS owner_role,
+             u.degree_level AS owner_degree_level, u.department AS owner_department,
+             a.name AS advisor_name,
+             CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
+      WHERE d.doc_id = @doc_id
+        AND d.status NOT IN ('deleted','trashed')
+        AND (
+          @user_id = d.user_id
+          OR @role IN ('admin','executive')
+          OR EXISTS (SELECT 1 FROM dbo.USERS owner WHERE owner.user_id = d.user_id AND owner.advisor_id = @user_id)
+        )
+    `)
+  return result.recordset[0] || null
+}
+
 // GET /api/documents
 const getDocuments = async (req, res) => {
   try {
@@ -123,6 +205,7 @@ const getDocuments = async (req, res) => {
     await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
     await ensureDocTypeColumn(pool)
+    await ensureDocumentVersioningSchema(pool)
 
     // Collect params so we can reuse across count + data requests
     const filterParams = []
@@ -215,27 +298,34 @@ const getDocument = async (req, res) => {
     const pool = await getPool()
     await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
+    await ensureDocumentVersioningSchema(pool)
 
-    const result = await pool.request()
-      .input('doc_id', sql.Int, id)
-      .query(`
-        SELECT d.*, u.name AS owner_name, u.email AS owner_email,
-               a.name AS advisor_name,
-               CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining
-        FROM dbo.DOCUMENTS d
-        JOIN dbo.USERS u ON d.user_id = u.user_id
-        LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
-        WHERE d.doc_id = @doc_id AND d.status NOT IN ('deleted','trashed')
-      `)
+    const doc = await getAccessibleDocument(pool, id, req.user)
 
-    if (result.recordset.length === 0)
+    if (!doc)
       return res.status(404).json({ message: 'ไม่พบเอกสาร' })
 
     const files = await pool.request()
       .input('doc_id', sql.Int, id)
-      .query('SELECT * FROM dbo.DOCUMENT_FILES WHERE doc_id = @doc_id')
+      .query(`
+        SELECT f.*, u.name AS uploaded_by_name
+        FROM dbo.DOCUMENT_FILES f
+        LEFT JOIN dbo.USERS u ON f.uploaded_by = u.user_id
+        WHERE f.doc_id = @doc_id
+        ORDER BY f.file_type, f.version_no DESC, f.uploaded_at DESC
+      `)
 
-    res.json({ ...result.recordset[0], files: files.recordset })
+    const timeline = await pool.request()
+      .input('doc_id', sql.Int, id)
+      .query(`
+        SELECT t.*, u.name AS actor_name, u.role AS actor_role
+        FROM dbo.DOCUMENT_TIMELINE t
+        LEFT JOIN dbo.USERS u ON t.actor_id = u.user_id
+        WHERE t.doc_id = @doc_id
+        ORDER BY t.created_at DESC, t.timeline_id DESC
+      `)
+
+    res.json({ ...doc, files: files.recordset, timeline: timeline.recordset })
   } catch (err) {
     logger.error(`getDocument: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
@@ -291,11 +381,21 @@ const createDocument = async (req, res) => {
         .input('file_path', sql.NVarChar, file.path)
         .input('file_size', sql.Int,      file.size)
         .input('mime_type', sql.NVarChar, file.mimetype)
+        .input('uploaded_by', sql.Int, user_id)
         .query(`
-          INSERT INTO dbo.DOCUMENT_FILES (doc_id, file_type, file_name, file_path, file_size, mime_type)
-          VALUES (@doc_id, @file_type, @file_name, @file_path, @file_size, @mime_type)
+          INSERT INTO dbo.DOCUMENT_FILES (doc_id, file_type, file_name, file_path, file_size, mime_type, version_no, is_current, uploaded_by)
+          VALUES (@doc_id, @file_type, @file_name, @file_path, @file_size, @mime_type, 1, 1, @uploaded_by)
         `)
     }
+
+    await logDocumentTimeline(pool, {
+      doc_id,
+      actor_id: user_id,
+      event_type: 'created',
+      title: 'สร้างเอกสาร',
+      detail: `สร้างเอกสาร "${title}" พร้อมไฟล์แนบ ${req.files.length} ไฟล์`,
+      metadata: { file_count: req.files.length, owner_id: effectiveUserId },
+    })
 
     logger.info(`Document created: ${doc_id} by user ${user_id} for user ${effectiveUserId}`)
     res.status(201).json({ message: 'อัปโหลดเอกสารสำเร็จ', doc_id })
@@ -339,6 +439,14 @@ const deleteDocument = async (req, res) => {
             trash_reason=@trash_reason, updated_at=GETDATE()
         WHERE doc_id=@doc_id
       `)
+
+    await logDocumentTimeline(pool, {
+      doc_id: parseInt(id),
+      actor_id: user_id,
+      event_type: 'trashed',
+      title: 'ย้ายเอกสารไปถังขยะ',
+      detail: trashReason,
+    })
 
     logger.info(`Document trashed: ${id} by admin ${user_id} reason="${trashReason}"`)
     res.json({ message: 'ย้ายเอกสารไปถังขยะสำเร็จ' })
@@ -566,6 +674,14 @@ const restoreDocument = async (req, res) => {
         WHERE doc_id=@doc_id
       `)
 
+    await logDocumentTimeline(pool, {
+      doc_id: parseInt(id),
+      actor_id: user_id,
+      event_type: 'restored',
+      title: 'กู้คืนเอกสาร',
+      detail: `กู้คืนเอกสารกลับเป็นสถานะ ${restoreStatus}`,
+    })
+
     logger.info(`Document restored: ${id} by admin ${user_id} → ${restoreStatus}`)
     res.json({ message: 'กู้คืนเอกสารสำเร็จ', status: restoreStatus })
   } catch (err) {
@@ -668,11 +784,129 @@ const permanentDeleteDocument = async (req, res) => {
   }
 }
 
+// POST /api/documents/:id/files/version — เพิ่มไฟล์เวอร์ชันใหม่ให้เอกสารเดิม
+const uploadFileVersion = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { user_id } = req.user
+    const { file_type = 'attachment', note } = req.body
+    const allowedTypes = ['main', 'certificate', 'attachment']
+
+    if (!allowedTypes.includes(file_type))
+      return res.status(400).json({ message: 'ประเภทไฟล์ไม่ถูกต้อง' })
+    if (!req.files || req.files.length === 0)
+      return res.status(400).json({ message: 'กรุณาแนบไฟล์อย่างน้อย 1 ไฟล์' })
+
+    const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
+    await ensureDocumentVersioningSchema(pool)
+
+    const doc = await getAccessibleDocument(pool, id, req.user)
+    if (!doc) return res.status(404).json({ message: 'ไม่พบเอกสาร' })
+
+    const versionResult = await pool.request()
+      .input('doc_id', sql.Int, id)
+      .input('file_type', sql.NVarChar, file_type)
+      .query(`
+        SELECT ISNULL(MAX(version_no), 0) + 1 AS next_version
+        FROM dbo.DOCUMENT_FILES
+        WHERE doc_id = @doc_id AND file_type = @file_type
+      `)
+    const nextVersion = versionResult.recordset[0]?.next_version || 1
+
+    await pool.request()
+      .input('doc_id', sql.Int, id)
+      .input('file_type', sql.NVarChar, file_type)
+      .query(`
+        UPDATE dbo.DOCUMENT_FILES
+        SET is_current = 0, replaced_at = GETDATE()
+        WHERE doc_id = @doc_id AND file_type = @file_type AND is_current = 1
+      `)
+
+    for (const file of req.files) {
+      const fileName = Buffer.from(file.originalname, 'latin1').toString('utf8')
+      await pool.request()
+        .input('doc_id', sql.Int, id)
+        .input('file_type', sql.NVarChar, file_type)
+        .input('file_name', sql.NVarChar, fileName)
+        .input('file_path', sql.NVarChar, file.path)
+        .input('file_size', sql.Int, file.size)
+        .input('mime_type', sql.NVarChar, file.mimetype)
+        .input('version_no', sql.Int, nextVersion)
+        .input('uploaded_by', sql.Int, user_id)
+        .query(`
+          INSERT INTO dbo.DOCUMENT_FILES
+            (doc_id, file_type, file_name, file_path, file_size, mime_type, version_no, is_current, uploaded_by)
+          VALUES
+            (@doc_id, @file_type, @file_name, @file_path, @file_size, @mime_type, @version_no, 1, @uploaded_by)
+        `)
+    }
+
+    await pool.request()
+      .input('doc_id', sql.Int, id)
+      .query('UPDATE dbo.DOCUMENTS SET updated_at = GETDATE() WHERE doc_id = @doc_id')
+
+    const typeLabel = file_type === 'main' ? 'เอกสารหลัก'
+      : file_type === 'certificate' ? 'บันทึกข้อความรับรอง' : 'ไฟล์แนบ'
+
+    await logDocumentTimeline(pool, {
+      doc_id: parseInt(id),
+      actor_id: user_id,
+      event_type: 'file_version_uploaded',
+      title: `เพิ่มเวอร์ชันไฟล์ ${typeLabel}`,
+      detail: note || `อัปโหลดเวอร์ชัน ${nextVersion} จำนวน ${req.files.length} ไฟล์`,
+      metadata: { file_type, version_no: nextVersion, file_count: req.files.length },
+    })
+
+    logger.info(`Document file version uploaded: doc=${id} type=${file_type} v=${nextVersion} by user ${user_id}`)
+    res.status(201).json({ message: 'เพิ่มเวอร์ชันไฟล์สำเร็จ', version_no: nextVersion })
+  } catch (err) {
+    logger.error(`uploadFileVersion: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// GET /api/documents/:id/timeline
+const getDocumentTimeline = async (req, res) => {
+  try {
+    const { id } = req.params
+    const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
+    await ensureDocumentVersioningSchema(pool)
+
+    const doc = await getAccessibleDocument(pool, id, req.user)
+    if (!doc) return res.status(404).json({ message: 'ไม่พบเอกสาร' })
+
+    const result = await pool.request()
+      .input('doc_id', sql.Int, id)
+      .query(`
+        SELECT t.*, u.name AS actor_name, u.role AS actor_role
+        FROM dbo.DOCUMENT_TIMELINE t
+        LEFT JOIN dbo.USERS u ON t.actor_id = u.user_id
+        WHERE t.doc_id = @doc_id
+        ORDER BY t.created_at DESC, t.timeline_id DESC
+      `)
+
+    res.json(result.recordset)
+  } catch (err) {
+    logger.error(`getDocumentTimeline: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
 // GET /api/documents/:id/files/:fileId/download
 const downloadFile = async (req, res) => {
   try {
     const { id, fileId } = req.params
     const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
+    await ensureDocumentVersioningSchema(pool)
+
+    const doc = await getAccessibleDocument(pool, id, req.user)
+    if (!doc) return res.status(404).json({ message: 'ไม่พบเอกสาร' })
 
     const result = await pool.request()
       .input('file_id', sql.Int, fileId)
@@ -698,6 +932,12 @@ const previewFile = async (req, res) => {
   try {
     const { id, fileId } = req.params
     const pool = await getPool()
+    await ensureNoExpireColumn(pool)
+    await ensureTrashedColumns(pool)
+    await ensureDocumentVersioningSchema(pool)
+
+    const doc = await getAccessibleDocument(pool, id, req.user)
+    if (!doc) return res.status(404).json({ message: 'ไม่พบเอกสาร' })
 
     const result = await pool.request()
       .input('file_id', sql.Int, fileId)
@@ -777,5 +1017,6 @@ module.exports = {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
   bulkRestoreDocuments, bulkPermanentDeleteDocuments,
+  uploadFileVersion, getDocumentTimeline,
   downloadFile, previewFile, getDocumentSummary,
 }

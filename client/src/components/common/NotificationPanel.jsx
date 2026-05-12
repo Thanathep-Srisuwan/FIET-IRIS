@@ -1,158 +1,168 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router-dom'
-import { 
-  Bell, 
-  AlertTriangle, 
-  AlertCircle, 
-  Trash2, 
-  RefreshCw, 
-  Calendar, 
-  X, 
-  ExternalLink, 
-  Megaphone, 
-  Clock 
-} from 'lucide-react'
-import { notificationService, announcementService } from '../../services/api'
 import toast from 'react-hot-toast'
-
-const docTypeIcon = (type) => {
-  const iconProps = { size: 20, strokeWidth: 2 };
-  switch (type) {
-    case 'expiry_warning':
-      return <AlertTriangle {...iconProps} />;
-    case 'expired':
-      return <AlertCircle {...iconProps} />;
-    case 'deleted':
-      return <Trash2 {...iconProps} />;
-    case 'replaced':
-      return <RefreshCw {...iconProps} />;
-    default:
-      return <Bell {...iconProps} />;
-  }
-}
+import { AlertCircle, AlertTriangle, Bell, Calendar, CheckCheck, Clock, ExternalLink, Megaphone, RefreshCw, Trash2, X } from 'lucide-react'
+import { announcementService, documentService, notificationService } from '../../services/api'
+import { useLanguage } from '../../contexts/LanguageContext'
 
 const docTypeColor = {
   expiry_warning: 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800',
-  expired:        'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
-  deleted:        'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-slate-700',
-  replaced:       'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
+  expired: 'bg-red-50 text-red-600 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800',
+  deleted: 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:text-slate-400 dark:border-slate-700',
+  replaced: 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800',
 }
+
 const announcementColorClass = 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+
+const docTypeIcon = (type) => {
+  const iconProps = { size: 20, strokeWidth: 2 }
+  if (type === 'expiry_warning') return <AlertTriangle {...iconProps} />
+  if (type === 'expired') return <AlertCircle {...iconProps} />
+  if (type === 'deleted') return <Trash2 {...iconProps} />
+  if (type === 'replaced') return <RefreshCw {...iconProps} />
+  return <Bell {...iconProps} />
+}
 
 function renderWithLinks(text) {
   if (!text) return null
   const parts = text.split(/(https?:\/\/[^\s]+)/g)
-  return parts.map((part, i) =>
+  return parts.map((part, index) =>
     /^https?:\/\//.test(part) ? (
-      <a key={i} href={part} target="_blank" rel="noopener noreferrer"
-        className="text-blue-600 dark:text-primary-400 underline break-all hover:text-blue-800 dark:hover:text-primary-300"
-        onClick={e => e.stopPropagation()}>
+      <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-blue-600 underline hover:text-blue-800 dark:text-primary-400 dark:hover:text-primary-300" onClick={e => e.stopPropagation()}>
         {part}
       </a>
     ) : part
   )
 }
 
-function AnnouncementModal({ item, onClose }) {
+function AnnouncementModal({ item, locale, t, onClose }) {
   if (!item) return null
-  
-  const modalContent = (
-    <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
-      onMouseDown={onClose}
-    >
-      <div
-        className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden transition-colors border border-slate-200 dark:border-slate-800"
-        onMouseDown={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
-          <div className="flex gap-3.5 items-start">
-            <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 flex-shrink-0">
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/50 px-6 py-5 dark:border-slate-800 dark:bg-slate-800/30">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-400">
               <Bell size={24} strokeWidth={2} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">{item.title}</h2>
-              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-wider flex items-center gap-1.5">
+              <h2 className="text-lg font-bold leading-snug text-slate-800 dark:text-slate-100">{item.title}</h2>
+              <p className="mt-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 <Calendar size={14} strokeWidth={2.5} />
-                {new Date(item.created_at).toLocaleString('th-TH', {
-                  year: 'numeric', month: 'long', day: 'numeric',
-                  hour: '2-digit', minute: '2-digit',
-                })}
+                {new Date(item.created_at).toLocaleString(locale, { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-          >
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300">
             <X size={20} />
           </button>
         </div>
 
-        {/* Content + Image */}
-        <div className="px-6 py-6 overflow-y-auto flex-1 custom-scrollbar">
+        <div className="custom-scrollbar flex-1 overflow-y-auto px-6 py-6">
           {item.image_url && (
-            <div className="relative w-full h-auto min-h-[200px] bg-slate-100 dark:bg-slate-800 overflow-hidden mb-6 shadow-md border border-slate-100 dark:border-slate-800">
-              {/* Modern blurred background effect for aspect ratio gaps */}
-              <div className="absolute inset-0 opacity-20 blur-3xl scale-125">
-                <img src={item.image_url} alt="" className="w-full h-full object-cover" />
+            <div className="relative mb-6 min-h-[200px] w-full overflow-hidden border border-slate-100 bg-slate-100 shadow-md dark:border-slate-800 dark:bg-slate-800">
+              <div className="absolute inset-0 scale-125 opacity-20 blur-3xl">
+                <img src={item.image_url} alt="" className="h-full w-full object-cover" />
               </div>
-              <img
-                src={item.image_url}
-                alt={item.title}
-                className="relative z-10 w-full h-auto max-h-[800px] object-contain mx-auto shadow-sm"
-              />
+              <img src={item.image_url} alt={item.title} className="relative z-10 mx-auto h-auto max-h-[800px] w-full object-contain shadow-sm" />
             </div>
           )}
-          <div className="text-[15px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-body">
-            {renderWithLinks(item.content)}
-          </div>
+          <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">{renderWithLinks(item.content)}</div>
         </div>
 
-        {/* Link button */}
         {item.link_url && (
-          <div className="px-6 pt-2 pb-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
-            <a
-              href={item.link_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2.5 w-full py-3 rounded-2xl text-[15px] font-bold text-white transition-all hover:opacity-90 shadow-lg hover:shadow-xl active:scale-[0.98]"
-              style={{ backgroundColor: '#1262a0' }}
-              onClick={e => e.stopPropagation()}
-            >
+          <div className="border-t border-slate-100 bg-white px-6 pb-4 pt-2 dark:border-slate-800 dark:bg-slate-900">
+            <a href={item.link_url} target="_blank" rel="noopener noreferrer" className="flex w-full items-center justify-center gap-2.5 rounded-2xl py-3 text-[15px] font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-[0.98]" style={{ backgroundColor: '#1262a0' }} onClick={e => e.stopPropagation()}>
               <ExternalLink size={20} strokeWidth={2} />
-              ดูรายละเอียดเพิ่มเติม
+              {t('common.viewMoreDetails')}
             </a>
           </div>
         )}
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex justify-end">
-          <button
-            onClick={onClose}
-            className="text-sm font-bold px-6 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            ปิดหน้าต่าง
+        <div className="flex justify-end border-t border-slate-100 bg-slate-50/50 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/30">
+          <button onClick={onClose} className="rounded-xl px-6 py-2.5 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700">
+            {t('common.close')}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
+}
 
-  return createPortal(modalContent, document.body)
+function DocumentNotificationModal({ item, loading, locale, t, onClose }) {
+  if (!item) return null
+  const fields = [
+    [t('common.documentType'), item.doc_type],
+    [t('common.owner'), item.owner_name],
+    [t('common.email'), item.owner_email],
+    [t('dashboard.tableExpire'), item.no_expire ? t('common.noExpire') : (item.expire_date ? new Date(item.expire_date).toLocaleDateString(locale) : '-')],
+  ]
+
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onMouseDown={onClose}>
+      <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900" onMouseDown={e => e.stopPropagation()}>
+        <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/50 px-6 py-5 dark:border-slate-800 dark:bg-slate-800/30">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-primary-600 dark:text-primary-400">{t('notifications.documentDetails')}</p>
+            <h2 className="mt-1 truncate text-lg font-bold text-slate-800 dark:text-slate-100">{item.title || item.doc_title || t('common.loading')}</h2>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-all hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300">
+            <X size={20} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="py-16 text-center text-sm font-medium text-slate-400">{t('common.loadingDetails')}</div>
+        ) : (
+          <div className="space-y-4 overflow-y-auto px-6 py-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {fields.map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800/50">
+                  <p className="text-xs font-bold text-slate-400">{label}</p>
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-700 dark:text-slate-200">{value || '-'}</p>
+                </div>
+              ))}
+            </div>
+
+            {(item.description || item.message) && (
+              <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-800/50">
+                <p className="text-xs font-bold text-slate-400">{t('notifications.description')}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700 dark:text-slate-300">{item.description || item.message}</p>
+              </div>
+            )}
+
+            {item.files?.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-bold text-slate-400">{t('common.fileAttachments')}</p>
+                <div className="space-y-2">
+                  {item.files.map(file => (
+                    <div key={file.file_id} className="rounded-2xl border border-slate-100 bg-white px-4 py-2 text-sm font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                      {file.file_name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
 }
 
 export default function NotificationPanel({ onCountChange }) {
-  const navigate = useNavigate()
-  const [open, setOpen]             = useState(false)
-  const [notifs, setNotifs]         = useState([])
+  const { locale, t } = useLanguage()
+  const [open, setOpen] = useState(false)
+  const [notifs, setNotifs] = useState([])
   const [announcements, setAnnouncements] = useState([])
-  const [loading, setLoading]       = useState(false)
+  const [loading, setLoading] = useState(false)
   const [selectedAnn, setSelectedAnn] = useState(null)
+  const [selectedDoc, setSelectedDoc] = useState(null)
+  const [selectedDocLoading, setSelectedDocLoading] = useState(false)
   const [badgeCount, setBadgeCount] = useState(0)
-  const panelRef                    = useRef(null)
+  const panelRef = useRef(null)
 
   const loadBadgeCount = async () => {
     try {
@@ -161,39 +171,33 @@ export default function NotificationPanel({ onCountChange }) {
         announcementService.getAll().catch(() => ({ data: [] })),
       ])
       const docUnread = Array.isArray(nRes.data) ? nRes.data.length : 0
-      const annUnread = (aRes.data || []).filter(a => !a.is_read).length
+      const annUnread = (aRes.data || []).filter(item => !item.is_read).length
       const total = docUnread + annUnread
       setBadgeCount(total)
       onCountChange?.(total)
     } catch {}
   }
 
-  useEffect(() => {
-    loadBadgeCount()
-    const interval = setInterval(loadBadgeCount, 30000) // Poll every 30s
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchAll = async () => {
     setLoading(true)
     try {
-      const [nRes, aRes] = await Promise.all([
-        notificationService.getAll(),
-        announcementService.getAll(),
-      ])
+      const [nRes, aRes] = await Promise.all([notificationService.getAll(), announcementService.getAll()])
       const fetchedNotifs = nRes.data || []
       const fetchedAnn = aRes.data || []
       setNotifs(fetchedNotifs)
       setAnnouncements(fetchedAnn)
-
-      const docUnread = fetchedNotifs.filter(n => !n.in_app_read).length
-      const annUnread = fetchedAnn.filter(a => !a.is_read).length
-      const total = docUnread + annUnread
+      const total = fetchedNotifs.filter(item => !item.in_app_read).length + fetchedAnn.filter(item => !item.is_read).length
       setBadgeCount(total)
       onCountChange?.(total)
     } catch {}
     finally { setLoading(false) }
   }
+
+  useEffect(() => {
+    loadBadgeCount()
+    const interval = setInterval(loadBadgeCount, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     if (open) fetchAll()
@@ -210,31 +214,15 @@ export default function NotificationPanel({ onCountChange }) {
   const handleMarkDocRead = async (id) => {
     try {
       await notificationService.markRead(id)
-      setNotifs(prev => {
-        const next = prev.map(n => n.notif_id === id ? { ...n, in_app_read: true } : n)
-        const docUnread = next.filter(n => !n.in_app_read).length
-        const annUnread = announcements.filter(a => !a.is_read).length
-        const total = docUnread + annUnread
-        setBadgeCount(total)
-        onCountChange?.(total)
-        return next
-      })
-    } catch { toast.error('เกิดข้อผิดพลาด') }
+      setNotifs(prev => prev.map(item => item.notif_id === id ? { ...item, in_app_read: true } : item))
+    } catch { toast.error(t('common.error')) }
   }
 
   const handleMarkAnnRead = async (id) => {
     try {
       await announcementService.markRead(id)
-      setAnnouncements(prev => {
-        const next = prev.map(a => a.announcement_id === id ? { ...a, is_read: true } : a)
-        const docUnread = notifs.filter(n => !n.in_app_read).length
-        const annUnread = next.filter(a => !a.is_read).length
-        const total = docUnread + annUnread
-        setBadgeCount(total)
-        onCountChange?.(total)
-        return next
-      })
-    } catch { toast.error('เกิดข้อผิดพลาด') }
+      setAnnouncements(prev => prev.map(item => item.announcement_id === id ? { ...item, is_read: true } : item))
+    } catch { toast.error(t('common.error')) }
   }
 
   const handleAnnClick = (item) => {
@@ -243,165 +231,111 @@ export default function NotificationPanel({ onCountChange }) {
     if (!item.is_read) handleMarkAnnRead(item.announcement_id)
   }
 
-  const handleDocClick = (item) => {
+  const handleDocClick = async (item) => {
     setOpen(false)
     if (!item.in_app_read) handleMarkDocRead(item.notif_id)
-    navigate('/documents')
+    setSelectedDoc(item)
+    setSelectedDocLoading(true)
+    try {
+      const { data } = await documentService.getById(item.doc_id)
+      setSelectedDoc({ ...item, ...data })
+    } catch {
+      setSelectedDoc(item)
+    } finally {
+      setSelectedDocLoading(false)
+    }
   }
 
   const handleMarkAllRead = async () => {
     try {
-      await Promise.all([
-        notificationService.markAllRead(),
-        announcementService.markAllRead(),
-      ])
-      setNotifs(prev => prev.map(n => ({ ...n, in_app_read: true })))
-      setAnnouncements(prev => prev.map(a => ({ ...a, is_read: true })))
+      await Promise.all([notificationService.markAllRead(), announcementService.markAllRead()])
+      setNotifs(prev => prev.map(item => ({ ...item, in_app_read: true })))
+      setAnnouncements(prev => prev.map(item => ({ ...item, is_read: true })))
       setBadgeCount(0)
       onCountChange?.(0)
-      toast.success('อ่านทั้งหมดแล้ว')
-    } catch { toast.error('เกิดข้อผิดพลาด') }
+      toast.success(t('notifications.markReadSuccess'))
+    } catch { toast.error(t('common.error')) }
   }
 
-  const docUnread = notifs.filter(n => !n.in_app_read).length
-  const annUnread = announcements.filter(a => !a.is_read).length
-  const unreadCount = docUnread + annUnread
-
+  const unreadCount = notifs.filter(item => !item.in_app_read).length + announcements.filter(item => !item.is_read).length
   const merged = [
-    ...notifs.map(n => ({ ...n, _kind: 'doc' })),
-    ...announcements.map(a => ({ ...a, _kind: 'announcement' })),
+    ...notifs.map(item => ({ ...item, _kind: 'doc' })),
+    ...announcements.map(item => ({ ...item, _kind: 'announcement' })),
   ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
   return (
     <>
-      <AnnouncementModal item={selectedAnn} onClose={() => setSelectedAnn(null)} />
+      <AnnouncementModal item={selectedAnn} locale={locale} t={t} onClose={() => setSelectedAnn(null)} />
+      <DocumentNotificationModal item={selectedDoc} loading={selectedDocLoading} locale={locale} t={t} onClose={() => setSelectedDoc(null)} />
 
       <div className="relative" ref={panelRef}>
-        {/* Bell button */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="relative p-2 rounded-xl transition-all hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95"
-        >
-          <Bell 
-            size={20} 
-            className={badgeCount > 0 ? 'text-amber-500 animate-swing' : 'text-slate-500 dark:text-slate-400'} 
-            fill={badgeCount > 0 ? 'currentColor' : 'none'}
-          />
+        <button onClick={() => setOpen(!open)} className="relative rounded-xl p-2 transition-all hover:bg-slate-100 active:scale-95 dark:hover:bg-slate-700" aria-label={t('notifications.title')}>
+          <Bell size={20} className={badgeCount > 0 ? 'animate-swing text-amber-500' : 'text-slate-500 dark:text-slate-400'} fill={badgeCount > 0 ? 'currentColor' : 'none'} />
           {badgeCount > 0 && (
-            <span
-              className="absolute top-1 right-1 w-4 h-4 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 shadow-sm"
-              style={{ backgroundColor: '#f7924a' }}
-            >
+            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white text-[9px] font-black text-white shadow-sm dark:border-slate-800" style={{ backgroundColor: '#f7924a' }}>
               {badgeCount > 9 ? '9' : badgeCount}
             </span>
           )}
         </button>
 
-        {/* Panel */}
         {open && (
-          <div className="absolute right-0 top-12 w-96 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden transition-all duration-300">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+          <div className="absolute right-0 top-12 z-50 w-96 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all duration-300 dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5 py-4 dark:border-slate-800 dark:bg-slate-800/30">
               <div>
-                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">การแจ้งเตือน</h3>
-                {unreadCount > 0 && (
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-1">ยังไม่ได้อ่าน {unreadCount} รายการ</p>
-                )}
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{t('notifications.title')}</h3>
+                {unreadCount > 0 && <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">{t('notifications.unreadCount', { count: unreadCount })}</p>}
               </div>
               {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  className="text-xs font-bold transition-all hover:opacity-80 active:scale-95"
-                  style={{ color: '#42b5e1' }}
-                >
-                  อ่านทั้งหมด
+                <button onClick={handleMarkAllRead} className="inline-flex items-center gap-1.5 rounded-lg bg-primary-50 px-3 py-1.5 text-xs font-bold text-primary-700 transition-all hover:bg-primary-100 active:scale-95 dark:bg-primary-900/30 dark:text-primary-300">
+                  <CheckCheck size={14} />
+                  {t('common.readAll')}
                 </button>
               )}
             </div>
 
-            {/* List */}
-            <div className="max-h-96 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800 custom-scrollbar">
+            <div className="custom-scrollbar max-h-96 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800">
               {loading ? (
-                <div className="flex flex-col gap-4 p-5">
-                  <div className="flex gap-4 animate-pulse">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
-                    <div className="flex-1 space-y-2 py-1">
-                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/2" />
-                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded" />
-                    </div>
-                  </div>
-                  <div className="flex gap-4 animate-pulse opacity-60">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800" />
-                    <div className="flex-1 space-y-2 py-1">
-                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/3" />
-                      <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded" />
-                    </div>
-                  </div>
-                </div>
+                <div className="p-5 text-center text-sm text-slate-400">{t('common.loading')}</div>
               ) : merged.length === 0 ? (
-                <div className="text-center py-12 px-6">
-                  <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <div className="px-6 py-12 text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-800">
                     <Bell size={32} className="text-slate-300 dark:text-slate-600" />
                   </div>
-                  <p className="text-slate-400 dark:text-slate-500 text-sm font-bold">ไม่มีการแจ้งเตือนในขณะนี้</p>
+                  <p className="text-sm font-bold text-slate-400 dark:text-slate-500">{t('notifications.empty')}</p>
                 </div>
               ) : merged.map(item => {
-                if (item._kind === 'announcement') {
-                  const isUnread = !item.is_read
-                  return (
-                    <div
-                      key={`ann-${item.announcement_id}`}
-                      className={`px-5 py-4 transition-all cursor-pointer border-l-4 ${isUnread ? 'bg-primary-50/40 dark:bg-primary-900/10 border-primary-400' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                      onClick={() => handleAnnClick(item)}
-                    >
-                      <div className="flex gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
-                          <Megaphone size={20} strokeWidth={2} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-[13px] font-bold truncate ${isUnread ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                            {item.title}
-                          </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed font-medium">{item.content}</p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${announcementColorClass}`}>
-                              ประกาศ
-                            </span>
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1">
-                              <Clock size={12} strokeWidth={2} />
-                              {new Date(item.created_at).toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }
-
-                // document notification
-                const cClass = docTypeColor[item.type] || docTypeColor.expiry_warning
+                const isAnnouncement = item._kind === 'announcement'
+                const isUnread = isAnnouncement ? !item.is_read : !item.in_app_read
+                const colorClass = isAnnouncement ? announcementColorClass : (docTypeColor[item.type] || docTypeColor.expiry_warning)
                 return (
                   <div
-                    key={`doc-${item.notif_id}`}
-                    className={`px-5 py-4 transition-all cursor-pointer border-l-4 ${!item.in_app_read ? 'bg-primary-50/40 dark:bg-primary-900/10 border-primary-400' : 'bg-white dark:bg-slate-900 border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
-                    onClick={() => handleDocClick(item)}
+                    key={isAnnouncement ? `ann-${item.announcement_id}` : `doc-${item.notif_id}`}
+                    className={`cursor-pointer border-l-4 px-5 py-4 transition-all ${isUnread ? 'border-primary-400 bg-primary-50/40 dark:bg-primary-900/10' : 'border-transparent bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50'}`}
+                    onClick={() => isAnnouncement ? handleAnnClick(item) : handleDocClick(item)}
                   >
                     <div className="flex gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${cClass.split(' ').slice(0, 2).join(' ')}`}>
-                        {docTypeIcon(item.type)}
+                      <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${isAnnouncement ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : colorClass.split(' ').slice(0, 2).join(' ')}`}>
+                        {isAnnouncement ? <Megaphone size={20} strokeWidth={2} /> : docTypeIcon(item.type)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`text-[13px] font-bold truncate ${!item.in_app_read ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
-                          {item.doc_title}
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2 leading-relaxed font-medium">{item.message}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${cClass}`}>
-                            {item.doc_type}
+                        <div className="flex items-start gap-2">
+                          {isUnread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary-500" />}
+                          <p className={`min-w-0 flex-1 truncate text-[13px] font-bold ${isUnread ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                            {isAnnouncement ? item.title : item.doc_title}
+                          </p>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-400">{isAnnouncement ? item.content : item.message}</p>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${colorClass}`}>
+                            {isAnnouncement ? t('notifications.announcement') : item.doc_type}
                           </span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1">
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 dark:text-slate-500">
                             <Clock size={12} strokeWidth={2} />
-                            {new Date(item.created_at).toLocaleString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            {new Date(item.created_at).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <CheckCheck size={12} />
+                            {isUnread ? t('common.read') : t('common.done')}
                           </span>
                         </div>
                       </div>
@@ -411,10 +345,9 @@ export default function NotificationPanel({ onCountChange }) {
               })}
             </div>
 
-            {/* Footer */}
             {merged.length > 0 && (
-              <div className="px-5 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 text-center">
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">แสดง {merged.length} รายการล่าสุด</p>
+              <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-3 text-center dark:border-slate-800 dark:bg-slate-800/30">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">{t('notifications.shownLatest', { count: merged.length })}</p>
               </div>
             )}
           </div>

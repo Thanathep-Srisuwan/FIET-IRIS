@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { userService } from '../../services/api'
 import toast from 'react-hot-toast'
-import ExcelJS from 'exceljs'
-import * as XLSX from 'xlsx'
+import useDebouncedValue from '../../hooks/useDebouncedValue'
 
 const LIMIT = 20
 
@@ -86,14 +85,16 @@ function UserModal({ user, advisors, onClose, onSaved }) {
     e.preventDefault()
     setLoading(true)
     try {
+      let savedUser = null
       if (isEdit) {
-        await userService.update(user.user_id, form)
+        const { data } = await userService.update(user.user_id, form)
+        savedUser = data?.user || { ...user, ...form }
         toast.success('แก้ไขข้อมูลสำเร็จ')
       } else {
         await userService.create(form)
         toast.success('สร้างบัญชีสำเร็จ ส่งอีเมลแล้ว')
       }
-      onSaved()
+      onSaved(savedUser)
       onClose()
     } catch (err) {
       toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
@@ -212,13 +213,15 @@ function ImportModal({ advisors, onClose, onSaved }) {
     const file = e.target.files[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
+      const XLSX = await import('xlsx')
       const data = new Uint8Array(ev.target.result)
       const workbook = XLSX.read(data, { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
       if (allRows.length < 2) { setRows([]); return }
-      const parsed = allRows.slice(1).map(cols => {
+      const firstDataIndex = allRows.findIndex((cols, idx) => idx > 0 && String(cols?.[1] || '').includes('@'))
+      const parsed = allRows.slice(firstDataIndex >= 0 ? firstDataIndex : 1).map(cols => {
         const [name, email, role, student_id, advisor_email, department, degree_level] = cols
         return {
           name:          String(name          || '').trim(),
@@ -258,12 +261,26 @@ function ImportModal({ advisors, onClose, onSaved }) {
   }
 
   const downloadTemplate = async () => {
+    const { default: ExcelJS } = await import('exceljs')
     const workbook  = new ExcelJS.Workbook()
     const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
     worksheet.columns = [
       { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
       { width: 30 }, { width: 30 }, { width: 18 },
     ]
+    worksheet.mergeCells('A1:G1')
+    worksheet.getCell('A1').value = 'FIET-IRIS'
+    worksheet.getCell('A1').font = { name: 'TH Sarabun New', bold: true, size: 14 }
+    worksheet.getCell('A1').alignment = { horizontal: 'right', vertical: 'middle' }
+    worksheet.mergeCells('A2:G2')
+    worksheet.getCell('A2').value = 'แบบฟอร์มนำเข้าผู้ใช้งาน'
+    worksheet.getCell('A2').font = { name: 'TH Sarabun New', bold: true, size: 14 }
+    worksheet.getCell('A2').alignment = { horizontal: 'right', vertical: 'middle' }
+    worksheet.mergeCells('A3:G3')
+    worksheet.getCell('A3').value = `วันที่พิมพ์ : ${new Date().toLocaleDateString('th-TH')}`
+    worksheet.getCell('A3').font = { name: 'TH Sarabun New', bold: true, size: 14 }
+    worksheet.getCell('A3').alignment = { horizontal: 'right', vertical: 'middle' }
+    worksheet.addRow([])
     const headerRow = worksheet.addRow([
       'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
       'อีเมลอาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา',
@@ -424,6 +441,7 @@ export default function AdminUsersPage() {
   const [total, setTotal]               = useState(0)
   const [loading, setLoading]           = useState(true)
   const [search, setSearch]             = useState('')
+  const debouncedSearch = useDebouncedValue(search, 350)
   const [roleFilter, setRoleFilter]     = useState('')
   const [deptFilter, setDeptFilter]     = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
@@ -436,12 +454,13 @@ export default function AdminUsersPage() {
   const [pendingDelete, setPendingDelete] = useState(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [exportLoading, setExportLoading] = useState(false)
+  const [exportScope, setExportScope] = useState('filtered')
 
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
       const { data } = await userService.getAll({
-        search, role: roleFilter, department: deptFilter,
+        search: debouncedSearch, role: roleFilter, department: deptFilter,
         degree_level: degreeFilter,
         sortBy, sortDir, page, limit: LIMIT,
       })
@@ -449,7 +468,7 @@ export default function AdminUsersPage() {
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [search, roleFilter, deptFilter, degreeFilter, sortBy, sortDir, page])
+  }, [debouncedSearch, roleFilter, deptFilter, degreeFilter, sortBy, sortDir, page])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
@@ -487,23 +506,52 @@ export default function AdminUsersPage() {
     } finally { setDeleteLoading(false) }
   }
 
+  const handleUserSaved = (updatedUser) => {
+    if (!updatedUser?.user_id) {
+      fetchUsers()
+      return
+    }
+    setUsers(prev => prev.map(u => u.user_id === updatedUser.user_id ? { ...u, ...updatedUser } : u))
+  }
+
   const exportExcel = async () => {
     setExportLoading(true)
     try {
-      const { data } = await userService.getAll({
-        search, role: roleFilter, department: deptFilter,
-        degree_level: degreeFilter,
-        sortBy, sortDir, limit: 9999, page: 1,
-      })
-      const all = data.users || []
+      let all = []
+      if (exportScope === 'selected') {
+        all = users.filter(u => selectedIds.has(u.user_id))
+      } else {
+        const { data } = await userService.getAll({
+          search: exportScope === 'all' ? '' : debouncedSearch,
+          role: exportScope === 'all' ? '' : roleFilter,
+          department: exportScope === 'all' ? '' : deptFilter,
+          degree_level: exportScope === 'all' ? '' : degreeFilter,
+          sortBy, sortDir, limit: 9999, page: 1,
+        })
+        all = data.users || []
+      }
       if (all.length === 0) { toast('ไม่มีข้อมูลที่จะ Export'); return }
 
+      const { default: ExcelJS } = await import('exceljs')
       const workbook  = new ExcelJS.Workbook()
       const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
       worksheet.columns = [
         { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
         { width: 25 }, { width: 30 }, { width: 18 }, { width: 15 },
       ]
+      worksheet.mergeCells('A1:H1')
+      worksheet.getCell('A1').value = 'FIET-IRIS'
+      worksheet.getCell('A1').font = { name: 'TH Sarabun New', bold: true, size: 14 }
+      worksheet.getCell('A1').alignment = { horizontal: 'right', vertical: 'middle' }
+      worksheet.mergeCells('A2:H2')
+      worksheet.getCell('A2').value = 'รายงานผู้ใช้งานในระบบ'
+      worksheet.getCell('A2').font = { name: 'TH Sarabun New', bold: true, size: 14 }
+      worksheet.getCell('A2').alignment = { horizontal: 'right', vertical: 'middle' }
+      worksheet.mergeCells('A3:H3')
+      worksheet.getCell('A3').value = `วันที่พิมพ์ : ${new Date().toLocaleDateString('th-TH')} | รวมทั้งหมด : ${all.length} รายการ`
+      worksheet.getCell('A3').font = { name: 'TH Sarabun New', bold: true, size: 14 }
+      worksheet.getCell('A3').alignment = { horizontal: 'right', vertical: 'middle' }
+      worksheet.addRow([])
       const headerRow = worksheet.addRow([
         'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
         'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา', 'วันที่สร้าง',
@@ -554,6 +602,8 @@ export default function AdminUsersPage() {
   const allSelected   = users.length > 0 && users.every(u => selectedIds.has(u.user_id))
   const someSelected  = users.some(u => selectedIds.has(u.user_id))
   const selectedUsers = users.filter(u => selectedIds.has(u.user_id))
+  const degreeDisabled = roleFilter && roleFilter !== 'student'
+  const userDeptOptions = !degreeDisabled && degreeFilter ? DEPARTMENTS_BY_DEGREE[degreeFilter] || [] : ALL_DEPARTMENTS
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
@@ -586,6 +636,11 @@ export default function AdminUsersPage() {
           <p className="text-slate-400 text-sm mt-0.5">ทั้งหมด {total} บัญชี</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <select className="input-field w-full sm:w-auto" value={exportScope} onChange={e => setExportScope(e.target.value)}>
+            <option value="filtered">ส่งออกตามตัวกรอง</option>
+            <option value="all">ส่งออกทั้งหมด</option>
+            <option value="selected" disabled={selectedIds.size === 0}>ส่งออกเฉพาะที่เลือก</option>
+          </select>
           <button onClick={exportExcel} disabled={exportLoading}
             className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-60">
             {exportLoading ? 'กำลัง Export...' : '⬇ Export'}
@@ -609,7 +664,13 @@ export default function AdminUsersPage() {
           placeholder="ค้นหาชื่อ อีเมล หรือรหัสนักศึกษา..."
           value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} />
         <select className="input-field w-full sm:w-auto" value={roleFilter}
-          onChange={e => { setRoleFilter(e.target.value); setPage(1) }}>
+          onChange={e => {
+            const nextRole = e.target.value
+            setRoleFilter(nextRole)
+            if (nextRole && nextRole !== 'student') setDegreeFilter('')
+            setDeptFilter('')
+            setPage(1)
+          }}>
           <option value="">ทุก Role</option>
           <option value="student">นักศึกษา</option>
           <option value="advisor">อาจารย์</option>
@@ -617,7 +678,8 @@ export default function AdminUsersPage() {
           <option value="executive">ผู้บริหาร</option>
           <option value="admin">ผู้ดูแลระบบ</option>
         </select>
-        <select className="input-field w-full sm:w-auto" value={degreeFilter}
+        <select className="input-field w-full sm:w-auto disabled:bg-slate-50 disabled:text-slate-400" value={degreeFilter}
+          disabled={degreeDisabled}
           onChange={e => { setDegreeFilter(e.target.value); setDeptFilter(''); setPage(1) }}>
           <option value="">ทุกระดับ</option>
           <option value="bachelor">ป.ตรี</option>
@@ -627,7 +689,7 @@ export default function AdminUsersPage() {
         <select className="input-field w-full sm:w-auto" value={deptFilter}
           onChange={e => { setDeptFilter(e.target.value); setPage(1) }}>
           <option value="">ทุกสาขาวิชา</option>
-          {(degreeFilter ? DEPARTMENTS_BY_DEGREE[degreeFilter] || [] : ALL_DEPARTMENTS).map(d => (
+          {userDeptOptions.map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
@@ -761,7 +823,7 @@ export default function AdminUsersPage() {
           user={modal === 'edit' ? selected : null}
           advisors={advisors}
           onClose={() => setModal(null)}
-          onSaved={fetchUsers}
+          onSaved={handleUserSaved}
         />
       )}
       {modal === 'import' && (

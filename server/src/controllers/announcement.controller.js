@@ -95,17 +95,31 @@ const create = async (req, res) => {
       : null
     const pool = await getPool()
     await ensureTable(pool)
-    await pool.request()
+    const result = await pool.request()
       .input('title',      sql.NVarChar(255),    title.trim())
       .input('content',    sql.NVarChar(sql.MAX), content.trim())
       .input('link_url',   sql.NVarChar(500),    link_url?.trim() || null)
       .input('image_url',  sql.NVarChar(500),    image_url)
       .input('created_by', sql.Int,               user_id)
       .query(`
+        DECLARE @inserted TABLE (announcement_id INT);
+
         INSERT INTO dbo.ANNOUNCEMENTS (title, content, link_url, image_url, created_by)
+        OUTPUT INSERTED.announcement_id INTO @inserted
         VALUES (@title, @content, @link_url, @image_url, @created_by)
+
+        SELECT
+          a.announcement_id, a.title, a.content, a.link_url, a.image_url, a.created_at,
+          u.name AS created_by_name,
+          CAST(0 AS BIT) AS is_read
+        FROM dbo.ANNOUNCEMENTS a
+        JOIN dbo.USERS u ON a.created_by = u.user_id
+        WHERE a.announcement_id = (SELECT TOP 1 announcement_id FROM @inserted)
       `)
-    res.status(201).json({ message: 'สร้างประกาศสำเร็จ' })
+    res.status(201).json({
+      message: 'สร้างประกาศสำเร็จ',
+      announcement: result.recordset[0],
+    })
   } catch (err) {
     logger.error(`createAnnouncement: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })

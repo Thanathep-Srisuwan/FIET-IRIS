@@ -44,6 +44,7 @@ api.interceptors.response.use(
 // Auth
 export const authService = {
   login:          (data) => api.post('/auth/login', data),
+  forgotPassword: (data) => api.post('/auth/forgot-password', data),
   logout:         ()     => api.post('/auth/logout'),
   changePassword: (data) => api.put('/auth/change-password', data),
   refresh:        (data) => api.post('/auth/refresh', data),
@@ -58,6 +59,8 @@ export const documentService = {
   delete:      (id)     => api.delete(`/documents/${id}`),
   download:    (id, fileId) => api.get(`/documents/${id}/files/${fileId}/download`, { responseType: 'blob' }),
   preview:     (id, fileId) => api.get(`/documents/${id}/files/${fileId}/preview`, { responseType: 'blob' }),
+  uploadVersion: (id, data) => api.post(`/documents/${id}/files/version`, data),
+  getTimeline: (id) => api.get(`/documents/${id}/timeline`),
 }
 
 // Trash (admin only)
@@ -81,7 +84,7 @@ export const notificationService = {
 export const userService = {
   getAll:        (params)         => api.get('/users', { params }),
   search:        (q)              => api.get('/users/search', { params: { q } }),
-  getAdvisors:   ()               => api.get('/users/advisors'),
+  getAdvisors:   (params)         => api.get('/users/advisors', { params }),
   create:        (data)           => api.post('/users', data),
   update:        (id, data)       => api.put(`/users/${id}`, data),
   toggle:        (id)             => api.patch(`/users/${id}/toggle`),

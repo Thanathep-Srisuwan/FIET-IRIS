@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt')
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
-const { sendMail } = require('../utils/mailer')
+const { sendMail, temporaryPasswordTemplate } = require('../utils/mailer')
 
 // เพิ่ม columns ถ้ายังไม่มี (idempotent)
 const ensureColumns = async (pool) => {
@@ -59,7 +59,7 @@ const getUsers = async (req, res) => {
 
     const result = await req2.query(`
       SELECT
-        u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level,
+        u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
         u.department, u.is_active, u.must_change_pw, u.last_login, u.created_at,
         a.name AS advisor_name,
         (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
@@ -155,19 +155,7 @@ const createUser = async (req, res) => {
 
     await sendMail({
       to: email,
-      subject: '[FIET-IRIS] บัญชีผู้ใช้งานของคุณถูกสร้างแล้ว',
-      html: `
-        <div style="font-family:sans-serif;max-width:520px;margin:auto">
-          <h2 style="color:#0d2d3e">ยินดีต้อนรับสู่ FIET-IRIS</h2>
-          <p>เรียน คุณ${name}</p>
-          <p>บัญชีของคุณถูกสร้างแล้ว กรุณาเข้าสู่ระบบด้วยข้อมูลต่อไปนี้</p>
-          <table style="background:#f8fafc;padding:16px;border-radius:8px;width:100%">
-            <tr><td style="color:#64748b">อีเมล</td><td><strong>${email}</strong></td></tr>
-            <tr><td style="color:#64748b">รหัสผ่านชั่วคราว</td><td><strong>${tempPassword}</strong></td></tr>
-          </table>
-          <p style="color:#f7924a;font-size:13px">⚠️ กรุณาเปลี่ยนรหัสผ่านหลังจากเข้าสู่ระบบครั้งแรก</p>
-        </div>
-      `,
+      ...temporaryPasswordTemplate({ name, email, tempPassword, reason: 'new_account' }),
     })
 
     logger.info(`User created: ${email} (${role}) by admin ${req.user.user_id}`)
@@ -202,7 +190,20 @@ const updateUser = async (req, res) => {
         WHERE user_id=@user_id
       `)
 
-    res.json({ message: 'แก้ไขข้อมูลสำเร็จ' })
+    const updated = await pool.request()
+      .input('user_id', sql.Int, id)
+      .query(`
+        SELECT
+          u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
+          u.department, u.is_active, u.must_change_pw, u.last_login, u.created_at,
+          a.name AS advisor_name,
+          (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
+        FROM dbo.USERS u
+        LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
+        WHERE u.user_id = @user_id
+      `)
+
+    res.json({ message: 'แก้ไขข้อมูลสำเร็จ', user: updated.recordset[0] })
   } catch (err) {
     logger.error(`updateUser error: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
@@ -262,17 +263,7 @@ const resetPassword = async (req, res) => {
 
     await sendMail({
       to: email,
-      subject: '[FIET-IRIS] รหัสผ่านของคุณถูกรีเซ็ตแล้ว',
-      html: `
-        <div style="font-family:sans-serif;max-width:520px;margin:auto">
-          <h2 style="color:#0d2d3e">รีเซ็ตรหัสผ่าน</h2>
-          <p>เรียน คุณ${name} รหัสผ่านของคุณถูกรีเซ็ตโดยผู้ดูแลระบบ</p>
-          <table style="background:#f8fafc;padding:16px;border-radius:8px;width:100%">
-            <tr><td style="color:#64748b">รหัสผ่านชั่วคราว</td><td><strong>${tempPassword}</strong></td></tr>
-          </table>
-          <p style="color:#f7924a;font-size:13px">⚠️ กรุณาเปลี่ยนรหัสผ่านหลังเข้าสู่ระบบ</p>
-        </div>
-      `,
+      ...temporaryPasswordTemplate({ name, email, tempPassword, reason: 'reset' }),
     })
 
     logger.info(`Password reset: user ${id} by admin ${req.user.user_id}`)
@@ -338,8 +329,7 @@ const importUsers = async (req, res) => {
 
         await sendMail({
           to: u.email,
-          subject: '[FIET-IRIS] บัญชีผู้ใช้งานของคุณถูกสร้างแล้ว',
-          html: `<p>รหัสผ่านชั่วคราว: <strong>${tempPassword}</strong></p>`,
+          ...temporaryPasswordTemplate({ name: u.name, email: u.email, tempPassword, reason: 'new_account' }),
         })
 
         results.success++
@@ -363,7 +353,33 @@ const getAdvisors = async (req, res) => {
     const pool = await getPool()
     const result = await pool.request()
       .query("SELECT user_id, name, email FROM dbo.USERS WHERE role = 'advisor' AND is_active = 1 ORDER BY name")
-    res.json({ advisors: result.recordset })
+    if (req.query.include_relations !== '1') {
+      return res.json({ advisors: result.recordset })
+    }
+
+    const relationsResult = await pool.request().query(`
+      SELECT advisor_id, degree_level, department
+      FROM dbo.USERS
+      WHERE role = 'student'
+        AND is_active = 1
+        AND advisor_id IS NOT NULL
+    `)
+    const relations = {}
+    relationsResult.recordset.forEach(row => {
+      if (!relations[row.advisor_id]) relations[row.advisor_id] = { degrees: new Set(), branches: new Set() }
+      if (row.degree_level) relations[row.advisor_id].degrees.add(row.degree_level)
+      if (row.department) relations[row.advisor_id].branches.add(row.department)
+    })
+
+    res.json({
+      advisors: result.recordset,
+      relations: Object.fromEntries(
+        Object.entries(relations).map(([id, value]) => [id, {
+          degrees: [...value.degrees],
+          branches: [...value.branches],
+        }])
+      ),
+    })
   } catch (err) {
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
   }

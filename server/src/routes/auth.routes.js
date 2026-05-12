@@ -1,9 +1,10 @@
 const express = require('express')
 const router = express.Router()
-const { login, refresh, logout, changePassword } = require('../controllers/auth.controller')
+const { login, refresh, logout, changePassword, forgotPassword } = require('../controllers/auth.controller')
 const { authenticate } = require('../middlewares/auth')
 
 router.post('/login',           login)
+router.post('/forgot-password', forgotPassword)
 router.post('/refresh',         refresh)
 router.post('/logout',          authenticate, logout)
 router.put('/change-password',  authenticate, changePassword)

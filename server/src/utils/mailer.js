@@ -105,4 +105,50 @@ const loadSettings = async (pool, sql) => {
   return defaults
 }
 
-module.exports = { sendMail, renderTemplate, loadTemplate, loadSettings, FALLBACK_TEMPLATES }
+const temporaryPasswordTemplate = ({ name, email, tempPassword, reason = 'reset' }) => {
+  const isNewAccount = reason === 'new_account'
+  const title = isNewAccount ? 'แจ้งข้อมูลบัญชีผู้ใช้งาน FIET-IRIS' : 'แจ้งการรีเซ็ตรหัสผ่าน FIET-IRIS'
+  const intro = isNewAccount
+    ? 'บัญชีผู้ใช้งานระบบ FIET-IRIS ของท่านได้ถูกสร้างเรียบร้อยแล้ว'
+    : 'ระบบได้ดำเนินการรีเซ็ตรหัสผ่านสำหรับบัญชีผู้ใช้งานของท่านเรียบร้อยแล้ว'
+
+  return {
+    subject: `[FIET-IRIS] ${title}`,
+    html: `
+      <div style="font-family:Arial,'Noto Sans Thai',sans-serif;max-width:640px;margin:auto;color:#1e293b;line-height:1.7">
+        <div style="border:1px solid #e2e8f0;border-radius:14px;overflow:hidden">
+          <div style="background:#0d4f8c;padding:22px 28px;color:#ffffff">
+            <h2 style="margin:0;font-size:20px">${title}</h2>
+            <p style="margin:6px 0 0;color:#dbeafe;font-size:13px">Integrity Research Information System</p>
+          </div>
+          <div style="padding:26px 28px;background:#ffffff">
+            <p style="margin-top:0">เรียน คุณ${name}</p>
+            <p>${intro} กรุณาใช้ข้อมูลด้านล่างสำหรับเข้าสู่ระบบ</p>
+            <table style="border-collapse:collapse;width:100%;margin:18px 0;background:#f8fafc;border-radius:10px;overflow:hidden">
+              <tr>
+                <td style="padding:12px 14px;color:#64748b;width:150px;border-bottom:1px solid #e2e8f0">อีเมลผู้ใช้งาน</td>
+                <td style="padding:12px 14px;border-bottom:1px solid #e2e8f0"><strong>${email}</strong></td>
+              </tr>
+              <tr>
+                <td style="padding:12px 14px;color:#64748b">รหัสผ่านชั่วคราว</td>
+                <td style="padding:12px 14px"><strong style="font-size:16px;color:#0f172a">${tempPassword}</strong></td>
+              </tr>
+            </table>
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin:18px 0;color:#9a3412;font-size:13px">
+              เพื่อความปลอดภัย กรุณาเข้าสู่ระบบและเปลี่ยนรหัสผ่านใหม่ทันทีหลังจากเข้าสู่ระบบครั้งแรก
+              และไม่ควรเปิดเผยรหัสผ่านชั่วคราวนี้แก่ผู้อื่น
+            </div>
+            <p style="font-size:13px;color:#64748b">
+              หากท่านไม่ได้ร้องขอการดำเนินการนี้ หรือพบความผิดปกติ กรุณาติดต่อผู้ดูแลระบบ FIET-IRIS โดยเร็วที่สุด
+            </p>
+            <p style="font-size:12px;color:#94a3b8;margin-top:26px">
+              อีเมลฉบับนี้เป็นข้อความอัตโนมัติจากระบบ FIET-IRIS กรุณาอย่าตอบกลับอีเมลฉบับนี้
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
+  }
+}
+
+module.exports = { sendMail, renderTemplate, loadTemplate, loadSettings, temporaryPasswordTemplate, FALLBACK_TEMPLATES }

@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
+const { sendMail, temporaryPasswordTemplate } = require('../utils/mailer')
 
 // สร้าง tokens
 const generateTokens = (user) => {
@@ -157,4 +158,51 @@ const changePassword = async (req, res) => {
   }
 }
 
-module.exports = { login, refresh, logout, changePassword }
+// POST /api/auth/forgot-password
+const forgotPassword = async (req, res) => {
+  const genericMessage = 'หากอีเมลนี้มีบัญชีในระบบ ระบบจะส่งวิธีรีเซ็ตรหัสผ่านไปให้'
+
+  try {
+    const email = String(req.body.email || '').trim().toLowerCase()
+
+    if (!email || !email.endsWith('@kmutt.ac.th')) {
+      return res.json({ message: genericMessage })
+    }
+
+    const pool = await getPool()
+    const result = await pool.request()
+      .input('email', sql.NVarChar, email)
+      .query('SELECT user_id, name, email FROM dbo.USERS WHERE email = @email AND is_active = 1')
+
+    if (result.recordset.length === 0) {
+      logger.info(`Forgot password requested for unknown/inactive email: ${email}`)
+      return res.json({ message: genericMessage })
+    }
+
+    const user = result.recordset[0]
+    const tempPassword = `Iris@${Math.random().toString(36).slice(-6).toUpperCase()}`
+    const hash = await bcrypt.hash(tempPassword, 12)
+
+    await pool.request()
+      .input('user_id', sql.Int, user.user_id)
+      .input('hash', sql.NVarChar, hash)
+      .query(`
+        UPDATE dbo.USERS
+        SET password_hash = @hash, must_change_pw = 1, updated_at = GETDATE()
+        WHERE user_id = @user_id
+      `)
+
+    await sendMail({
+      to: user.email,
+      ...temporaryPasswordTemplate({ name: user.name, email: user.email, tempPassword, reason: 'reset' }),
+    })
+
+    logger.info(`Forgot password reset issued: user_id ${user.user_id}`)
+    res.json({ message: genericMessage })
+  } catch (err) {
+    logger.error(`Forgot password error: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+module.exports = { login, refresh, logout, changePassword, forgotPassword }

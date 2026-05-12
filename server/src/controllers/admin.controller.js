@@ -1,6 +1,9 @@
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 
+const STATS_CACHE_TTL_MS = 30 * 1000
+let statsCache = { expiresAt: 0, payload: null }
+
 const ensureColumns = async (pool) => {
   await pool.request().query(`
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='student_id')
@@ -37,6 +40,10 @@ const ensureColumns = async (pool) => {
 // GET /api/admin/stats
 const getAdminStats = async (req, res) => {
   try {
+    if (statsCache.payload && statsCache.expiresAt > Date.now()) {
+      return res.json(statsCache.payload)
+    }
+
     const pool = await getPool()
     await ensureColumns(pool)
 
@@ -137,6 +144,92 @@ const getAdminStats = async (req, res) => {
     `)
 
     // เอกสารที่หมดอายุแล้ว / ใกล้หมดอายุ (สำหรับ notification panel)
+    const docStatusDetails = await pool.request()
+      .input('expiry_days3', sql.Int, expiryDays)
+      .query(`
+      SELECT TOP 300
+        d.doc_id,
+        d.title AS doc_title,
+        d.doc_type,
+        d.expire_date,
+        DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) AS days_remaining,
+        u.name AS owner_name,
+        u.email AS owner_email,
+        u.student_id AS owner_student_id,
+        CASE
+          WHEN (d.no_expire IS NULL OR d.no_expire = 0)
+            AND d.expire_date IS NOT NULL
+            AND d.expire_date < CAST(GETDATE() AS DATE)
+          THEN 'expired'
+          WHEN (d.no_expire IS NULL OR d.no_expire = 0)
+            AND d.expire_date IS NOT NULL
+            AND d.expire_date >= CAST(GETDATE() AS DATE)
+            AND d.expire_date <= DATEADD(DAY, @expiry_days3, CAST(GETDATE() AS DATE))
+          THEN 'expiring_soon'
+          ELSE 'active'
+        END AS status_group
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      WHERE d.status NOT IN ('deleted', 'trashed')
+      ORDER BY
+        CASE WHEN d.expire_date IS NULL THEN 1 ELSE 0 END,
+        d.expire_date ASC,
+        d.created_at DESC
+    `)
+
+    const expiryDetails = await pool.request()
+      .input('expiry_days4', sql.Int, expiryDays)
+      .query(`
+      SELECT TOP 300
+        d.doc_id,
+        d.title AS doc_title,
+        d.doc_type,
+        d.expire_date,
+        DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) AS days_remaining,
+        u.name AS owner_name,
+        u.email AS owner_email,
+        u.student_id AS owner_student_id,
+        CASE
+          WHEN d.expire_date < CAST(GETDATE() AS DATE) THEN 'already_expired'
+          WHEN d.expire_date <= DATEADD(DAY, 30, CAST(GETDATE() AS DATE)) THEN 'within_30'
+          WHEN d.expire_date <= DATEADD(DAY, 60, CAST(GETDATE() AS DATE)) THEN 'within_60'
+          ELSE 'within_warning'
+        END AS timeline_group
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.USERS u ON d.user_id = u.user_id
+      WHERE d.status NOT IN ('deleted', 'trashed')
+        AND (d.no_expire IS NULL OR d.no_expire = 0)
+        AND d.expire_date IS NOT NULL
+        AND d.expire_date <= DATEADD(DAY, @expiry_days4, CAST(GETDATE() AS DATE))
+      ORDER BY d.expire_date ASC
+    `)
+
+    const userDetails = await pool.request().query(`
+      SELECT TOP 500
+        u.user_id,
+        u.name,
+        u.email,
+        u.student_id,
+        u.department,
+        u.role,
+        u.degree_level,
+        a.name AS advisor_name,
+        CASE
+          WHEN u.role = 'student' AND u.degree_level = 'master' THEN 'master'
+          WHEN u.role = 'student' AND u.degree_level = 'doctoral' THEN 'doctoral'
+          WHEN u.role = 'student' THEN 'bachelor'
+          WHEN u.role = 'advisor' THEN 'advisor'
+          WHEN u.role = 'staff' THEN 'staff'
+          ELSE NULL
+        END AS grp,
+        (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
+      FROM dbo.USERS u
+      LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
+      WHERE u.is_active = 1
+        AND u.role NOT IN ('admin', 'executive')
+      ORDER BY u.role, u.degree_level, u.name
+    `)
+
     const alertDocs = await pool.request().query(`
       SELECT TOP 10
         d.doc_id,
@@ -169,14 +262,20 @@ const getAdminStats = async (req, res) => {
       ORDER BY d.created_at DESC
     `)
 
-    res.json({
+    const payload = {
       docStats:        docStats.recordset[0],
       userBreakdown:   userBreakdown.recordset,
       expiryTimeline:  expiryTimeline.recordset[0],
       recentActivity:  recentActivity.recordset,
       alertDocs:       alertDocs.recordset,
+      docStatusDetails: docStatusDetails.recordset,
+      expiryDetails:    expiryDetails.recordset,
+      userDetails:      userDetails.recordset.filter(u => u.grp),
       expiryDays,
-    })
+    }
+
+    statsCache = { expiresAt: Date.now() + STATS_CACHE_TTL_MS, payload }
+    res.json(payload)
   } catch (err) {
     logger.error(`getAdminStats: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })

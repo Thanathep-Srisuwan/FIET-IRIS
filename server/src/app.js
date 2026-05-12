@@ -20,10 +20,13 @@ app.use(cors({
   credentials: true,
 }))
 
+const authRateLimitMax = parseInt(process.env.AUTH_RATE_LIMIT_MAX, 10)
+  || (process.env.NODE_ENV === 'production' ? 20 : 1000)
+
 // Rate Limiting
 app.use('/api/auth', rateLimit({
   windowMs: 15 * 60 * 1000, // 15 นาที
-  max: 20,
+  max: authRateLimitMax,
   message: { message: 'พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอ 15 นาที' },
 }))
 

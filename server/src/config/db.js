@@ -11,15 +11,25 @@ const config = {
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  authentication: {
+    type: 'default',
+    options: {
+      userName: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+    },
+  },
   options: {
-    encrypt: toBool(process.env.DB_ENCRYPT, false),
-    trustServerCertificate: toBool(process.env.DB_TRUST_SERVER_CERTIFICATE, true),
+    encrypt: toBool(process.env.DB_ENCRYPT, true),
+    trustServerCertificate: toBool(process.env.DB_TRUST_SERVER_CERTIFICATE, false),
     useUTC: false,
+    connectTimeout: 30000,
+    requestTimeout: 30000,
   },
   pool: {
     max: 10,
-    min: 0,
+    min: 2,
     idleTimeoutMillis: 30000,
+    acquireTimeoutMillis: 30000,
   },
 }
 

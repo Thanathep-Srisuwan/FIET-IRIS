@@ -2,5 +2,7 @@
     "appService.zipIgnorePattern": [
         "node_modules{,/**}",
         ".vscode{,/**}"
-    ]
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/534a5ad5-3db7-4a3f-8020-fe869738f4c4/resourceGroups/rg-fiet-iris-test/providers/Microsoft.Web/sites/fiet-iris-api-thanathep",
+    "appService.deploySubpath": "server"
 }

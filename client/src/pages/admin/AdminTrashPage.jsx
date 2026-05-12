@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { trashService, docTypeService } from '../../services/api'
 import toast from 'react-hot-toast'
 import { Calendar, Trash2 } from 'lucide-react'
+import useDebouncedValue from '../../hooks/useDebouncedValue'
 
 function DateInput({ value, onChange, min, max }) {
   const pickerRef = useRef(null)
@@ -96,6 +97,7 @@ export default function AdminTrashPage() {
   const [docTypes, setDocTypes]       = useState([])
   const [loading, setLoading]         = useState(true)
   const [search, setSearch]           = useState('')
+  const debouncedSearch = useDebouncedValue(search, 350)
   const [docType, setDocType]         = useState('')
   const [degreeLevel, setDegreeLevel] = useState('')
   const [dateFrom, setDateFrom]       = useState('')
@@ -113,7 +115,7 @@ export default function AdminTrashPage() {
     setSelected(new Set())
     try {
       const { data } = await trashService.getAll({
-        search,
+        search: debouncedSearch,
         doc_type: docType,
         degree_level: degreeLevel,
         date_from: dateFrom,
@@ -123,7 +125,7 @@ export default function AdminTrashPage() {
       setTotal(data.total ?? data.documents?.length ?? 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [search, docType, degreeLevel, dateFrom, dateTo])
+  }, [debouncedSearch, docType, degreeLevel, dateFrom, dateTo])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 

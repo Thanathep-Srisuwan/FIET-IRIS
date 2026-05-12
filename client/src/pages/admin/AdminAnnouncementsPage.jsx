@@ -4,12 +4,41 @@ import {
   Image as ImageIcon, 
   Link as LinkIcon, 
   X, 
-  Search 
+  Search,
+  UploadCloud,
+  FileImage,
+  CheckCircle2,
+  RefreshCw,
+  Info
 } from 'lucide-react'
 import { announcementService } from '../../services/api'
 import toast from 'react-hot-toast'
 
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+function formatFileSize(bytes = 0) {
+  if (!bytes) return '-'
+  const mb = bytes / (1024 * 1024)
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+function getImageRatio(width, height) {
+  if (!width || !height) return null
+  const value = width / height
+  if (Math.abs(value - 16 / 9) < 0.08) return '16:9'
+  if (Math.abs(value - 4 / 3) < 0.08) return '4:3'
+  if (Math.abs(value - 1) < 0.08) return '1:1'
+  if (Math.abs(value - 9 / 16) < 0.08) return '9:16'
+  return value > 1 ? `${value.toFixed(2)}:1` : `1:${(1 / value).toFixed(2)}`
+}
+
+function getImageFitMessage(dimensions) {
+  if (!dimensions) return 'ระบบจะแสดงรูปแบบเต็มภาพโดยไม่ตัดส่วนสำคัญ'
+  const ratio = dimensions.width / dimensions.height
+  if (Math.abs(ratio - 16 / 9) < 0.08) return 'อัตราส่วนนี้เหมาะกับพื้นที่แนะนำ'
+  return 'รองรับอัตราส่วนนี้ และจะแสดงแบบเต็มภาพโดยไม่ครอป'
+}
 
 function formatDate(value) {
   if (!value) return '-'
@@ -29,7 +58,6 @@ function AnnouncementPreview({ form, preview }) {
     <aside className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
       <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30">
         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">ตัวอย่างประกาศ</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">แสดงรูปแบบใกล้เคียงกับหน้า Homepage</p>
       </div>
 
       {!hasContent ? (
@@ -73,7 +101,9 @@ function AnnouncementForm({ onSaved }) {
   const [form, setForm] = useState({ title: '', content: '', link_url: '' })
   const [image, setImage] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [imageDimensions, setImageDimensions] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
@@ -84,25 +114,43 @@ function AnnouncementForm({ onSaved }) {
 
   const updateField = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0]
+  const setSelectedImage = (file) => {
     if (!file) return
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       toast.error('รองรับเฉพาะไฟล์ JPG, PNG หรือ WebP')
       return
     }
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error('รูปภาพต้องมีขนาดไม่เกิน 5 MB')
+      toast.error('รูปภาพต้องมีขนาดไม่เกิน 20 MB')
       return
     }
     if (preview) URL.revokeObjectURL(preview)
+    const nextPreview = URL.createObjectURL(file)
     setImage(file)
-    setPreview(URL.createObjectURL(file))
+    setImageDimensions(null)
+    setPreview(nextPreview)
+
+    const probe = new Image()
+    probe.onload = () => setImageDimensions({ width: probe.naturalWidth, height: probe.naturalHeight })
+    probe.src = nextPreview
   }
+
+  const handleImageChange = (e) => {
+    setSelectedImage(e.target.files[0])
+  }
+
+  const handleImageDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    setSelectedImage(e.dataTransfer.files[0])
+  }
+
+  const openImagePicker = () => fileInputRef.current?.click()
 
   const clearImage = () => {
     if (preview) URL.revokeObjectURL(preview)
     setImage(null)
+    setImageDimensions(null)
     setPreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -120,11 +168,11 @@ function AnnouncementForm({ onSaved }) {
       fd.append('content', form.content.trim())
       fd.append('link_url', form.link_url.trim())
       if (image) fd.append('image', image)
-      await announcementService.create(fd)
+      const { data } = await announcementService.create(fd)
       toast.success('เผยแพร่ประกาศสำเร็จ')
       setForm({ title: '', content: '', link_url: '' })
       clearImage()
-      onSaved()
+      onSaved(data?.announcement)
     } catch (err) {
       toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
     } finally {
@@ -138,11 +186,8 @@ function AnnouncementForm({ onSaved }) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">สร้างประกาศใหม่</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">ประกาศจะแสดงบนหน้า Homepage และแผงแจ้งเตือนของผู้ใช้</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">ประกาศจะแสดงบนหน้า Homepage และช่องการแจ้งเตือนของผู้ใช้</p>
           </div>
-          <span className="hidden sm:inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
-            Published
-          </span>
         </div>
 
         <div>
@@ -182,24 +227,76 @@ function AnnouncementForm({ onSaved }) {
             </p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500">รองรับไฟล์ JPG/PNG/WebP, ขนาดไม่เกิน 20 MB</p>
           </div>
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageChange} />
           {preview ? (
-            <div className="relative overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/50 shadow-inner group/img">
-              <img src={preview} alt="preview" className="w-full h-auto max-h-80 object-contain mx-auto" />
-              <button
-                type="button"
-                onClick={clearImage}
-                className="absolute right-3 top-3 w-9 h-9 rounded-full bg-white/90 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-red-600 transition-all flex items-center justify-center shadow-lg active:scale-90"
-                aria-label="ลบรูปภาพ"
-              >
-                <X size={20} />
-              </button>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="relative flex min-h-56 max-h-[520px] items-center justify-center bg-slate-100 dark:bg-slate-800">
+                <div className="absolute inset-0 opacity-20 blur-2xl scale-110">
+                  <img src={preview} alt="" className="h-full w-full object-cover" />
+                </div>
+                <img src={preview} alt="preview" className="relative z-10 max-h-[520px] w-full object-contain" />
+                <div className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                  <CheckCircle2 size={14} />
+                  {getImageRatio(imageDimensions?.width, imageDimensions?.height) || 'Ready'}
+                </div>
+              </div>
+              <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                    <FileImage size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{image?.name}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {formatFileSize(image?.size)} • {image?.type?.replace('image/', '').toUpperCase()}
+                      {imageDimensions && ` • ${imageDimensions.width} x ${imageDimensions.height}px`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400 lg:col-span-2">
+                  <Info size={15} className="mt-0.5 shrink-0 text-primary-500" />
+                  <span>{getImageFitMessage(imageDimensions)}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={openImagePicker}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                  >
+                    <RefreshCw size={14} />
+                    เปลี่ยนรูป
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                    aria-label="ลบรูปภาพ"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
-            <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-primary-400 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-colors">
-              <ImageIcon size={32} strokeWidth={1.7} className="text-slate-300 dark:text-slate-600 mb-2" />
-              <span className="text-sm font-medium text-slate-500 dark:text-slate-400">คลิกเพื่อเลือกรูปภาพ</span>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageChange} />
-            </label>
+            <button
+              type="button"
+              onClick={openImagePicker}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setIsDragging(true)
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleImageDrop}
+              className={`group flex min-h-48 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition-all ${
+                isDragging
+                  ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-900/20 dark:text-primary-300'
+                  : 'border-slate-200 bg-slate-50/70 text-slate-500 hover:border-primary-400 hover:bg-primary-50/60 dark:border-slate-700 dark:bg-slate-800/30 dark:text-slate-400 dark:hover:bg-primary-900/20'
+              }`}
+            >
+              <UploadCloud size={32} strokeWidth={1.7} className="text-primary-500 dark:text-primary-300 mb-2" />
+              <span className="text-sm font-bold text-slate-700 dark:text-slate-100">ลากรูปมาวาง หรือคลิกเพื่อเลือกไฟล์</span>
+              <span className="mt-1 text-xs text-slate-400">อัตราส่วนที่แนะนำ 16:9 • ไม่เกิน 20 MB</span>
+            </button>
           )}
         </div>
 
@@ -302,9 +399,7 @@ function AnnouncementCard({ item, onDelete }) {
 
           {item.link_url && (
             <a href={item.link_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 mt-4 text-xs font-semibold text-primary-700 dark:text-primary-300 hover:underline break-all">
-              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 015.657 5.657l-1.414 1.414a4 4 0 01-5.657-5.657M10.172 13.828a4 4 0 01-5.657-5.657l1.414-1.414a4 4 0 015.657 5.657" />
-              </svg>
+              <LinkIcon size={14} className="flex-shrink-0" />
               {item.link_url}
             </a>
           )}
@@ -332,6 +427,14 @@ export default function AdminAnnouncementsPage() {
   }
 
   useEffect(() => { fetchAll() }, [])
+
+  const handleSaved = (announcement) => {
+    if (!announcement?.announcement_id) {
+      fetchAll()
+      return
+    }
+    setItems(prev => [announcement, ...prev])
+  }
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -363,7 +466,7 @@ export default function AdminAnnouncementsPage() {
         </div>
       </header>
 
-      <AnnouncementForm onSaved={fetchAll} />
+      <AnnouncementForm onSaved={handleSaved} />
 
       <section className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -372,9 +475,7 @@ export default function AdminAnnouncementsPage() {
             <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">แสดง {filteredItems.length} จาก {items.length} รายการ</p>
           </div>
           <div className="relative w-full md:w-80">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
@@ -389,9 +490,7 @@ export default function AdminAnnouncementsPage() {
         ) : filteredItems.length === 0 ? (
           <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-              </svg>
+              <Megaphone size={32} strokeWidth={1.8} />
             </div>
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{query ? 'ไม่พบประกาศที่ค้นหา' : 'ยังไม่มีประกาศ'}</p>
           </div>

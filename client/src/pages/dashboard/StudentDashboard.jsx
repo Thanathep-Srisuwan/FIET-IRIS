@@ -1,39 +1,104 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AlertTriangle, ArrowRight, Bell, CheckCircle2, FileText, FolderOpen, History } from 'lucide-react'
 import { documentService, notificationService } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+import { useLanguage } from '../../contexts/LanguageContext'
 
-const statusColor = {
-  active:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  expiring_soon: 'bg-amber-50 text-amber-700 border border-amber-200',
-  expired:       'bg-red-50 text-red-600 border border-red-200',
+const statusBadge = {
+  active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  expiring_soon: 'bg-amber-50 text-amber-700 border-amber-200',
+  expired: 'bg-red-50 text-red-700 border-red-200',
 }
-const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
 
-function StatCard({ label, value, color }) {
-  const palette = {
-    blue:   { bg: '#f0f9ff', border: '#bae6fd', text: '#0369a1', val: '#0c4a6e' },
-    orange: { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', val: '#7c2d12' },
-    red:    { bg: '#fff1f2', border: '#fecdd3', text: '#be123c', val: '#881337' },
+const getStatus = (doc) => {
+  if (doc.no_expire) return 'active'
+  if (doc.days_remaining == null) return doc.status
+  if (doc.days_remaining < 0) return 'expired'
+  if (doc.days_remaining <= 90) return 'expiring_soon'
+  return 'active'
+}
+
+const formatDate = (value, locale) => value ? new Date(value).toLocaleDateString(locale) : '-'
+
+const getDueText = (doc, t, locale) => {
+  if (doc.no_expire) return t('common.noExpire')
+  if (doc.days_remaining == null) return formatDate(doc.expire_date, locale)
+  if (doc.days_remaining < 0) return t('common.overdueDays', { days: Math.abs(doc.days_remaining) })
+  return t('common.remainingDays', { days: doc.days_remaining })
+}
+
+const statusKey = (status) => ({
+  active: 'status.active',
+  expiring_soon: 'status.expiringSoon',
+  expired: 'status.expired',
+}[status] || status)
+
+function SummaryPill({ label, value, tone }) {
+  const tones = {
+    neutral: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200',
+    amber: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+    red: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
   }
-  const p = palette[color] || palette.blue
+
   return (
-    <div className="rounded-xl p-5 border" style={{ backgroundColor: p.bg, borderColor: p.border }}>
-      <p className="text-3xl font-bold mb-1" style={{ color: p.val }}>{value ?? '0'}</p>
-      <p className="text-sm font-medium" style={{ color: p.text }}>{label}</p>
+    <div className={`rounded-2xl px-4 py-3 ${tones[tone] || tones.neutral}`}>
+      <p className="text-2xl font-bold leading-none">{value}</p>
+      <p className="mt-1 text-xs font-semibold">{label}</p>
+    </div>
+  )
+}
+
+function DocumentItem({ doc, t, locale }) {
+  const status = getStatus(doc)
+
+  return (
+    <Link
+      to="/documents"
+      className="group flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 transition-all hover:border-primary-200 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        <FileText size={18} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{doc.title}</p>
+          <span className="shrink-0 rounded-md bg-primary-50 px-2 py-0.5 text-[11px] font-bold text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+            {doc.doc_type}
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {t('common.expireDate')} {formatDate(doc.expire_date, locale)} · {getDueText(doc, t, locale)}
+        </p>
+      </div>
+      <span className={`hidden rounded-full border px-2.5 py-1 text-xs font-semibold sm:inline-flex ${statusBadge[status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+        {t(statusKey(status))}
+      </span>
+      <ArrowRight size={16} className="shrink-0 text-slate-300 transition-transform group-hover:translate-x-1 group-hover:text-primary-500" />
+    </Link>
+  )
+}
+
+function EmptyState({ title, desc }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 px-4 py-10 text-center dark:bg-slate-900">
+      <CheckCircle2 size={34} className="mx-auto mb-3 text-emerald-500" />
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-400">{desc}</p>
     </div>
   )
 }
 
 export default function StudentDashboard() {
   const { user } = useAuthStore()
-  const [docs, setDocs]     = useState([])
+  const { locale, t } = useLanguage()
+  const [docs, setDocs] = useState([])
   const [notifs, setNotifs] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
-      documentService.getAll({ limit: 5 }),
+      documentService.getAll({ limit: 100, sort_by: 'expire_date', sort_dir: 'asc' }),
       notificationService.getUnread(),
     ]).then(([d, n]) => {
       setDocs(d.data?.documents || [])
@@ -41,119 +106,133 @@ export default function StudentDashboard() {
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
-  const expiringSoon = docs.filter(d => d.status === 'expiring_soon').length
-  const expired      = docs.filter(d => d.status === 'expired').length
+  const stats = useMemo(() => {
+    const expired = docs.filter(doc => getStatus(doc) === 'expired').length
+    const expiring = docs.filter(doc => getStatus(doc) === 'expiring_soon').length
+    return { total: docs.length, expired, expiring }
+  }, [docs])
+
+  const urgentDocs = useMemo(() => (
+    docs
+      .filter(doc => !doc.no_expire && ['expired', 'expiring_soon'].includes(getStatus(doc)))
+      .sort((a, b) => (a.days_remaining ?? 9999) - (b.days_remaining ?? 9999))
+      .slice(0, 4)
+  ), [docs])
+
+  const nextDoc = urgentDocs[0] || docs.find(doc => !doc.no_expire)
+  const hasProblem = stats.expired > 0 || stats.expiring > 0
 
   return (
-    <div className="space-y-6 max-w-7xl">
-
-      {/* Header */}
-      <div>
-        <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>
-          นักศึกษา
-        </p>
-        <h1 className="text-2xl font-bold text-slate-800">สวัสดี {user?.name}</h1>
-        <p className="text-slate-400 text-sm mt-0.5">ภาพรวมใบ Certification ของคุณ</p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard label="เอกสารทั้งหมด" value={docs.length} color="blue"   />
-        <StatCard label="ใกล้หมดอายุ"  value={expiringSoon} color="orange" />
-        <StatCard label="หมดอายุแล้ว"  value={expired}      color="red"    />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* เอกสารล่าสุด */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-700">เอกสารล่าสุดของฉัน</h2>
-            <Link to="/documents" className="text-xs font-medium" style={{ color: '#42b5e1' }}>
-              ดูทั้งหมด →
-            </Link>
+    <div className="mx-auto max-w-6xl space-y-5">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-widest text-primary-600 dark:text-primary-400">{t('studentDashboard.eyebrow')}</p>
+            <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{t('studentDashboard.greeting', { name: user?.name || '' })}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500 dark:text-slate-400">{t('studentDashboard.intro')}</p>
           </div>
-          {loading ? (
-            <div className="text-center py-16 text-slate-400 text-sm">กำลังโหลดข้อมูล...</div>
-          ) : docs.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-slate-300 text-4xl mb-3">○</p>
-              <p className="text-slate-400 text-sm mb-4">ยังไม่มีเอกสาร</p>
-              <Link to="/documents/upload"
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-                style={{ backgroundColor: '#42b5e1' }}>
-                อัปโหลดเอกสาร
-              </Link>
+          <Link to="/documents" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-primary-700">
+            <FolderOpen size={17} />
+            {t('common.openDocuments')}
+          </Link>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <div className={`rounded-3xl border p-5 shadow-sm dark:border-slate-800 ${hasProblem ? 'border-amber-200 bg-amber-50 dark:bg-amber-950/20' : 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20'}`}>
+          <div className="flex items-start gap-4">
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${hasProblem ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'}`}>
+              {hasProblem ? <AlertTriangle size={24} /> : <CheckCircle2 size={24} />}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: '480px' }}>
-              <thead className="bg-slate-50">
-                <tr>
-                  {['ชื่อเอกสาร','ประเภท','วันหมดอายุ','สถานะ'].map(h => (
-                    <th key={h} className="text-left px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {docs.map(doc => (
-                  <tr key={doc.doc_id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-3.5 font-medium text-slate-700 max-w-[180px] truncate">{doc.title}</td>
-                    <td className="px-6 py-3.5">
-                      <span className="px-2 py-0.5 text-xs font-semibold rounded"
-                        style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>
-                        {doc.doc_type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-3.5 text-slate-500 text-xs tabular-nums">
-                      {doc.no_expire ? <span className="italic text-slate-400">ไม่มีวันหมดอายุ</span> : doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : '—'}
-                    </td>
-                    <td className="px-6 py-3.5">
-                      <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColor[doc.status] || 'bg-slate-100 text-slate-500'}`}>
-                        {statusLabel[doc.status] || doc.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                {hasProblem ? t('studentDashboard.hasProblemTitle') : t('studentDashboard.noUrgentTitle')}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                {hasProblem
+                  ? t('studentDashboard.hasProblemDesc', { expired: stats.expired, expiring: stats.expiring })
+                  : t('studentDashboard.noProblemDesc')}
+              </p>
+              {nextDoc && (
+                <div className="mt-4 rounded-2xl bg-white/75 p-3 dark:bg-slate-950/50">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{t('studentDashboard.nextItem')}</p>
+                  <p className="mt-1 truncate text-sm font-bold text-slate-800 dark:text-slate-100">{nextDoc.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{getDueText(nextDoc, t, locale)}</p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
-        {/* การแจ้งเตือน */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-slate-700">การแจ้งเตือน</h2>
-            {notifs.length > 0 && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                style={{ backgroundColor: '#f7924a' }}>
-                {notifs.length}
-              </span>
-            )}
-          </div>
-          {notifs.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-slate-300 text-3xl mb-2">○</p>
-              <p className="text-slate-400 text-xs">ไม่มีการแจ้งเตือน</p>
+        <div className="grid grid-cols-3 gap-2 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:grid-cols-1">
+          <SummaryPill label={t('studentDashboard.total')} value={stats.total} tone="neutral" />
+          <SummaryPill label={t('studentDashboard.expiring')} value={stats.expiring} tone="amber" />
+          <SummaryPill label={t('studentDashboard.expired')} value={stats.expired} tone="red" />
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('studentDashboard.tasksTitle')}</h2>
+              <p className="text-xs text-slate-400">{t('studentDashboard.tasksDesc')}</p>
             </div>
+            <Link to="/documents" className="text-xs font-semibold text-primary-600 hover:underline dark:text-primary-400">{t('studentDashboard.seeInDocuments')}</Link>
+          </div>
+
+          {loading ? (
+            <div className="py-12 text-center text-sm text-slate-400">{t('common.loading')}</div>
+          ) : urgentDocs.length === 0 ? (
+            <EmptyState title={t('studentDashboard.emptyTaskTitle')} desc={t('studentDashboard.emptyTaskDesc')} />
           ) : (
             <div className="space-y-2">
-              {notifs.slice(0, 5).map(n => (
-                <Link key={n.notif_id} to="/documents"
-                  className="block p-3 rounded-lg border text-xs hover:shadow-md transition-shadow"
-                  style={{ backgroundColor: '#fffbeb', borderColor: '#fde68a' }}>
-                  <p className="font-semibold text-amber-800 truncate">{n.doc_title}</p>
-                  <p className="text-amber-600 mt-0.5">{n.message}</p>
-                </Link>
-              ))}
+              {urgentDocs.map(doc => <DocumentItem key={doc.doc_id} doc={doc} t={t} locale={locale} />)}
             </div>
           )}
         </div>
-      </div>
 
+        <div className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300">
+                <History size={18} />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('studentDashboard.versionTitle')}</h2>
+                <p className="text-xs text-slate-400">{t('studentDashboard.versionDesc')}</p>
+              </div>
+            </div>
+            <ol className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+              <li>1. {t('studentDashboard.stepOpen')}</li>
+              <li>2. {t('studentDashboard.stepSelect')}</li>
+              <li>3. {t('studentDashboard.stepUpload')}</li>
+            </ol>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('studentDashboard.notifications')}</h2>
+                <p className="text-xs text-slate-400">{t('studentDashboard.unreadCount', { count: notifs.length })}</p>
+              </div>
+              <Bell size={18} className="text-slate-400" />
+            </div>
+            {notifs.length === 0 ? (
+              <p className="rounded-2xl bg-slate-50 p-4 text-center text-sm text-slate-400 dark:bg-slate-900">{t('studentDashboard.noNewNotifications')}</p>
+            ) : (
+              <div className="space-y-2">
+                {notifs.slice(0, 3).map(item => (
+                  <Link key={item.notif_id} to="/documents" className="block rounded-2xl bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
+                    <p className="truncate font-semibold text-amber-900 dark:text-amber-200">{item.doc_title}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-amber-700 dark:text-amber-300">{item.message}</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

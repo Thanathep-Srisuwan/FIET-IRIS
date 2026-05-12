@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { LockKeyhole } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { useLanguage } from '../../contexts/LanguageContext'
 import { authService } from '../../services/api'
 import ThemeToggle from '../../components/common/ThemeToggle'
-import toast from 'react-hot-toast'
+import LanguageToggle from '../../components/common/LanguageToggle'
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate()
   const { user, updateUser } = useAuthStore()
-
+  const { t } = useLanguage()
   const [form, setForm] = useState({
     current_password: '',
     new_password: '',
@@ -22,15 +25,9 @@ export default function ChangePasswordPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-
-    if (!form.current_password || !form.new_password || !form.confirm_password)
-      return toast.error('กรุณากรอกข้อมูลให้ครบถ้วน')
-
-    if (form.new_password.length < 8)
-      return toast.error('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร')
-
-    if (form.new_password !== form.confirm_password)
-      return toast.error('รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน')
+    if (!form.current_password || !form.new_password || !form.confirm_password) return toast.error(t('auth.fillAll'))
+    if (form.new_password.length < 8) return toast.error(t('auth.minLength'))
+    if (form.new_password !== form.confirm_password) return toast.error(t('auth.passwordMismatch'))
 
     setLoading(true)
     try {
@@ -39,82 +36,72 @@ export default function ChangePasswordPage() {
         new_password: form.new_password,
       })
       updateUser({ ...user, must_change_pw: false })
-      toast.success('เปลี่ยนรหัสผ่านสำเร็จ')
+      toast.success(t('auth.changeSuccess'))
       navigate('/dashboard')
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่')
+      toast.error(err.response?.data?.message || t('auth.changeFailed'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="relative min-h-screen bg-primary-900 flex items-center justify-center p-4">
-      <div className="absolute right-4 top-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-primary-900 p-4">
+      <div className="absolute right-4 top-4 flex items-center gap-2">
+        <LanguageToggle className="h-10 bg-white/10 px-3 text-white hover:bg-white/20" />
         <ThemeToggle className="bg-white/10 text-white hover:bg-white/20 dark:bg-slate-900/70 dark:hover:bg-slate-800" />
       </div>
-      <div className="w-full max-w-md">
 
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
-            <span className="text-3xl">🔐</span>
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg">
+            <LockKeyhole size={30} className="text-primary-700" />
           </div>
-          <h1 className="text-2xl font-bold text-white">เปลี่ยนรหัสผ่าน</h1>
-          <p className="text-primary-200 mt-1 text-sm">
-            กรุณาตั้งรหัสผ่านใหม่ก่อนเข้าใช้งานระบบ
-          </p>
+          <h1 className="text-2xl font-bold text-white">{t('auth.changePassword')}</h1>
+          <p className="mt-1 text-sm text-primary-200">{t('auth.changePasswordDesc')}</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
-
-          {/* แจ้งเตือน */}
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-sm text-amber-800">
-            ⚠️ บัญชีของคุณต้องเปลี่ยนรหัสผ่านก่อนใช้งาน
+        <div className="rounded-2xl bg-white p-8 shadow-2xl dark:bg-slate-900">
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            {t('auth.mustChangePassword')}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                รหัสผ่านปัจจุบัน
-              </label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">{t('auth.currentPassword')}</label>
               <input
                 type="password"
                 name="current_password"
                 value={form.current_password}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="รหัสผ่านที่ได้รับจากระบบ"
+                placeholder={t('auth.currentPasswordPlaceholder')}
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                รหัสผ่านใหม่
-              </label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">{t('auth.newPassword')}</label>
               <input
                 type="password"
                 name="new_password"
                 value={form.new_password}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="อย่างน้อย 8 ตัวอักษร"
+                placeholder={t('auth.newPasswordPlaceholder')}
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">
-                ยืนยันรหัสผ่านใหม่
-              </label>
+              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-slate-300">{t('auth.confirmNewPassword')}</label>
               <input
                 type="password"
                 name="confirm_password"
                 value={form.confirm_password}
                 onChange={handleChange}
                 className="input-field"
-                placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
+                placeholder={t('auth.confirmNewPasswordPlaceholder')}
                 disabled={loading}
               />
             </div>
@@ -122,16 +109,15 @@ export default function ChangePasswordPage() {
             <button
               type="submit"
               disabled={loading}
-              className="btn-primary w-full py-2.5 mt-2 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="btn-primary mt-2 flex w-full items-center justify-center gap-2 py-2.5 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? (
                 <>
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  กำลังบันทึก...
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  {t('common.saving')}
                 </>
-              ) : 'บันทึกรหัสผ่านใหม่'}
+              ) : t('auth.saveNewPassword')}
             </button>
-
           </form>
         </div>
       </div>

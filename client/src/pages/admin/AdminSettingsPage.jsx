@@ -1,39 +1,35 @@
-import { useEffect, useState } from 'react'
-import { settingsService } from '../../services/api'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { settingsService } from '../../services/api'
+import { useLanguage } from '../../contexts/LanguageContext'
 
-const LABELS = {
-  'expiry warning days':  { label: 'แจ้งเตือนก่อนหมดอายุ (วัน)',     type: 'number', placeholder: '90', min: 7, max: 365 },
-  'trash retention days': { label: 'เก็บในถังขยะก่อนลบถาวร (วัน)',   type: 'number', placeholder: '30', min: 1, max: 180 },
-}
-
-const GROUPS = {
-  'ตั้งค่าอัตโนมัติ':    ['expiry warning days', 'trash retention days'],
-}
+const SETTINGS = [
+  { key: 'expiry warning days', labelKey: 'adminSettings.expiryWarningDays', type: 'number', placeholder: '90', min: 7, max: 365 },
+  { key: 'trash retention days', labelKey: 'adminSettings.trashRetentionDays', type: 'number', placeholder: '30', min: 1, max: 180 },
+]
 
 export default function AdminSettingsPage() {
+  const { t } = useLanguage()
   const [settings, setSettings] = useState({})
-  const [draft,    setDraft]    = useState({})
-  const [loading,  setLoading]  = useState(true)
-  const [saving,   setSaving]   = useState(false)
-  const [dirty,    setDirty]    = useState(false)
+  const [draft, setDraft] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const dirty = useMemo(() => SETTINGS.some(item => settings[item.key] !== draft[item.key]), [settings, draft])
 
   useEffect(() => {
     settingsService.getAll()
-      .then(r => {
+      .then(({ data }) => {
         const map = {}
-        r.data.forEach(s => { map[s.setting_key] = s.setting_value })
+        data.forEach(item => { map[item.setting_key] = item.setting_value })
         setSettings(map)
         setDraft(map)
       })
-      .catch(() => toast.error('โหลดการตั้งค่าไม่สำเร็จ'))
+      .catch(() => toast.error(t('adminSettings.loadFailed')))
       .finally(() => setLoading(false))
-  }, [])
+  }, [t])
 
-  const handleChange = (key, value) => {
-    setDraft(prev => ({ ...prev, [key]: value }))
-    setDirty(true)
-  }
+  const handleChange = (key, value) => setDraft(prev => ({ ...prev, [key]: value }))
 
   const handleSave = async () => {
     setSaving(true)
@@ -42,117 +38,89 @@ export default function AdminSettingsPage() {
         .filter(([key, value]) => settings[key] !== value)
         .map(([key, value]) => ({ key, value }))
 
-      if (!payload.length) { toast('ไม่มีการเปลี่ยนแปลง'); setSaving(false); return }
+      if (!payload.length) {
+        toast(t('adminSettings.noChanges'))
+        setSaving(false)
+        return
+      }
 
       await settingsService.bulkUpdate(payload)
       setSettings({ ...draft })
-      setDirty(false)
-      toast.success('บันทึกการตั้งค่าเรียบร้อย')
+      toast.success(t('adminSettings.saveSuccess'))
     } catch {
-      toast.error('บันทึกไม่สำเร็จ')
+      toast.error(t('adminSettings.saveFailed'))
     } finally {
       setSaving(false)
     }
   }
 
-  const handleReset = () => {
-    setDraft({ ...settings })
-    setDirty(false)
-  }
+  const handleReset = () => setDraft({ ...settings })
 
   if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <p className="text-slate-400 text-sm">กำลังโหลด...</p>
+    <div className="flex h-64 items-center justify-center">
+      <p className="text-sm text-slate-400">{t('common.loading')}</p>
     </div>
   )
 
   return (
     <div className="max-w-3xl space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>ผู้ดูแลระบบ</p>
-          <h1 className="text-2xl font-bold text-slate-800">ตั้งค่าระบบ</h1>
+          <p className="mb-1 text-xs font-medium uppercase tracking-widest" style={{ color: '#42b5e1' }}>{t('roles.admin')}</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{t('adminSettings.title')}</h1>
         </div>
-        {/* {dirty && (
-          <div className="flex gap-2">
-            <button onClick={handleReset}
-              className="px-4 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-              ยกเลิก
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              className="px-4 py-2 text-sm rounded-xl text-white font-semibold transition-colors disabled:opacity-60"
-              style={{ backgroundColor: '#1262a0' }}>
-              {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
-            </button>
-          </div>
-        )} */}
       </div>
 
-      {/* Setting Groups */}
-      {Object.entries(GROUPS).map(([groupName, keys]) => (
-        <div key={groupName} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-700">{groupName}</h2>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {keys.map(key => {
-              const meta  = LABELS[key]
-              if (!meta) return null
-              const value = draft[key] ?? ''
-              return (
-                <div key={key} className="px-6 py-4 flex items-center gap-6">
-                  <div className="w-52 flex-shrink-0">
-                    <p className="text-sm font-medium text-slate-700">{meta.label}</p>
-                    <p className="text-xs text-slate-400 mt-0.5 font-mono">{key}</p>
-                  </div>
-                  <div className="flex-1">
-                    <input
-                      type={meta.type}
-                      value={value}
-                      min={meta.min}
-                      max={meta.max}
-                      placeholder={meta.placeholder}
-                      onChange={e => handleChange(key, e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:border-transparent transition-all"
-                      style={{ '--tw-ring-color': '#42b5e1' }}
-                      onFocus={e => e.target.style.boxShadow = '0 0 0 2px #42b5e140'}
-                      onBlur={e => e.target.style.boxShadow = ''}
-                    />
-                    {settings[key] !== value && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        ค่าเดิม <span className="font-mono">{settings[key]}</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
+        <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('adminSettings.autoGroup')}</h2>
         </div>
-      ))}
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {SETTINGS.map(item => {
+            const value = draft[item.key] ?? ''
+            return (
+              <div key={item.key} className="flex items-center gap-6 px-6 py-4">
+                <div className="w-52 flex-shrink-0">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{t(item.labelKey)}</p>
+                  <p className="mt-0.5 font-mono text-xs text-slate-400">{item.key}</p>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type={item.type}
+                    value={value}
+                    min={item.min}
+                    max={item.max}
+                    placeholder={item.placeholder}
+                    onChange={e => handleChange(item.key, e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-all focus:border-transparent focus:outline-none focus:ring-2 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+                    style={{ '--tw-ring-color': '#42b5e1' }}
+                  />
+                  {settings[item.key] !== value && (
+                    <p className="mt-1 text-xs text-amber-600">{t('adminSettings.originalValue', { value: settings[item.key] })}</p>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
 
-      {/* Info box */}
       <div className="rounded-xl p-4 text-sm" style={{ backgroundColor: '#f0f9ff', border: '1px solid #bae6fd' }}>
-        <p className="font-semibold text-blue-800 mb-1">หมายเหตุ</p>
-        <ul className="text-blue-700 space-y-1 text-xs">
-          <li>• ค่า <strong>expiry warning days</strong> มีจะผลทันทีหลังจากกด "บันทึกการเปลี่ยนแปลง"</li>
-          <li>• ค่า <strong>trash retention days</strong> จะมีผลหลังจากระบบเริ่มทำงานในเวลา 08:00 น. ของวันถัดไป</li>
-          <li>• ชื่อองค์กร/คณะ จะแสดงในอีเมลแจ้งเตือนอัตโนมัติ</li>
+        <p className="mb-1 font-semibold text-blue-800">{t('adminSettings.noteTitle')}</p>
+        <ul className="space-y-1 text-xs text-blue-700">
+          <li>• {t('adminSettings.note1')}</li>
+          <li>• {t('adminSettings.note2')}</li>
+          <li>• {t('adminSettings.note3')}</li>
         </ul>
       </div>
 
-      {/* Save button bottom */}
       {dirty && (
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={handleReset}
-            className="px-4 py-2 text-sm rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-            ยกเลิก
+          <button onClick={handleReset} className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900">
+            {t('common.cancel')}
           </button>
-          <button onClick={handleSave} disabled={saving}
-            className="px-6 py-2 text-sm rounded-xl text-white font-semibold transition-colors disabled:opacity-60"
-            style={{ backgroundColor: '#1262a0' }}>
-            {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
+          <button onClick={handleSave} disabled={saving} className="rounded-xl px-6 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60" style={{ backgroundColor: '#1262a0' }}>
+            {saving ? t('common.saving') : t('adminSettings.saveChanges')}
           </button>
         </div>
       )}

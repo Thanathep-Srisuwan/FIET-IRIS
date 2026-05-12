@@ -261,6 +261,3 @@ Email template และ system settings ถูกเก็บในฐานข
 - การตั้งค่า theme อยู่ฝั่ง client เท่านั้น ยังไม่บันทึก preference ลงฐานข้อมูล
 - ไฟล์ upload ถูก serve ผ่าน `/uploads`
 - งาน build หลักอยู่ที่ `client`
-
-claude plugin marketplace add kerlos/pordee
-claude plugin install pordee@pordee

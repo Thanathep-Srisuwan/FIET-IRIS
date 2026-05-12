@@ -9,6 +9,7 @@ const {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
   bulkRestoreDocuments, bulkPermanentDeleteDocuments,
+  uploadFileVersion, getDocumentTimeline,
   downloadFile, previewFile, getDocumentSummary,
 } = require('../controllers/document.controller')
 
@@ -51,6 +52,8 @@ router.delete('/:id/permanent',             ...adminOnly, permanentDeleteDocumen
 
 // Standard routes
 router.get('/',                              ...auth,      getDocuments)
+router.post('/:id/files/version', upload.array('files', 5), ...auth, uploadFileVersion)
+router.get('/:id/timeline',                  ...auth,      getDocumentTimeline)
 router.get('/:id',                           ...auth,      getDocument)
 router.post('/', upload.array('files', 5),   ...auth,      createDocument)
 router.delete('/:id',                        ...adminOnly, deleteDocument)

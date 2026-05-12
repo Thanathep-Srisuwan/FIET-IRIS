@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { documentService, docTypeService, userService } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
 import toast from 'react-hot-toast'
+import useDebouncedValue from '../../hooks/useDebouncedValue'
 import {
   Calendar,
   X,
@@ -14,6 +15,8 @@ import {
   School,
   Paperclip,
   Download,
+  UploadCloud,
+  History,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -53,7 +56,16 @@ const branchesByDegree = {
   ],
 }
 const roleLabel   = { student: 'นักศึกษา', advisor: 'อาจารย์', admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร', staff: 'เจ้าหน้าที่' }
+const allBranchOptions = [...new Set(Object.values(branchesByDegree).flat())]
 const LIMIT = 15
+
+const getDegreeForBranch = (branch) => {
+  if (!branch) return ''
+  const matches = Object.entries(branchesByDegree)
+    .filter(([, branches]) => branches.includes(branch))
+    .map(([degree]) => degree)
+  return matches.length === 1 ? matches[0] : ''
+}
 
 const computedStatus = (doc) => {
   if (doc.no_expire) return null
@@ -82,6 +94,19 @@ const rowBg = (doc) => {
   if (doc.days_remaining < 0)   return 'bg-red-50 hover:bg-red-100'
   if (doc.days_remaining <= 30) return 'bg-amber-50 hover:bg-amber-100'
   return 'hover:bg-slate-50'
+}
+
+const fileTypeLabel = {
+  main: 'เอกสารหลัก',
+  certificate: 'บันทึกข้อความรับรอง',
+  attachment: 'ไฟล์แนบ',
+}
+
+const timelineIcon = {
+  created: FileText,
+  file_version_uploaded: UploadCloud,
+  trashed: Trash2,
+  restored: ClipboardList,
 }
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
@@ -284,15 +309,82 @@ function UserSearchInput({ value, onChange }) {
   )
 }
 
+function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPreview }) {
+  const Icon = file.mime_type?.includes('image') ? ImageIcon : FileText
+  const handleDownload = async () => {
+    try {
+      const { data } = await documentService.download(docId, file.file_id)
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.file_name
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    } catch {
+      toast.error('ไม่สามารถดาวน์โหลดได้')
+    }
+  }
+
+  return (
+    <div className={`flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-white border-slate-200' : 'bg-white/70 border-slate-100'}`}>
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <Icon size={20} className={file.mime_type?.includes('pdf') ? 'text-red-500' : 'text-slate-400'} />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-sm font-medium text-slate-700 truncate">{file.file_name}</p>
+            {isCurrent && <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">ปัจจุบัน</span>}
+          </div>
+          <p className="text-xs text-slate-400">
+            v{file.version_no || 1} · {(file.file_size / 1024).toFixed(1)} KB · {fileTypeLabel[file.file_type] || 'ไฟล์แนบ'}
+            {file.uploaded_by_name ? ` · โดย ${file.uploaded_by_name}` : ''}
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 flex-shrink-0 ml-2">
+        {file.mime_type?.includes('pdf') && (
+          <button
+            type="button"
+            onClick={() => onPreview(file)}
+            disabled={previewLoading[file.file_id]}
+            className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50">
+            {previewLoading[file.file_id] ? '...' : 'ดู'}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleDownload}
+          className="text-xs px-2.5 py-1 rounded-lg text-white"
+          style={{ backgroundColor: '#42b5e1' }}>
+          โหลด
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 function DetailModal({ doc, onClose, onDeleted, role }) {
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState({})
+  const [currentDoc, setCurrentDoc] = useState(doc)
+  const [versionFiles, setVersionFiles] = useState([])
+  const [versionFileType, setVersionFileType] = useState('attachment')
+  const [versionNote, setVersionNote] = useState('')
+  const [uploadingVersion, setUploadingVersion] = useState(false)
+
+  useEffect(() => {
+    setCurrentDoc(doc)
+  }, [doc])
+
+  const refreshDetail = async () => {
+    const { data } = await documentService.getById(currentDoc.doc_id)
+    setCurrentDoc(data)
+  }
 
   const handlePreview = async (f) => {
     setPreviewLoading(p => ({ ...p, [f.file_id]: true }))
     try {
-      const { data } = await documentService.preview(doc.doc_id, f.file_id)
+      const { data } = await documentService.preview(currentDoc.doc_id, f.file_id)
       const url = URL.createObjectURL(data)
       window.open(url, '_blank')
       setTimeout(() => URL.revokeObjectURL(url), 60000)
@@ -301,39 +393,69 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
   }
 
   const handleTrash = async () => {
-    if (!confirm(`ย้าย "${doc.title}" ไปถังขยะ?`)) return
+    if (!confirm(`ย้าย "${currentDoc.title}" ไปถังขยะ?`)) return
     setLoading(true)
     try {
-      await documentService.delete(doc.doc_id)
+      await documentService.delete(currentDoc.doc_id)
       toast.success('ย้ายเอกสารไปถังขยะสำเร็จ')
       onDeleted(); onClose()
     } catch (err) { toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด') }
     finally { setLoading(false) }
   }
 
-  const noExp = !!doc.no_expire
-  const daysLeft = doc.days_remaining
+  const handleVersionFiles = (newFiles) => {
+    setVersionFiles(prev => [...prev, ...Array.from(newFiles)].slice(0, 5))
+  }
+
+  const handleUploadVersion = async (e) => {
+    e.preventDefault()
+    if (versionFiles.length === 0) return toast.error('กรุณาเลือกไฟล์เวอร์ชันใหม่')
+    setUploadingVersion(true)
+    try {
+      const fd = new FormData()
+      fd.append('file_type', versionFileType)
+      fd.append('doc_type', currentDoc.doc_type || 'RI')
+      if (versionNote.trim()) fd.append('note', versionNote.trim())
+      versionFiles.forEach(f => fd.append('files', f))
+      await documentService.uploadVersion(currentDoc.doc_id, fd)
+      toast.success('เพิ่มเวอร์ชันไฟล์สำเร็จ')
+      setVersionFiles([])
+      setVersionNote('')
+      await refreshDetail()
+      onDeleted()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'อัปโหลดเวอร์ชันล้มเหลว')
+    } finally {
+      setUploadingVersion(false)
+    }
+  }
+
+  const files = currentDoc.files || []
+  const currentFiles = files.filter(f => f.is_current === true || f.is_current === 1)
+  const previousFiles = files.filter(f => !(f.is_current === true || f.is_current === 1))
+  const noExp = !!currentDoc.no_expire
+  const daysLeft = currentDoc.days_remaining
   const daysColor = daysLeft < 0 ? 'text-red-600' : daysLeft <= 30 ? 'text-amber-600' : 'text-emerald-600'
-  const gb = groupBadge(doc)
+  const gb = groupBadge(currentDoc)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="px-2 py-0.5 text-xs font-semibold rounded"
-                style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{doc.doc_type}</span>
+                style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{currentDoc.doc_type}</span>
               {gb && (
                 <span className="px-2 py-0.5 text-xs font-semibold rounded"
                   style={{ backgroundColor: gb.bg, color: gb.color }}>{gb.text}</span>
               )}
-              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColor[computedStatus(doc)] || ''}`}>
-                {statusLabel[computedStatus(doc)] || doc.status}
+              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColor[computedStatus(currentDoc)] || ''}`}>
+                {statusLabel[computedStatus(currentDoc)] || currentDoc.status}
               </span>
             </div>
-            <h2 className="text-base font-semibold text-slate-800 mt-1">{doc.title}</h2>
+            <h2 className="text-base font-semibold text-slate-800 mt-1">{currentDoc.title}</h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl ml-4 flex-shrink-0">✕</button>
         </div>
@@ -343,7 +465,7 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
             <div className="bg-slate-50 rounded-xl p-4">
               <p className="text-xs text-slate-400 mb-1">วันที่ออกใบประกาศ</p>
               <p className="text-sm font-semibold text-slate-700">
-                {new Date(doc.issue_date).toLocaleDateString('th-TH')}
+                {new Date(currentDoc.issue_date).toLocaleDateString('th-TH')}
               </p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
@@ -353,7 +475,7 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
               ) : (
                 <>
                   <p className="text-sm font-semibold text-slate-700">
-                    {doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : '—'}
+                    {currentDoc.expire_date ? new Date(currentDoc.expire_date).toLocaleDateString('th-TH') : '—'}
                   </p>
                   {daysLeft != null && (
                     <p className={`text-xs mt-0.5 font-medium ${daysColor}`}>
@@ -371,77 +493,149 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
               <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                   style={{ backgroundColor: '#42b5e1' }}>
-                  {doc.owner_name?.[0]}
+                  {currentDoc.owner_name?.[0]}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-slate-700">{doc.owner_name}</p>
-                    {doc.owner_student_id && (
+                    <p className="text-sm font-medium text-slate-700">{currentDoc.owner_name}</p>
+                    {currentDoc.owner_student_id && (
                       <span className="text-xs font-mono px-1.5 py-0.5 rounded"
-                        style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{doc.owner_student_id}</span>
+                        style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{currentDoc.owner_student_id}</span>
                     )}
-                    {doc.owner_role && (
-                      <span className="text-xs text-slate-400">{roleLabel[doc.owner_role]}
-                        {doc.owner_degree_level ? ` (${degreeLabel[doc.owner_degree_level] || doc.owner_degree_level})` : ''}
+                    {currentDoc.owner_role && (
+                      <span className="text-xs text-slate-400">{roleLabel[currentDoc.owner_role]}
+                        {currentDoc.owner_degree_level ? ` (${degreeLabel[currentDoc.owner_degree_level] || currentDoc.owner_degree_level})` : ''}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-400 truncate">{doc.owner_email}</p>
-                  {doc.advisor_name && <p className="text-xs text-slate-400 mt-0.5">อาจารย์: {doc.advisor_name}</p>}
+                  <p className="text-xs text-slate-400 truncate">{currentDoc.owner_email}</p>
+                  {currentDoc.advisor_name && <p className="text-xs text-slate-400 mt-0.5">อาจารย์: {currentDoc.advisor_name}</p>}
                 </div>
               </div>
             </div>
           )}
 
-          {doc.files?.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">ไฟล์แนบ</p>
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">ไฟล์แนบและเวอร์ชัน</p>
+              <span className="text-[11px] text-slate-400">{files.length} ไฟล์ทั้งหมด</span>
+            </div>
+            {currentFiles.length > 0 ? (
               <div className="space-y-2">
-                {doc.files.map(f => (
-                  <div key={f.file_id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-lg flex-shrink-0">{f.mime_type?.includes('pdf') ? '📄' : '🖼️'}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-700 truncate">{f.file_name}</p>
-                        <p className="text-xs text-slate-400">
-                          {(f.file_size / 1024).toFixed(1)} KB ·{' '}
-                          {f.file_type === 'main' ? 'เอกสารหลัก' : f.file_type === 'certificate' ? 'บันทึกข้อความรับรอง' : 'ไฟล์แนบ'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0 ml-2">
-                      {f.mime_type?.includes('pdf') && (
-                        <button
-                          onClick={() => handlePreview(f)}
-                          disabled={previewLoading[f.file_id]}
-                          className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50">
-                          {previewLoading[f.file_id] ? '...' : 'ดู'}
-                        </button>
-                      )}
-                      <button
-                        onClick={async () => {
-                          try {
-                            const { data } = await documentService.download(doc.doc_id, f.file_id)
-                            const url = URL.createObjectURL(data)
-                            const a = document.createElement('a')
-                            a.href = url; a.download = f.file_name; a.click()
-                            setTimeout(() => URL.revokeObjectURL(url), 10000)
-                          } catch { toast.error('ไม่สามารถดาวน์โหลดได้') }
-                        }}
-                        className="text-xs px-2.5 py-1 rounded-lg text-white"
-                        style={{ backgroundColor: '#42b5e1' }}>โหลด</button>
-                    </div>
+                {currentFiles.map(f => (
+                  <FileVersionRow
+                    key={f.file_id}
+                    file={f}
+                    docId={currentDoc.doc_id}
+                    isCurrent
+                    previewLoading={previewLoading}
+                    onPreview={handlePreview}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-3">ยังไม่มีไฟล์แนบ</p>
+            )}
+
+            {previousFiles.length > 0 && (
+              <details className="mt-3 rounded-xl border border-slate-100 bg-slate-50/60">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-500">
+                  ดูเวอร์ชันก่อนหน้า ({previousFiles.length})
+                </summary>
+                <div className="px-3 pb-3 space-y-2">
+                  {previousFiles.map(f => (
+                    <FileVersionRow
+                      key={f.file_id}
+                      file={f}
+                      docId={currentDoc.doc_id}
+                      previewLoading={previewLoading}
+                      onPreview={handlePreview}
+                    />
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+
+          <form onSubmit={handleUploadVersion} className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <UploadCloud size={17} className="text-[#42b5e1]" />
+              <div>
+                <p className="text-sm font-semibold text-slate-700">เพิ่มเวอร์ชันไฟล์</p>
+                <p className="text-xs text-slate-400">ไฟล์ประเภทเดียวกันจะถูกตั้งเป็นเวอร์ชันปัจจุบันอัตโนมัติ</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select className="input-field" value={versionFileType} onChange={e => setVersionFileType(e.target.value)}>
+                <option value="main">เอกสารหลัก</option>
+                <option value="certificate">บันทึกข้อความรับรอง</option>
+                <option value="attachment">ไฟล์แนบ</option>
+              </select>
+              <input
+                className="input-field"
+                value={versionNote}
+                onChange={e => setVersionNote(e.target.value)}
+                placeholder="หมายเหตุเวอร์ชัน (ไม่บังคับ)"
+              />
+            </div>
+            <label className="block cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-sm text-slate-500 hover:bg-slate-50">
+              เลือกไฟล์เวอร์ชันใหม่
+              <input type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                onChange={e => handleVersionFiles(e.target.files)} />
+            </label>
+            {versionFiles.length > 0 && (
+              <div className="space-y-1">
+                {versionFiles.map((f, i) => (
+                  <div key={`${f.name}-${i}`} className="flex items-center justify-between text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg">
+                    <span className="truncate">{f.name}</span>
+                    <button type="button" onClick={() => setVersionFiles(prev => prev.filter((_, j) => j !== i))}
+                      className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0">✕</button>
                   </div>
                 ))}
+              </div>
+            )}
+            <button type="submit" disabled={uploadingVersion || versionFiles.length === 0}
+              className="w-full py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
+              style={{ backgroundColor: '#42b5e1' }}>
+              {uploadingVersion ? 'กำลังเพิ่มเวอร์ชัน...' : 'บันทึกเวอร์ชันใหม่'}
+            </button>
+          </form>
+
+          {currentDoc.timeline?.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <History size={16} className="text-slate-400" />
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Timeline</p>
+              </div>
+              <div className="space-y-3">
+                {currentDoc.timeline.map(item => {
+                  const Icon = timelineIcon[item.event_type] || ClipboardList
+                  return (
+                    <div key={item.timeline_id} className="flex gap-3">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                        <Icon size={15} />
+                      </div>
+                      <div className="min-w-0 flex-1 pb-3 border-b border-slate-100 last:border-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-700">{item.title}</p>
+                          <span className="text-[11px] text-slate-400">
+                            {new Date(item.created_at).toLocaleString('th-TH')}
+                          </span>
+                        </div>
+                        {item.detail && <p className="text-xs text-slate-500 mt-1">{item.detail}</p>}
+                        {item.actor_name && <p className="text-[11px] text-slate-400 mt-1">โดย {item.actor_name}</p>}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
 
-          {doc.description && (
+          {currentDoc.description && (
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">คำอธิบาย</p>
-              <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{doc.description}</p>
+              <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{currentDoc.description}</p>
             </div>
           )}
         </div>
@@ -525,26 +719,70 @@ function DateInput({ display, iso, onChange }) {
 }
 
 // ─── Export Modal ─────────────────────────────────────────────────────────────
-function ExportModal({ onClose, search, docType, status, sort }) {
+function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '', branch = '', ownerRole = '', advisorId = '' }) {
   const [exportMode, setExportMode] = useState('all')
   const [loading, setLoading]       = useState(false)
+  const [filterRole, setFilterRole] = useState(ownerRole)
+  const [filterDegree, setFilterDegree] = useState(degreeLevel)
+  const [filterBranch, setFilterBranch] = useState(branch)
+
+  const exportBranchOptions = filterDegree ? branchesByDegree[filterDegree] || [] : allBranchOptions
+
+  useEffect(() => {
+    if (filterBranch && !exportBranchOptions.includes(filterBranch)) setFilterBranch('')
+  }, [filterDegree, filterBranch, exportBranchOptions])
+
+  useEffect(() => {
+    if (filterBranch && exportMode === 'branch') setExportMode('all')
+  }, [filterBranch, exportMode])
 
   const fetchAllDocs = async () => {
     const { data } = await documentService.getAll({
       search, doc_type: docType, status,
       sort_by: sort.by, sort_dir: sort.dir,
       limit: 9999, page: 1,
+      ...(filterRole && { owner_role: filterRole }),
+      ...(filterDegree && { degree_level: filterDegree }),
+      ...(filterBranch && { department: filterBranch }),
+      ...(advisorId && { advisor_id: advisorId }),
     })
     return data.documents || []
   }
 
-const handleExport = async () => {
+  const exportFilters = [
+    filterRole ? `กลุ่ม: ${roleLabel[filterRole] || filterRole}` : 'กลุ่ม: ทั้งหมด',
+    filterDegree ? `ระดับ: ${degreeLabel[filterDegree] || filterDegree}` : 'ระดับ: ทั้งหมด',
+    filterBranch ? `สาขา: ${filterBranch}` : 'สาขา: ทั้งหมด',
+  ].join(' | ')
+
+  const formatPrintDate = (date) => date.toLocaleDateString('th-TH', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+  const compactDate = (date) => {
+    const y = date.getFullYear()
+    const m = String(date.getMonth() + 1).padStart(2, '0')
+    const d = String(date.getDate()).padStart(2, '0')
+    return `${y}${m}${d}`
+  }
+  const safeFilePart = (value) => String(value || '')
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 48)
+  const scopeFileParts = () => [
+    filterRole && (roleLabel[filterRole] || filterRole),
+    filterDegree && (degreeLabel[filterDegree] || filterDegree),
+    filterBranch,
+  ].filter(Boolean).map(safeFilePart)
+
+  const handleExport = async () => {
     setLoading(true)
     try {
       const docs = await fetchAllDocs()
       const now = new Date()
-      const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
-      const modeLabels = { all: 'ทั้งหมด', role: 'แบ่งตามบทบาท', degree: 'แบ่งตามระดับการศึกษา', branch: 'แบ่งตามสาขาวิชา' }
+      const dateStr = formatPrintDate(now)
+      const modeLabels = { all: 'รายการเดียว', role: 'จัดกลุ่มตามบทบาท', degree: 'จัดกลุ่มตามระดับปริญญา', branch: 'จัดกลุ่มตามสาขาวิชา' }
 
       const { default: ExcelJS } = await import('exceljs')
       const wb = new ExcelJS.Workbook()
@@ -554,93 +792,101 @@ const handleExport = async () => {
       const ws = wb.addWorksheet('เอกสาร', {
         pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
       })
-      ws.pageSetup.margins = { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 }
+      ws.pageSetup.margins = { left: 0.35, right: 0.35, top: 0.55, bottom: 0.55, header: 0.25, footer: 0.25 }
+      ws.pageSetup.horizontalCentered = true
+      ws.pageSetup.printTitlesRow = '1:8'
+      ws.views = [{ showGridLines: false }]
+      ws.headerFooter = { oddFooter: '&Lระบบ IRIS&Cหน้า &P / &N&Rพิมพ์เมื่อ ' + dateStr }
 
-      const N = 12
+      const N = 10
       ws.columns = [
-        { width: 22 }, { width: 8  }, { width: 13 },
-        { width: 16 }, { width: 10 }, { width: 10 },
-        { width: 22 }, { width: 16 }, { width: 14 },
-        { width: 14 }, { width: 11 }, { width: 12 },
+        { width: 6 }, { width: 30 }, { width: 9 },
+        { width: 14 }, { width: 22 }, { width: 10 },
+        { width: 28 }, { width: 13 }, { width: 13 },
+        { width: 14 },
       ]
 
       const FNT  = 'TH Sarabun New'
       const fFill   = (c) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } })
       const fBorder = (s = 'thin') => ({ top: { style: s }, bottom: { style: s }, left: { style: s }, right: { style: s } })
-      const fillRow = (row, argb) => { for (let c = 1; c <= N; c++) row.getCell(c).fill = fFill(argb) }
 
-      // ─ Document header (rows 1-3)
-      const docHeaders = [
-        { left: 'ระบบ IRIS', center: 'มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี', right: `ที่พิมพ์: ${dateStr}`, h: 26, cSz: 12 },
-        { left: '',          center: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',     right: '',                  h: 20, cSz: 11 },
-        { left: '',          center: 'รายงานเอกสารใบประกาศ — ระบบ IRIS',        right: '',                  h: 24, cSz: 13 },
-      ]
-      docHeaders.forEach(({ left, center, right, h, cSz }, ri) => {
-        const row = ws.addRow([left, '', '', center, '', '', '', '', '', right, '', ''])
-        row.height = h
-        const rn = ri + 1
-        ws.mergeCells(rn, 1, rn, 3)
-        ws.mergeCells(rn, 4, rn, 9)
-        ws.mergeCells(rn, 10, rn, 12)
-        row.getCell(1).style  = { font: { name: FNT, bold: true, size: 11, color: { argb: 'FF1B2631' } }, alignment: { horizontal: 'left',   vertical: 'middle' } }
-        row.getCell(4).style  = { font: { name: FNT, bold: true, size: cSz, color: { argb: 'FF1B2631' } }, alignment: { horizontal: 'center', vertical: 'middle' } }
-        row.getCell(10).style = { font: { name: FNT, size: 9,    color: { argb: 'FF64748B' } },           alignment: { horizontal: 'right',  vertical: 'middle' } }
+      const addMergedRow = (values, height, styles = {}) => {
+        const row = ws.addRow(values)
+        row.height = height
+        ws.mergeCells(row.number, 1, row.number, 2)
+        ws.mergeCells(row.number, 3, row.number, 7)
+        ws.mergeCells(row.number, 8, row.number, 10)
+        row.getCell(1).style = styles.left || {}
+        row.getCell(3).style = styles.center || {}
+        row.getCell(10).style = styles.right || {}
+        return row
+      }
+
+      addMergedRow(['ระบบ IRIS', '', 'มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี', '', '', '', '', `วันที่พิมพ์ : ${dateStr}`, '', ''], 21, {
+        left: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'left', vertical: 'middle' } },
+        center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
+        right: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
       })
+      addMergedRow(['', '', 'รายงานเอกสารใบประกาศ', '', '', '', '', '', '', ''], 21, {
+        center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
+      })
+      addMergedRow(['', '', 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี', '', '', '', '', '', '', ''], 21, {
+        center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
+      })
+      addMergedRow([`รูปแบบ : ${modeLabels[exportMode]}`, '', '', '', '', '', '', `รวมทั้งหมด : ${docs.length} รายการ`, '', ''], 21, {
+        left: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
+        right: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
+      })
+      const filterRow = ws.addRow([`เงื่อนไข : ${exportFilters}`, ...Array(N - 1).fill('')])
+      filterRow.height = 28
+      ws.mergeCells(filterRow.number, 1, filterRow.number, N)
+      filterRow.getCell(1).style = { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle', wrapText: true } }
 
-      // ─ Info row (row 4)
-      const r4 = ws.addRow([`รูปแบบรายงาน: ${modeLabels[exportMode]}`, '', '', `รวมทั้งหมด: ${docs.length} รายการ`, '', '', '', '', '', '', '', ''])
-      r4.height = 18
-      ws.mergeCells(r4.number, 1, r4.number, 3)
-      ws.mergeCells(r4.number, 4, r4.number, 12)
-      r4.getCell(1).style = { font: { name: FNT, size: 10, color: { argb: 'FF1B2631' } },             alignment: { horizontal: 'left', vertical: 'middle' } }
-      r4.getCell(4).style = { font: { name: FNT, size: 10, bold: true, color: { argb: 'FF1B2631' } }, alignment: { horizontal: 'left', vertical: 'middle' } }
-
-      // ─ Spacer
       const spacer = ws.addRow(Array(N).fill(''))
-      spacer.height = 5
-      fillRow(spacer, 'FFFFFFFF')
+      spacer.height = 4
 
       // ─ Column label row
-      const COL_LABELS = ['ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของเอกสาร', 'บทบาท', 'ระดับการศึกษา', 'สาขาวิชา', 'อาจารย์ที่ปรึกษา', 'วันที่ออกใบประกาศ', 'วันหมดอายุ', 'คงเหลือ (วัน)', 'สถานะ']
+      const COL_LABELS = ['ลำดับ', 'ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของเอกสาร', 'ระดับ', 'สาขาวิชา', 'วันที่ออก', 'วันหมดอายุ', 'สถานะ']
       const addTableHeader = () => {
         const hr = ws.addRow(COL_LABELS)
-        hr.height = 26
+        hr.height = 24
         const s = {
-          font: { name: FNT, bold: true, size: 10, color: { argb: 'FF0D2D3E' } },
-          fill: fFill('FF42B5E1'),
+          font: { name: FNT, bold: true, size: 14, color: { argb: 'FF111827' } },
+          fill: fFill('FFE5E7EB'),
           alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
-          border: fBorder('medium'),
+          border: fBorder('thin'),
         }
         for (let c = 1; c <= N; c++) hr.getCell(c).style = s
       }
 
-      const docToRow = (doc) => [
+      const docToRow = (doc, index) => [
+        index + 1,
         doc.title || '',
         doc.doc_type || '',
         doc.owner_student_id || '',
         doc.owner_name || '',
-        roleLabel[doc.owner_role] || doc.owner_role || '',
         degreeLabel[doc.owner_degree_level] || '',
         doc.owner_department || '',
-        doc.advisor_name || '',
         doc.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '',
         doc.no_expire ? 'ไม่มีวันหมดอายุ' : (doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : ''),
-        doc.no_expire ? '' : (doc.days_remaining ?? ''),
         doc.no_expire ? 'ไม่มีวันหมดอายุ' : (statusLabel[computedStatus(doc)] || doc.status || ''),
       ]
 
       const addDataRows = (docList) => {
         docList.forEach((doc, i) => {
-          const dr = ws.addRow(docToRow(doc))
-          dr.height = 16
-          const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFE0F4FB'
+          const dr = ws.addRow(docToRow(doc, i))
+          dr.height = 21
+          const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC'
           const base = {
-            font: { name: FNT, size: 10, color: { argb: 'FF1B2631' } },
+            font: { name: FNT, size: 12, color: { argb: 'FF1B2631' } },
             fill: fFill(bg),
-            border: { bottom: { style: 'hair' }, left: { style: 'hair' }, right: { style: 'hair' } },
+            border: fBorder('thin'),
           }
           for (let c = 1; c <= N; c++) {
-            dr.getCell(c).style = { ...base, alignment: { vertical: 'middle', horizontal: c === 11 ? 'center' : 'left' } }
+            dr.getCell(c).style = {
+              ...base,
+              alignment: { vertical: 'middle', horizontal: [1, 3, 4, 6, 8, 9, 10].includes(c) ? 'center' : 'left', wrapText: [2, 5, 7, 10].includes(c) },
+            }
           }
         })
       }
@@ -649,7 +895,12 @@ const handleExport = async () => {
         const sr = ws.addRow([`  ${label}  (${count} รายการ)`, ...Array(N - 1).fill('')])
         sr.height = 22
         ws.mergeCells(sr.number, 1, sr.number, N)
-        sr.getCell(1).style = { font: { name: FNT, bold: true, size: 10, color: { argb: 'FFFFFFFF' } }, fill: fFill('FF1A5276'), alignment: { horizontal: 'left', vertical: 'middle' } }
+        sr.getCell(1).style = {
+          font: { name: FNT, bold: true, size: 12, color: { argb: 'FF111827' } },
+          fill: fFill('FFF1F5F9'),
+          alignment: { horizontal: 'left', vertical: 'middle' },
+          border: fBorder('thin'),
+        }
       }
 
       const buildGrouped = (allDocs, keyFn, labelFn, orderedKeys = []) => {
@@ -667,28 +918,27 @@ const handleExport = async () => {
         }
       }
 
-      let suffix = 'all'
       if (exportMode === 'all') {
         addTableHeader(); addDataRows(docs)
       } else if (exportMode === 'role') {
-        suffix = 'by_role'
         buildGrouped(docs, d => d.owner_role || 'other', k => roleLabel[k] || k, ['student', 'advisor', 'staff', 'admin', 'executive'])
       } else if (exportMode === 'degree') {
-        suffix = 'by_degree'
         buildGrouped(docs,
           d => d.owner_role === 'student' ? (d.owner_degree_level || 'bachelor') : (d.owner_role || 'other'),
           k => k in degreeLabel ? `นักศึกษา ${degreeLabel[k]}` : (roleLabel[k] || k),
           ['bachelor', 'master', 'doctoral', 'advisor', 'staff'])
       } else if (exportMode === 'branch') {
-        suffix = 'by_branch'
         buildGrouped(docs, d => d.owner_department || 'ไม่ระบุสาขา', k => k, Object.values(branchesByDegree).flat())
       }
+
+      const filenameParts = ['IRIS', 'ใบประกาศ', compactDate(now), ...scopeFileParts(), modeLabels[exportMode]]
+      const exportFilename = `${filenameParts.map(safeFilePart).filter(Boolean).join('_')}.xlsx`
 
       const buffer = await wb.xlsx.writeBuffer()
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
-      a.href = url; a.download = `iris_documents_${suffix}_${now.toISOString().slice(0, 10)}.xlsx`; a.click()
+      a.href = url; a.download = exportFilename; a.click()
       setTimeout(() => URL.revokeObjectURL(url), 10000)
       toast.success(`ส่งออก ${docs.length} รายการสำเร็จ`)
       onClose()
@@ -697,24 +947,58 @@ const handleExport = async () => {
   }
 
   const opts = [
-    { key: 'all',    icon: '📋', label: 'ทั้งหมด',              desc: 'ส่งออกเอกสารทั้งหมดในไฟล์เดียว' },
-    { key: 'role',   icon: '👥', label: 'แบ่งตามบทบาท',         desc: 'แยกหมวด: นักศึกษา / อาจารย์ / เจ้าหน้าที่' },
-    { key: 'degree', icon: '🎓', label: 'แบ่งตามระดับการศึกษา', desc: 'แยกหมวด: ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่' },
-    { key: 'branch', icon: '🏫', label: 'แบ่งตามสาขาวิชา',      desc: 'แยกหมวดตามสาขาวิชาทุกสาขา' },
-  ]
+    { key: 'all',    label: 'รายการเดียว ไม่แบ่งกลุ่ม', desc: 'เรียงข้อมูลทั้งหมดตามตัวกรองที่เลือกไว้ในชีตเดียว' },
+    { key: 'role',   label: 'จัดกลุ่มตามบทบาท',         desc: 'แยกหมวดนักศึกษา / อาจารย์ / เจ้าหน้าที่ / กลุ่มอื่น' },
+    { key: 'degree', label: 'จัดกลุ่มตามระดับปริญญา', desc: 'แยกหมวด ป.ตรี / ป.โท / ป.เอก และกลุ่มอื่น' },
+    { key: 'branch', label: 'จัดกลุ่มตามสาขาวิชา',      desc: 'เหมาะเมื่อส่งออกหลายสาขาในไฟล์เดียว' },
+  ].filter(opt => !(filterBranch && opt.key === 'branch'))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
             <h2 className="text-base font-semibold text-slate-800">ส่งออกข้อมูล Excel</h2>
-            <p className="text-xs text-slate-400 mt-0.5">เลือกรูปแบบการจัดกลุ่มในไฟล์ที่ส่งออก</p>
+            <p className="text-xs text-slate-400 mt-0.5">เลือกข้อมูลก่อน แล้วกำหนดการจัดรูปแบบในไฟล์</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl ml-4">✕</button>
         </div>
-        <div className="p-5 space-y-2">
+        <div className="p-5 space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Download size={16} className="text-[#42b5e1]" />
+              <div>
+                <p className="text-sm font-semibold text-slate-700">เลือกข้อมูล</p>
+                <p className="text-xs text-slate-400">เลือกเฉพาะกลุ่มที่ต้องการได้ เช่น นักศึกษา ป.ตรี หรือสาขาเดียว</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select className="input-field text-sm" value={filterRole} onChange={e => setFilterRole(e.target.value)}>
+                <option value="">ทุกกลุ่มผู้ใช้</option>
+                <option value="student">นักศึกษา</option>
+                <option value="advisor">อาจารย์</option>
+                <option value="staff">เจ้าหน้าที่</option>
+                <option value="admin">ผู้ดูแลระบบ</option>
+                <option value="executive">ผู้บริหาร</option>
+              </select>
+              <select className="input-field text-sm" value={filterDegree} onChange={e => setFilterDegree(e.target.value)}>
+                <option value="">ทุกระดับปริญญา</option>
+                <option value="bachelor">ป.ตรี</option>
+                <option value="master">ป.โท</option>
+                <option value="doctoral">ป.เอก</option>
+              </select>
+              <select className="input-field text-sm sm:col-span-2" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
+                <option value="">ทุกสาขาวิชา</option>
+                {exportBranchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <ClipboardList size={16} className="text-[#42b5e1]" />
+              <p className="text-sm font-semibold text-slate-700">จัดรูปแบบในไฟล์ Excel</p>
+            </div>
           {opts.map(opt => (
             <label key={opt.key}
               className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all
@@ -725,7 +1009,10 @@ const handleExport = async () => {
                 checked={exportMode === opt.key}
                 onChange={() => setExportMode(opt.key)}
                 className="accent-[#42b5e1] flex-shrink-0" />
-              <span className="text-xl flex-shrink-0">{opt.icon}</span>
+              {(() => {
+                const Icon = { all: ClipboardList, role: Users, degree: GraduationCap, branch: School }[opt.key] || ClipboardList
+                return <Icon size={20} className="text-[#42b5e1] flex-shrink-0" />
+              })()}
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-700">{opt.label}</p>
                 <p className="text-xs text-slate-400 mt-0.5">{opt.desc}</p>
@@ -736,6 +1023,7 @@ const handleExport = async () => {
               )}
             </label>
           ))}
+          </div>
         </div>
         <div className="px-5 pb-5 pt-1 border-t border-slate-50 flex gap-3 mt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
@@ -965,15 +1253,18 @@ export default function DocumentsPage() {
   const [docs, setDocs]         = useState([])
   const [docTypes, setDocTypes] = useState([])
   const [advisors, setAdvisors] = useState([])
+  const [advisorRelations, setAdvisorRelations] = useState({})
   const [summary, setSummary]   = useState(null)
   const [total, setTotal]       = useState(0)
   const [loading, setLoading]   = useState(true)
 
   const [activeTab, setActiveTab]       = useState('all')
   const [search, setSearch]             = useState('')
+  const debouncedSearch = useDebouncedValue(search, 350)
   const [docType, setDocType]           = useState('')
   const [status, setStatus]             = useState('')
   const [advisorFilter, setAdvisorFilter] = useState('')
+  const [degreeFilter, setDegreeFilter] = useState('')
   const [branchFilter, setBranchFilter] = useState('')
   const [sort, setSort]                 = useState({ by: 'created_at', dir: 'desc' })
   const [page, setPage]                 = useState(1)
@@ -984,13 +1275,41 @@ export default function DocumentsPage() {
   useEffect(() => {
     docTypeService.getAll().then(r => setDocTypes(r.data || [])).catch(() => {})
     if (isAdmin) {
-      userService.getAdvisors().then(r => setAdvisors(r.data?.advisors || [])).catch(() => {})
+      userService.getAdvisors({ include_relations: 1 }).then(r => {
+        setAdvisors(r.data?.advisors || [])
+        setAdvisorRelations(r.data?.relations || {})
+      }).catch(() => {})
       documentService.getSummary().then(r => setSummary(r.data)).catch(() => {})
     }
   }, [isAdmin])
 
   // Reset page when filters change (not when page itself changes)
-  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, branchFilter, sort])
+  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, degreeFilter, branchFilter, sort])
+
+  useEffect(() => {
+    const allowedBranches = degreeFilter ? branchesByDegree[degreeFilter] || [] : allBranchOptions
+    if (branchFilter && !allowedBranches.includes(branchFilter)) setBranchFilter('')
+  }, [degreeFilter, branchFilter])
+
+  useEffect(() => {
+    const tabParams = tabs.find(t => t.key === activeTab)?.params || {}
+    if (tabParams.owner_role && tabParams.owner_role !== 'student') {
+      setDegreeFilter('')
+      setBranchFilter('')
+      setAdvisorFilter('')
+    }
+    if (tabParams.degree_level && degreeFilter) setDegreeFilter('')
+  }, [activeTab, degreeFilter])
+
+  useEffect(() => {
+    if (!advisorFilter) return
+    const relation = advisorRelations[advisorFilter]
+    if (!relation) return
+    const activeDegree = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : degreeFilter
+    const degreeMismatch = activeDegree && relation.degrees.length > 0 && !relation.degrees.includes(activeDegree)
+    const branchMismatch = branchFilter && relation.branches.length > 0 && !relation.branches.includes(branchFilter)
+    if (degreeMismatch || branchMismatch) setAdvisorFilter('')
+  }, [advisorFilter, advisorRelations, activeTab, degreeFilter, branchFilter])
 
   const fetchDocs = useCallback(async () => {
     setLoading(true)
@@ -998,10 +1317,11 @@ export default function DocumentsPage() {
       const tabParams = tabs.find(t => t.key === activeTab)?.params || {}
       const params = {
         ...tabParams,
-        search, doc_type: docType, status,
+        search: debouncedSearch, doc_type: docType, status,
         sort_by: sort.by, sort_dir: sort.dir,
         page, limit: LIMIT,
         ...(advisorFilter && { advisor_id: advisorFilter }),
+        ...(degreeFilter && !tabParams.degree_level && { degree_level: degreeFilter }),
         ...(branchFilter  && { department: branchFilter }),
       }
       const { data } = await documentService.getAll(params)
@@ -1009,7 +1329,7 @@ export default function DocumentsPage() {
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [activeTab, search, docType, status, sort, page, advisorFilter, branchFilter])
+  }, [activeTab, debouncedSearch, docType, status, sort, page, advisorFilter, degreeFilter, branchFilter])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
@@ -1024,7 +1344,23 @@ export default function DocumentsPage() {
     setSort(prev => prev.by === key ? { by: key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { by: key, dir: 'desc' })
   }
 
-  const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setBranchFilter('') }
+  const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setDegreeFilter(''); setBranchFilter('') }
+
+  const handleDegreeChange = (value) => {
+    setDegreeFilter(value)
+    setAdvisorFilter('')
+    if (branchFilter && value && !(branchesByDegree[value] || []).includes(branchFilter)) {
+      setBranchFilter('')
+    }
+  }
+
+  const handleBranchChange = (value) => {
+    setBranchFilter(value)
+    setAdvisorFilter('')
+    if (!value || degreeTabKey) return
+    const inferredDegree = getDegreeForBranch(value)
+    if (inferredDegree && inferredDegree !== degreeFilter) setDegreeFilter(inferredDegree)
+  }
 
   const refreshAll = useCallback(() => {
     fetchDocs()
@@ -1037,8 +1373,19 @@ export default function DocumentsPage() {
   const showGroup     = isAdmin && activeTab === 'all'
   const showAdvisorFilter = isAdmin && isStudentTab
   const degreeTabKey  = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : null
-  const showBranchFilter = (isAdmin || isAdvisor) && degreeTabKey != null
-  const branchOptions = degreeTabKey ? branchesByDegree[degreeTabKey] : []
+  const showDegreeFilter = (isAdmin || isAdvisor) && activeTab === 'all'
+  const branchFilterDegree = degreeTabKey || degreeFilter
+  const showBranchFilter = (isAdmin || isAdvisor) && (activeTab === 'all' || degreeTabKey != null)
+  const branchOptions = branchFilterDegree ? branchesByDegree[branchFilterDegree] || [] : allBranchOptions
+  const currentTabParams = tabs.find(t => t.key === activeTab)?.params || {}
+  const filteredAdvisors = advisors.filter(advisor => {
+    const relation = advisorRelations[advisor.user_id]
+    if (!relation) return !degreeFilter && !branchFilter && !degreeTabKey
+    const activeDegree = degreeTabKey || degreeFilter
+    const degreeOk = !activeDegree || relation.degrees.length === 0 || relation.degrees.includes(activeDegree)
+    const branchOk = !branchFilter || relation.branches.length === 0 || relation.branches.includes(branchFilter)
+    return degreeOk && branchOk
+  })
 
   const pageTitle = isAdmin ? 'ใบประกาศทั้งหมด'
     : isAdvisor             ? 'ใบประกาศนักศึกษาในที่ปรึกษา'
@@ -1104,14 +1451,22 @@ export default function DocumentsPage() {
               <option value="expiring_soon">ใกล้หมดอายุ</option>
               <option value="expired">หมดอายุ</option>
             </select>
+            {showDegreeFilter && (
+              <select className="input-field w-full sm:w-auto sm:max-w-[170px]" value={degreeFilter} onChange={e => handleDegreeChange(e.target.value)}>
+                <option value="">ทุกระดับปริญญา</option>
+                <option value="bachelor">ป.ตรี</option>
+                <option value="master">ป.โท</option>
+                <option value="doctoral">ป.เอก</option>
+              </select>
+            )}
             {showAdvisorFilter && advisors.length > 0 && (
               <select className="input-field w-full sm:w-auto sm:max-w-[180px]" value={advisorFilter} onChange={e => setAdvisorFilter(e.target.value)}>
                 <option value="">ทุกอาจารย์</option>
-                {advisors.map(a => <option key={a.user_id} value={a.user_id}>{a.name}</option>)}
+                {filteredAdvisors.map(a => <option key={a.user_id} value={a.user_id}>{a.name}</option>)}
               </select>
             )}
             {showBranchFilter && (
-              <select className="input-field w-full sm:w-auto sm:max-w-[220px]" value={branchFilter} onChange={e => setBranchFilter(e.target.value)}>
+              <select className="input-field w-full sm:w-auto sm:max-w-[220px]" value={branchFilter} onChange={e => handleBranchChange(e.target.value)}>
                 <option value="">ทุกสาขา</option>
                 {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
@@ -1308,6 +1663,10 @@ export default function DocumentsPage() {
         <ExportModal
           onClose={() => setModal(null)}
           search={search} docType={docType} status={status} sort={sort}
+          ownerRole={currentTabParams.owner_role || ''}
+          degreeLevel={currentTabParams.degree_level || degreeFilter}
+          branch={branchFilter}
+          advisorId={advisorFilter}
         />
       )}
       {modal === 'upload' && (

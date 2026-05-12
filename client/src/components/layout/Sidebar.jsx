@@ -1,112 +1,112 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { 
-  Home, 
-  FileText, 
-  Users, 
-  Megaphone, 
-  Tags, 
-  Trash2, 
-  History, 
-  Settings, 
-  Mail, 
-  BarChart3, 
-  LogOut 
+import {
+  Home,
+  FileText,
+  ListTodo,
+  Users,
+  Megaphone,
+  Tags,
+  Trash2,
+  History,
+  Settings,
+  Mail,
+  BarChart3,
+  LogOut,
 } from 'lucide-react'
-import { useAuthStore } from '../../stores/authStore'
-import { authService } from '../../services/api'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '../../stores/authStore'
+import { useLanguage } from '../../contexts/LanguageContext'
+import { authService } from '../../services/api'
 import irisLogo from '../../assets/LOGO-IRIS.png'
 
 const navByRole = {
   student: [
-    { to: '/dashboard',  label: 'หน้าแรก' },
-    { to: '/documents',  label: 'ใบประกาศของฉัน' },
+    { to: '/dashboard', labelKey: 'nav.home' },
+    { to: '/student/tasks', labelKey: 'nav.studentTasks' },
+    { to: '/documents', labelKey: 'nav.myCertificates' },
+    { to: '/student/activity', labelKey: 'nav.studentActivity' },
   ],
   advisor: [
-    { to: '/dashboard',  label: 'หน้าแรก' },
-    { to: '/documents',  label: 'ใบประกาศ RI/IRB' },
+    { to: '/dashboard', labelKey: 'nav.home' },
+    { to: '/documents', labelKey: 'nav.advisorDocuments' },
   ],
   staff: [
-    { to: '/dashboard',  label: 'หน้าแรก' },
-    { to: '/documents',  label: 'เอกสารของฉัน' },
+    { to: '/dashboard', labelKey: 'nav.home' },
+    { to: '/documents', labelKey: 'nav.myDocuments' },
   ],
   admin: [
-    { to: '/dashboard',                label: 'หน้าแรก' },
-    { to: '/documents',                label: 'ใบประกาศทั้งหมด' },
-    { to: '/admin/users',              label: 'จัดการผู้ใช้' },
-    { to: '/admin/announcements',      label: 'จัดการประกาศ' },
-    { to: '/admin/doc-types',          label: 'ประเภทใบประกาศ' },
-    { to: '/admin/trash',              label: 'ถังขยะ' },
-    { to: '/admin/logs',               label: 'ประวัติระบบ' },
-    { to: '/admin/settings',           label: 'ตั้งค่าระบบ' },
-    { to: '/admin/email-templates',    label: 'จัดการ Email Template' },
+    { to: '/dashboard', labelKey: 'nav.home' },
+    { to: '/documents', labelKey: 'nav.allCertificates' },
+    { to: '/admin/users', labelKey: 'nav.users' },
+    { to: '/admin/announcements', labelKey: 'nav.announcements' },
+    { to: '/admin/doc-types', labelKey: 'nav.documentTypes' },
+    { to: '/admin/trash', labelKey: 'nav.trash' },
+    { to: '/admin/logs', labelKey: 'nav.logs' },
+    { to: '/admin/settings', labelKey: 'nav.settings' },
+    { to: '/admin/email-templates', labelKey: 'nav.emailTemplates' },
   ],
   executive: [
-    { to: '/executive/overview',  label: 'ข้อมูลภาพรวมในคณะ' },
-    { to: '/executive/branches',  label: 'สรุปรายงานรายสาขาวิชา' },
-    { to: '/executive/documents', label: 'เอกสารในคณะทั้งหมด' },
+    { to: '/executive/overview', labelKey: 'nav.executiveOverview' },
+    { to: '/executive/branches', labelKey: 'nav.executiveBranches' },
+    { to: '/executive/documents', labelKey: 'nav.executiveDocuments' },
   ],
-}
-
-const roleLabel = {
-  student:   'นักศึกษา',
-  advisor:   'อาจารย์',
-  staff:     'เจ้าหน้าที่',
-  admin:     'ผู้ดูแลระบบ',
-  executive: 'ผู้บริหาร',
 }
 
 export default function Sidebar({ onClose }) {
   const { user, logout } = useAuthStore()
+  const { t } = useLanguage()
   const navigate = useNavigate()
   const items = navByRole[user?.role] || []
 
   const handleLogout = async () => {
-    try { await authService.logout() } finally {
-      logout(); navigate('/')
-      toast.success('ออกจากระบบสำเร็จ')
+    try {
+      await authService.logout()
+    } finally {
+      logout()
+      navigate('/')
+      toast.success(t('common.logoutSuccess'))
     }
   }
 
   return (
-    <aside className="w-72 md:w-64 flex flex-col font-sans select-none transition-colors duration-300 h-screen overflow-hidden bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800">
-
-      {/* Logo Section */}
-      <div className="px-5 py-5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+    <aside className="flex h-screen w-72 select-none flex-col overflow-hidden border-r border-slate-200 bg-white font-sans transition-colors duration-300 dark:border-slate-800 dark:bg-slate-950 md:w-64">
+      <div className="shrink-0 border-b border-slate-100 px-5 py-5 dark:border-slate-800">
         <div className="flex items-center gap-3">
-          <img src={irisLogo} alt="FIET-IRIS Logo" className="h-10 w-auto object-contain flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-lg font-extrabold text-slate-900 dark:text-white leading-none">FIET IRIS</p>
-            <p className="text-[11px] font-semibold leading-tight text-slate-500 dark:text-slate-400 mt-1">Integrity Research Information System</p>
+          <img src={irisLogo} alt="FIET-IRIS Logo" className="h-10 w-auto shrink-0 object-contain" />
+          <div className="min-w-0 flex-1">
+            <p className="text-lg font-extrabold leading-none text-slate-900 dark:text-white">FIET IRIS</p>
+            <p className="mt-1 text-[11px] font-semibold leading-tight text-slate-500 dark:text-slate-400">Integrity Research Information System</p>
           </div>
         </div>
       </div>
 
-      {/* Navigation Area - Scrollable but hidden scrollbar */}
-      <nav className="flex-1 px-3 py-4 overflow-y-auto scrollbar-hide">
-        <p className="px-3 pb-2 text-[11px] font-bold text-slate-400 dark:text-slate-500">เมนูหลัก</p>
+      <nav className="scrollbar-hide flex-1 overflow-y-auto px-3 py-4">
+        <p className="px-3 pb-2 text-[11px] font-bold text-slate-400 dark:text-slate-500">{t('common.mainMenu')}</p>
         <div className="space-y-1">
           {items.map(item => (
-            <NavLink key={item.to} to={item.to}
+            <NavLink
+              key={item.to}
+              to={item.to}
               onClick={onClose}
               className={({ isActive }) =>
-                `group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
                   isActive
                     ? 'bg-primary-50 text-primary-800 dark:bg-primary-900/30 dark:text-primary-200'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-slate-900'
+                    : 'text-slate-500 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100'
                 }`
-              }>
+              }
+            >
               {({ isActive }) => (
                 <>
-                  {isActive && <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-primary-500" />}
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors duration-200 ${
+                  {isActive && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary-500" />}
+                  <div className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors duration-200 ${
                     isActive
                       ? 'bg-primary-100 text-primary-700 dark:bg-primary-800/60 dark:text-primary-200'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400 group-hover:text-primary-600 dark:group-hover:text-primary-300'
+                      : 'bg-slate-100 text-slate-500 group-hover:text-primary-600 dark:bg-slate-900 dark:text-slate-400 dark:group-hover:text-primary-300'
                   }`}>
                     {getIcon(item.to, isActive)}
                   </div>
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{t(item.labelKey)}</span>
                 </>
               )}
             </NavLink>
@@ -114,21 +114,22 @@ export default function Sidebar({ onClose }) {
         </div>
       </nav>
 
-      {/* User & Logout Section - Fixed at the bottom */}
-      <div className="px-4 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 flex-shrink-0">
-        <div className="flex items-center gap-3 mb-3 px-1">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 bg-primary-600 text-white">
+      <div className="shrink-0 border-t border-slate-100 bg-slate-50/70 px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
+        <div className="mb-3 flex items-center gap-3 px-1">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-bold text-white">
             {user?.name?.[0] || 'U'}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{user?.name}</p>
-            <p className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5">{roleLabel[user?.role]}</p>
+            <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{user?.name}</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-slate-400 dark:text-slate-500">{t(`roles.${user?.role || 'user'}`)}</p>
           </div>
         </div>
-        <button onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:text-red-300 dark:hover:border-red-900 active:scale-95">
+        <button
+          onClick={handleLogout}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-semibold text-slate-500 transition-all duration-200 hover:border-red-200 hover:bg-red-50 hover:text-red-600 active:scale-95 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400 dark:hover:border-red-900 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+        >
           <LogOut size={14} strokeWidth={2.5} />
-          <span>Logout</span>
+          <span>{t('common.logout')}</span>
         </button>
       </div>
     </aside>
@@ -138,41 +139,21 @@ export default function Sidebar({ onClose }) {
 function getIcon(to, isActive) {
   const iconProps = {
     size: 20,
-    strokeWidth: isActive ? 2.5 : 2
-  };
-
-  if (to.includes('dashboard') || to === '/executive/overview') {
-    return <Home {...iconProps} />
-  }
-  if (to.includes('documents')) {
-    return <FileText {...iconProps} />
-  }
-  if (to.includes('admin/users')) {
-    return <Users {...iconProps} />
-  }
-  if (to.includes('admin/announcements')) {
-    return <Megaphone {...iconProps} />
-  }
-  if (to.includes('admin/doc-types')) {
-    return <Tags {...iconProps} />
-  }
-  if (to.includes('admin/trash')) {
-    return <Trash2 {...iconProps} />
-  }
-  if (to.includes('admin/logs')) {
-    return <History {...iconProps} />
-  }
-  if (to.includes('admin/settings')) {
-    return <Settings {...iconProps} />
-  }
-  if (to.includes('admin/email-templates')) {
-    return <Mail {...iconProps} />
-  }
-  if (to.includes('executive/branches')) {
-    return <BarChart3 {...iconProps} />
+    strokeWidth: isActive ? 2.5 : 2,
   }
 
-  return (
-    <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-white/25'}`} />
-  )
+  if (to.includes('dashboard') || to === '/executive/overview') return <Home {...iconProps} />
+  if (to.includes('student/tasks')) return <ListTodo {...iconProps} />
+  if (to.includes('student/activity')) return <History {...iconProps} />
+  if (to.includes('documents')) return <FileText {...iconProps} />
+  if (to.includes('admin/users')) return <Users {...iconProps} />
+  if (to.includes('admin/announcements')) return <Megaphone {...iconProps} />
+  if (to.includes('admin/doc-types')) return <Tags {...iconProps} />
+  if (to.includes('admin/trash')) return <Trash2 {...iconProps} />
+  if (to.includes('admin/logs')) return <History {...iconProps} />
+  if (to.includes('admin/settings')) return <Settings {...iconProps} />
+  if (to.includes('admin/email-templates')) return <Mail {...iconProps} />
+  if (to.includes('executive/branches')) return <BarChart3 {...iconProps} />
+
+  return <div className={`h-1.5 w-1.5 rounded-full ${isActive ? 'bg-white' : 'bg-white/25'}`} />
 }

@@ -6,6 +6,8 @@ import LoginPage           from './pages/auth/LoginPage'
 import ChangePasswordPage  from './pages/auth/ChangePasswordPage'
 import DashboardPage       from './pages/dashboard/DashboardPage'
 import DocumentsPage       from './pages/documents/DocumentsPage'
+import StudentTasksPage    from './pages/student/StudentTasksPage'
+import StudentActivityPage from './pages/student/StudentActivityPage'
 import AdminUsersPage          from './pages/admin/AdminUsersPage'
 import AdminLogsPage           from './pages/admin/AdminLogsPage'
 import AdminAnnouncementsPage  from './pages/admin/AdminAnnouncementsPage'
@@ -38,6 +40,8 @@ export default function App() {
       <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
         <Route path="dashboard"  element={<DashboardPage />} />
         <Route path="documents"  element={<DocumentsPage />} />
+        <Route path="student/tasks" element={<PrivateRoute roles={['student']}><StudentTasksPage /></PrivateRoute>} />
+        <Route path="student/activity" element={<PrivateRoute roles={['student']}><StudentActivityPage /></PrivateRoute>} />
 
         {/* Admin */}
         <Route path="admin/users"          element={<PrivateRoute roles={['admin']}><AdminUsersPage /></PrivateRoute>} />
