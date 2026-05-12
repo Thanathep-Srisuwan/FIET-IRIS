@@ -4,6 +4,16 @@ const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 const { sendMail, permanentDeleteTemplate } = require('../utils/mailer')
 
+const ensureUserProgramColumn = async (pool) => {
+  await pool.request().query(`
+    IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='department')
+       AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      EXEC sp_rename 'dbo.USERS.department', 'program', 'COLUMN';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
+  `)
+}
+
 const ensureNoExpireColumn = async (pool) => {
   await pool.request().query(`
     IF NOT EXISTS (
@@ -163,6 +173,7 @@ const logDocumentTimeline = async (pool, { doc_id, actor_id = null, event_type, 
 }
 
 const getAccessibleDocument = async (pool, docId, user) => {
+  await ensureUserProgramColumn(pool)
   const result = await pool.request()
     .input('doc_id', sql.Int, docId)
     .input('user_id', sql.Int, user.user_id)
@@ -170,7 +181,8 @@ const getAccessibleDocument = async (pool, docId, user) => {
     .query(`
       SELECT d.*, u.name AS owner_name, u.email AS owner_email,
              u.student_id AS owner_student_id, u.role AS owner_role,
-             u.degree_level AS owner_degree_level, u.department AS owner_department,
+             u.degree_level AS owner_degree_level, u.program AS owner_program,
+             u.affiliation AS owner_affiliation,
              a.name AS advisor_name,
              CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining
       FROM dbo.DOCUMENTS d
@@ -193,15 +205,17 @@ const getDocuments = async (req, res) => {
     const {
       search, doc_type, status,
       page = 1, limit = 15,
-      degree_level, advisor_id, owner_role, department,
+      degree_level, advisor_id, owner_role,
       sort_by, sort_dir,
     } = req.query
+    const program = req.query.program || req.query.department
     const { user_id, role } = req.user
     const parsedPage  = Math.max(1, parseInt(page)  || 1)
     const parsedLimit = Math.min(200, Math.max(1, parseInt(limit) || 15))
     const offset = (parsedPage - 1) * parsedLimit
 
     const pool = await getPool()
+    await ensureUserProgramColumn(pool)
     await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
     await ensureDocTypeColumn(pool)
@@ -239,9 +253,9 @@ const getDocuments = async (req, res) => {
       where += ' AND u.role = @owner_role'
       addParam('owner_role', sql.NVarChar, owner_role)
     }
-    if (department && (role === 'admin' || role === 'advisor')) {
-      where += ' AND u.department = @department'
-      addParam('department', sql.NVarChar, department)
+    if (program && (role === 'admin' || role === 'advisor')) {
+      where += ' AND u.program = @program'
+      addParam('program', sql.NVarChar, program)
     }
 
     const sortMap = {
@@ -268,7 +282,7 @@ const getDocuments = async (req, res) => {
         CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining,
         u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email,
         u.student_id AS owner_student_id, u.role AS owner_role, u.degree_level AS owner_degree_level,
-        u.department AS owner_department,
+        u.program AS owner_program,
         a.name AS advisor_name, a.user_id AS advisor_id,
         (SELECT COUNT(*) FROM dbo.DOCUMENT_FILES f WHERE f.doc_id = d.doc_id) AS file_count
       FROM dbo.DOCUMENTS d
@@ -296,6 +310,7 @@ const getDocument = async (req, res) => {
   try {
     const { id } = req.params
     const pool = await getPool()
+    await ensureUserProgramColumn(pool)
     await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
     await ensureDocumentVersioningSchema(pool)

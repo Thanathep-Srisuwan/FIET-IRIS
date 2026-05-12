@@ -37,7 +37,8 @@ CREATE TABLE dbo.USERS (
     role            NVARCHAR(10)    NOT NULL
                         CHECK (role IN ('student', 'advisor', 'admin')),
     advisor_id      INT             NULL,
-    department      NVARCHAR(100)   NULL,
+    program      NVARCHAR(100)   NULL,
+    affiliation  NVARCHAR(100)   NULL,
     phone           NVARCHAR(20)    NULL,
     is_active       BIT             NOT NULL DEFAULT 1,
     must_change_pw  BIT             NOT NULL DEFAULT 1,
@@ -267,14 +268,15 @@ GO
 -- ============================================================
 --  SEED DATA: Admin คนแรก
 -- ============================================================
-INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, department, must_change_pw)
+INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, program, affiliation, must_change_pw)
 VALUES (
     N'ผู้ดูแลระบบ',
     'admin@kmutt.ac.th',
     '$2b$12$SbW.B5e.xKZccTu57h.pkugwsiT8qmqtPb7/DaeCTaM4OTd0VEevW',
     'admin',
     NULL,
-    N'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',
+    NULL,
+    N'สำนักงานคณบดี',
     0
 );
 GO
@@ -414,27 +416,29 @@ ALTER LOGIN sa ENABLE;
 
 USE FIET_IRIS;
 
-INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, department, must_change_pw)
+INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, program, affiliation, must_change_pw)
 VALUES (
   N'อาจารย์ทดสอบ',
   'advisor.test@kmutt.ac.th',
   '$2b$12$q2r/4xnkynHYEYTMBUGp8eA6wNuogAEnq7o9dwle5OHsjBTInEF.2',
   'advisor',
   NULL,
-  N'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',
+  NULL,
+  N'สำนักงานคณบดี',
   0
 );
 
 SELECT user_id, name, email, role FROM dbo.USERS WHERE role = 'advisor';
 
-INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, department, must_change_pw)
+INSERT INTO dbo.USERS (name, email, password_hash, role, advisor_id, program, affiliation, must_change_pw)
 VALUES (
   N'นักศึกษาทดสอบ',
   'student.test@kmutt.ac.th',
   '$2b$12$q2r/4xnkynHYEYTMBUGp8eA6wNuogAEnq7o9dwle5OHsjBTInEF.2',
   'student',
   1,   -- ← เปลี่ยนเป็น user_id ของ advisor ที่เพิ่งสร้าง
-  N'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี',
+  N'ค.อ.บ. วิศวกรรมไฟฟ้า (หลักสูตร 5 ปี)',
+  NULL,
   0
 );
 
@@ -448,7 +452,11 @@ UPDATE dbo.USERS
 SET advisor_id = 2  -- user_id ของ advisor.test@kmutt.ac.th
 WHERE email = 'student.test@kmutt.ac.th';
 
-EXEC sp_rename 'dbo.USERS.branch', 'department', 'COLUMN';
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.USERS') AND name = 'branch')
+   AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.USERS') AND name = 'program')
+BEGIN
+  EXEC sp_rename 'dbo.USERS.branch', 'program', 'COLUMN';
+END
 
 SELECT user_id, name, email, must_change_pw, created_at
 FROM dbo.USERS

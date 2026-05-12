@@ -4,6 +4,18 @@ const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 const { sendMail, temporaryPasswordTemplate } = require('../utils/mailer')
 
+const ensureUserProgramColumn = async (pool) => {
+  await pool.request().query(`
+    IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='department')
+       AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      EXEC sp_rename 'dbo.USERS.department', 'program', 'COLUMN';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='affiliation')
+      ALTER TABLE dbo.USERS ADD affiliation NVARCHAR(100) NULL;
+  `)
+}
+
 // สร้าง tokens
 const generateTokens = (user) => {
   const payload = {
@@ -35,6 +47,7 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'กรุณาใช้อีเมลมหาวิทยาลัย @kmutt.ac.th เท่านั้น' })
 
     const pool = await getPool()
+    await ensureUserProgramColumn(pool)
     const result = await pool.request()
       .input('email', sql.NVarChar, email)
       .query('SELECT * FROM dbo.USERS WHERE email = @email AND is_active = 1')
@@ -65,7 +78,8 @@ const login = async (req, res) => {
         name:          user.name,
         email:         user.email,
         role:          user.role,
-        department:    user.department,
+        program:    user.program,
+        affiliation: user.affiliation,
         must_change_pw: user.must_change_pw,
       },
     })
@@ -85,6 +99,7 @@ const refresh = async (req, res) => {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET)
 
     const pool = await getPool()
+    await ensureUserProgramColumn(pool)
     const result = await pool.request()
       .input('user_id', sql.Int, decoded.user_id)
       .query('SELECT * FROM dbo.USERS WHERE user_id = @user_id AND is_active = 1')
@@ -102,6 +117,8 @@ const refresh = async (req, res) => {
         name:          user.name,
         email:         user.email,
         role:          user.role,
+        program:       user.program,
+        affiliation:   user.affiliation,
         must_change_pw: user.must_change_pw,
       },
     })

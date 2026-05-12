@@ -117,14 +117,14 @@ export default function ExecutiveDashboard() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
-            <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{t('executive.expiringBranches')}</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{t('executive.expiringPrograms')}</h2>
             {!topExpiring?.length ? (
-              <p className="py-4 text-center text-xs text-slate-400">{t('executive.noExpiringBranches')}</p>
+              <p className="py-4 text-center text-xs text-slate-400">{t('executive.noExpiringPrograms')}</p>
             ) : (
               <div className="space-y-2">
                 {topExpiring.map((item, index) => (
                   <div key={index} className="flex items-center justify-between rounded-lg p-2.5" style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
-                    <p className="max-w-[160px] truncate text-xs font-medium text-amber-800">{item.department || t('executive.unspecifiedBranch')}</p>
+                    <p className="max-w-[160px] truncate text-xs font-medium text-amber-800">{item.program || t('executive.unspecifiedProgram')}</p>
                     <span className="ml-2 flex-shrink-0 text-xs font-bold text-amber-700">{item.expiring_count} {t('executive.copies')}</span>
                   </div>
                 ))}

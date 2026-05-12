@@ -3,6 +3,8 @@ import { documentService, docTypeService, userService } from '../../services/api
 import { useAuthStore } from '../../stores/authStore'
 import toast from 'react-hot-toast'
 import useDebouncedValue from '../../hooks/useDebouncedValue'
+import useAcademicOptions from '../../hooks/useAcademicOptions'
+import { ALL_PROGRAMS, PROGRAMS_BY_DEGREE, getDegreeForProgram } from '../../constants/programs'
 import {
   Calendar,
   X,
@@ -31,41 +33,10 @@ const statusColor = {
   expired:       'bg-red-50 text-red-600 border border-red-200',
 }
 const degreeLabel = { bachelor: 'ป.ตรี', master: 'ป.โท', doctoral: 'ป.เอก' }
-const branchesByDegree = {
-  bachelor: [
-    'ครุศาสตร์โยธา',
-    'ครุศาสตร์เครื่องกล',
-    'ครุศาสตร์ไฟฟ้า',
-    'ครุศาสตร์อุตสาหการ',
-    'เทคโนโลยีการศึกษาและสื่อสารมวลชน',
-    'เทคโนโลยีการพิมพ์และบรรจุภัณฑ์',
-    'เทคโนโลยีอุตสาหกรรม',
-    'วิทยาการคอมพิวเตอร์ประยุกต์ – มัลติมีเดีย',
-  ],
-  master: [
-    'เทคโนโลยีการเรียนรู้และสื่อสารมวลชน',
-    'วิศวกรรมเครื่องกล',
-    'วิศวกรรมไฟฟ้า',
-    'วิศวกรรมโยธา',
-    'วิศวกรรมอุตสาหการ',
-    'เทคโนโลยีบรรจุภัณฑ์และนวัตกรรมการพิมพ์',
-    'คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
-  ],
-  doctoral: [
-    'นวัตกรรมการเรียนรู้และเทคโนโลยี',
-  ],
-}
+const programsByDegree = PROGRAMS_BY_DEGREE
 const roleLabel   = { student: 'นักศึกษา', advisor: 'อาจารย์', admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร', staff: 'เจ้าหน้าที่' }
-const allBranchOptions = [...new Set(Object.values(branchesByDegree).flat())]
+const allProgramOptions = ALL_PROGRAMS
 const LIMIT = 15
-
-const getDegreeForBranch = (branch) => {
-  if (!branch) return ''
-  const matches = Object.entries(branchesByDegree)
-    .filter(([, branches]) => branches.includes(branch))
-    .map(([degree]) => degree)
-  return matches.length === 1 ? matches[0] : ''
-}
 
 const computedStatus = (doc) => {
   if (doc.no_expire) return null
@@ -719,22 +690,22 @@ function DateInput({ display, iso, onChange }) {
 }
 
 // ─── Export Modal ─────────────────────────────────────────────────────────────
-function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '', branch = '', ownerRole = '', advisorId = '' }) {
+function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '', program = '', ownerRole = '', advisorId = '', programsByDegree: exportProgramsByDegree = programsByDegree, allProgramOptions: exportAllProgramOptions = allProgramOptions }) {
   const [exportMode, setExportMode] = useState('all')
   const [loading, setLoading]       = useState(false)
   const [filterRole, setFilterRole] = useState(ownerRole)
   const [filterDegree, setFilterDegree] = useState(degreeLevel)
-  const [filterBranch, setFilterBranch] = useState(branch)
+  const [filterProgram, setFilterProgram] = useState(program)
 
-  const exportBranchOptions = filterDegree ? branchesByDegree[filterDegree] || [] : allBranchOptions
-
-  useEffect(() => {
-    if (filterBranch && !exportBranchOptions.includes(filterBranch)) setFilterBranch('')
-  }, [filterDegree, filterBranch, exportBranchOptions])
+  const exportProgramOptions = filterDegree ? exportProgramsByDegree[filterDegree] || [] : exportAllProgramOptions
 
   useEffect(() => {
-    if (filterBranch && exportMode === 'branch') setExportMode('all')
-  }, [filterBranch, exportMode])
+    if (filterProgram && !exportProgramOptions.includes(filterProgram)) setFilterProgram('')
+  }, [filterDegree, filterProgram, exportProgramOptions])
+
+  useEffect(() => {
+    if (filterProgram && exportMode === 'program') setExportMode('all')
+  }, [filterProgram, exportMode])
 
   const fetchAllDocs = async () => {
     const { data } = await documentService.getAll({
@@ -743,7 +714,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       limit: 9999, page: 1,
       ...(filterRole && { owner_role: filterRole }),
       ...(filterDegree && { degree_level: filterDegree }),
-      ...(filterBranch && { department: filterBranch }),
+      ...(filterProgram && { program: filterProgram }),
       ...(advisorId && { advisor_id: advisorId }),
     })
     return data.documents || []
@@ -752,7 +723,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
   const exportFilters = [
     filterRole ? `กลุ่ม: ${roleLabel[filterRole] || filterRole}` : 'กลุ่ม: ทั้งหมด',
     filterDegree ? `ระดับ: ${degreeLabel[filterDegree] || filterDegree}` : 'ระดับ: ทั้งหมด',
-    filterBranch ? `สาขา: ${filterBranch}` : 'สาขา: ทั้งหมด',
+    filterProgram ? `หลักสูตร: ${filterProgram}` : 'หลักสูตร: ทั้งหมด',
   ].join(' | ')
 
   const formatPrintDate = (date) => date.toLocaleDateString('th-TH', {
@@ -773,7 +744,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
   const scopeFileParts = () => [
     filterRole && (roleLabel[filterRole] || filterRole),
     filterDegree && (degreeLabel[filterDegree] || filterDegree),
-    filterBranch,
+    filterProgram,
   ].filter(Boolean).map(safeFilePart)
 
   const handleExport = async () => {
@@ -782,7 +753,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       const docs = await fetchAllDocs()
       const now = new Date()
       const dateStr = formatPrintDate(now)
-      const modeLabels = { all: 'รายการเดียว', role: 'จัดกลุ่มตามบทบาท', degree: 'จัดกลุ่มตามระดับปริญญา', branch: 'จัดกลุ่มตามสาขาวิชา' }
+      const modeLabels = { all: 'รายการเดียว', role: 'จัดกลุ่มตามบทบาท', degree: 'จัดกลุ่มตามระดับปริญญา', program: 'จัดกลุ่มตามหลักสูตร' }
 
       const { default: ExcelJS } = await import('exceljs')
       const wb = new ExcelJS.Workbook()
@@ -846,7 +817,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       spacer.height = 4
 
       // ─ Column label row
-      const COL_LABELS = ['ลำดับ', 'ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของเอกสาร', 'ระดับ', 'สาขาวิชา', 'วันที่ออก', 'วันหมดอายุ', 'สถานะ']
+      const COL_LABELS = ['ลำดับ', 'ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของเอกสาร', 'ระดับ', 'หลักสูตร', 'วันที่ออก', 'วันหมดอายุ', 'สถานะ']
       const addTableHeader = () => {
         const hr = ws.addRow(COL_LABELS)
         hr.height = 24
@@ -866,7 +837,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
         doc.owner_student_id || '',
         doc.owner_name || '',
         degreeLabel[doc.owner_degree_level] || '',
-        doc.owner_department || '',
+        doc.owner_program || '',
         doc.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '',
         doc.no_expire ? 'ไม่มีวันหมดอายุ' : (doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : ''),
         doc.no_expire ? 'ไม่มีวันหมดอายุ' : (statusLabel[computedStatus(doc)] || doc.status || ''),
@@ -927,8 +898,8 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
           d => d.owner_role === 'student' ? (d.owner_degree_level || 'bachelor') : (d.owner_role || 'other'),
           k => k in degreeLabel ? `นักศึกษา ${degreeLabel[k]}` : (roleLabel[k] || k),
           ['bachelor', 'master', 'doctoral', 'advisor', 'staff'])
-      } else if (exportMode === 'branch') {
-        buildGrouped(docs, d => d.owner_department || 'ไม่ระบุสาขา', k => k, Object.values(branchesByDegree).flat())
+      } else if (exportMode === 'program') {
+        buildGrouped(docs, d => d.owner_program || 'ไม่ระบุหลักสูตร', k => k, Object.values(exportProgramsByDegree).flat())
       }
 
       const filenameParts = ['IRIS', 'ใบประกาศ', compactDate(now), ...scopeFileParts(), modeLabels[exportMode]]
@@ -950,8 +921,8 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
     { key: 'all',    label: 'รายการเดียว ไม่แบ่งกลุ่ม', desc: 'เรียงข้อมูลทั้งหมดตามตัวกรองที่เลือกไว้ในชีตเดียว' },
     { key: 'role',   label: 'จัดกลุ่มตามบทบาท',         desc: 'แยกหมวดนักศึกษา / อาจารย์ / เจ้าหน้าที่ / กลุ่มอื่น' },
     { key: 'degree', label: 'จัดกลุ่มตามระดับปริญญา', desc: 'แยกหมวด ป.ตรี / ป.โท / ป.เอก และกลุ่มอื่น' },
-    { key: 'branch', label: 'จัดกลุ่มตามสาขาวิชา',      desc: 'เหมาะเมื่อส่งออกหลายสาขาในไฟล์เดียว' },
-  ].filter(opt => !(filterBranch && opt.key === 'branch'))
+    { key: 'program', label: 'จัดกลุ่มตามหลักสูตร',      desc: 'เหมาะเมื่อส่งออกหลายหลักสูตรในไฟล์เดียว' },
+  ].filter(opt => !(filterProgram && opt.key === 'program'))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -970,7 +941,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
               <Download size={16} className="text-[#42b5e1]" />
               <div>
                 <p className="text-sm font-semibold text-slate-700">เลือกข้อมูล</p>
-                <p className="text-xs text-slate-400">เลือกเฉพาะกลุ่มที่ต้องการได้ เช่น นักศึกษา ป.ตรี หรือสาขาเดียว</p>
+                <p className="text-xs text-slate-400">เลือกเฉพาะกลุ่มที่ต้องการได้ เช่น นักศึกษา ป.ตรี หรือหลักสูตรเดียว</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -988,9 +959,9 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
                 <option value="master">ป.โท</option>
                 <option value="doctoral">ป.เอก</option>
               </select>
-              <select className="input-field text-sm sm:col-span-2" value={filterBranch} onChange={e => setFilterBranch(e.target.value)}>
-                <option value="">ทุกสาขาวิชา</option>
-                {exportBranchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+              <select className="input-field text-sm sm:col-span-2" value={filterProgram} onChange={e => setFilterProgram(e.target.value)}>
+                <option value="">ทุกหลักสูตร</option>
+                {exportProgramOptions.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
           </div>
@@ -1010,7 +981,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
                 onChange={() => setExportMode(opt.key)}
                 className="accent-[#42b5e1] flex-shrink-0" />
               {(() => {
-                const Icon = { all: ClipboardList, role: Users, degree: GraduationCap, branch: School }[opt.key] || ClipboardList
+                const Icon = { all: ClipboardList, role: Users, degree: GraduationCap, program: School }[opt.key] || ClipboardList
                 return <Icon size={20} className="text-[#42b5e1] flex-shrink-0" />
               })()}
               <div className="min-w-0">
@@ -1243,6 +1214,9 @@ function UploadModal({ onClose, onUploaded, docTypes, user }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DocumentsPage() {
+  const academicOptions = useAcademicOptions()
+  const activeProgramsByDegree = academicOptions.programsByDegree || programsByDegree
+  const activeProgramOptions = academicOptions.programs || allProgramOptions
   const { user } = useAuthStore()
   const isAdmin   = user?.role === 'admin'
   const isAdvisor = user?.role === 'advisor'
@@ -1265,7 +1239,7 @@ export default function DocumentsPage() {
   const [status, setStatus]             = useState('')
   const [advisorFilter, setAdvisorFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
-  const [branchFilter, setBranchFilter] = useState('')
+  const [programFilter, setProgramFilter] = useState('')
   const [sort, setSort]                 = useState({ by: 'created_at', dir: 'desc' })
   const [page, setPage]                 = useState(1)
   const [modal, setModal]               = useState(null)
@@ -1284,18 +1258,18 @@ export default function DocumentsPage() {
   }, [isAdmin])
 
   // Reset page when filters change (not when page itself changes)
-  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, degreeFilter, branchFilter, sort])
+  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, degreeFilter, programFilter, sort])
 
   useEffect(() => {
-    const allowedBranches = degreeFilter ? branchesByDegree[degreeFilter] || [] : allBranchOptions
-    if (branchFilter && !allowedBranches.includes(branchFilter)) setBranchFilter('')
-  }, [degreeFilter, branchFilter])
+    const allowedPrograms = degreeFilter ? activeProgramsByDegree[degreeFilter] || [] : activeProgramOptions
+    if (programFilter && !allowedPrograms.includes(programFilter)) setProgramFilter('')
+  }, [degreeFilter, programFilter])
 
   useEffect(() => {
     const tabParams = tabs.find(t => t.key === activeTab)?.params || {}
     if (tabParams.owner_role && tabParams.owner_role !== 'student') {
       setDegreeFilter('')
-      setBranchFilter('')
+      setProgramFilter('')
       setAdvisorFilter('')
     }
     if (tabParams.degree_level && degreeFilter) setDegreeFilter('')
@@ -1307,9 +1281,9 @@ export default function DocumentsPage() {
     if (!relation) return
     const activeDegree = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : degreeFilter
     const degreeMismatch = activeDegree && relation.degrees.length > 0 && !relation.degrees.includes(activeDegree)
-    const branchMismatch = branchFilter && relation.branches.length > 0 && !relation.branches.includes(branchFilter)
-    if (degreeMismatch || branchMismatch) setAdvisorFilter('')
-  }, [advisorFilter, advisorRelations, activeTab, degreeFilter, branchFilter])
+    const programMismatch = programFilter && relation.programs.length > 0 && !relation.programs.includes(programFilter)
+    if (degreeMismatch || programMismatch) setAdvisorFilter('')
+  }, [advisorFilter, advisorRelations, activeTab, degreeFilter, programFilter])
 
   const fetchDocs = useCallback(async () => {
     setLoading(true)
@@ -1322,14 +1296,14 @@ export default function DocumentsPage() {
         page, limit: LIMIT,
         ...(advisorFilter && { advisor_id: advisorFilter }),
         ...(degreeFilter && !tabParams.degree_level && { degree_level: degreeFilter }),
-        ...(branchFilter  && { department: branchFilter }),
+        ...(programFilter  && { program: programFilter }),
       }
       const { data } = await documentService.getAll(params)
       setDocs(data.documents || [])
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [activeTab, debouncedSearch, docType, status, sort, page, advisorFilter, degreeFilter, branchFilter])
+  }, [activeTab, debouncedSearch, docType, status, sort, page, advisorFilter, degreeFilter, programFilter])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
@@ -1344,22 +1318,44 @@ export default function DocumentsPage() {
     setSort(prev => prev.by === key ? { by: key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { by: key, dir: 'desc' })
   }
 
-  const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setDegreeFilter(''); setBranchFilter('') }
+  const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setDegreeFilter(''); setProgramFilter('') }
 
   const handleDegreeChange = (value) => {
     setDegreeFilter(value)
-    setAdvisorFilter('')
-    if (branchFilter && value && !(branchesByDegree[value] || []).includes(branchFilter)) {
-      setBranchFilter('')
+    if (advisorFilter && value) {
+      const rel = advisorRelations[advisorFilter]
+      if (rel?.degrees?.length > 0 && !rel.degrees.includes(value)) setAdvisorFilter('')
+    }
+    if (programFilter && value && !(activeProgramsByDegree[value] || []).includes(programFilter)) {
+      setProgramFilter('')
     }
   }
 
-  const handleBranchChange = (value) => {
-    setBranchFilter(value)
-    setAdvisorFilter('')
+  const handleProgramChange = (value) => {
+    setProgramFilter(value)
+    if (advisorFilter && value) {
+      const rel = advisorRelations[advisorFilter]
+      if (rel?.programs?.length > 0 && !rel.programs.includes(value)) setAdvisorFilter('')
+    }
     if (!value || degreeTabKey) return
-    const inferredDegree = getDegreeForBranch(value)
+    const inferredDegree = Object.entries(activeProgramsByDegree)
+      .find(([, programs]) => programs.includes(value))?.[0] || getDegreeForProgram(value)
     if (inferredDegree && inferredDegree !== degreeFilter) setDegreeFilter(inferredDegree)
+  }
+
+  const handleAdvisorChange = (value) => {
+    setAdvisorFilter(value)
+    if (!value) return
+    const rel = advisorRelations[value]
+    if (!rel) return
+    if (degreeFilter && rel.degrees.length > 0 && !rel.degrees.includes(degreeFilter)) {
+      setDegreeFilter('')
+      setProgramFilter('')
+      return
+    }
+    if (programFilter && rel.programs.length > 0 && !rel.programs.includes(programFilter)) {
+      setProgramFilter('')
+    }
   }
 
   const refreshAll = useCallback(() => {
@@ -1374,17 +1370,27 @@ export default function DocumentsPage() {
   const showAdvisorFilter = isAdmin && isStudentTab
   const degreeTabKey  = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : null
   const showDegreeFilter = (isAdmin || isAdvisor) && activeTab === 'all'
-  const branchFilterDegree = degreeTabKey || degreeFilter
-  const showBranchFilter = (isAdmin || isAdvisor) && (activeTab === 'all' || degreeTabKey != null)
-  const branchOptions = branchFilterDegree ? branchesByDegree[branchFilterDegree] || [] : allBranchOptions
+  const programFilterDegree = degreeTabKey || degreeFilter
   const currentTabParams = tabs.find(t => t.key === activeTab)?.params || {}
+
+  // Cascade: narrow options based on selected advisor
+  const advisorRelation = advisorFilter ? advisorRelations[advisorFilter] : null
+  const availableDegrees = advisorRelation?.degrees?.length > 0
+    ? advisorRelation.degrees
+    : ['bachelor', 'master', 'doctoral']
+
+  const advisorProgramList = advisorRelation?.programs?.length > 0 ? advisorRelation.programs : null
+  const basePrograms = programFilterDegree ? activeProgramsByDegree[programFilterDegree] || [] : activeProgramOptions
+  const showProgramFilter = (isAdmin || isAdvisor) && (activeTab === 'all' || degreeTabKey != null)
+  const programOptions = advisorProgramList ? basePrograms.filter(p => advisorProgramList.includes(p)) : basePrograms
+
   const filteredAdvisors = advisors.filter(advisor => {
     const relation = advisorRelations[advisor.user_id]
-    if (!relation) return !degreeFilter && !branchFilter && !degreeTabKey
+    if (!relation) return !degreeFilter && !programFilter && !degreeTabKey
     const activeDegree = degreeTabKey || degreeFilter
     const degreeOk = !activeDegree || relation.degrees.length === 0 || relation.degrees.includes(activeDegree)
-    const branchOk = !branchFilter || relation.branches.length === 0 || relation.branches.includes(branchFilter)
-    return degreeOk && branchOk
+    const programOk = !programFilter || relation.programs.length === 0 || relation.programs.includes(programFilter)
+    return degreeOk && programOk
   })
 
   const pageTitle = isAdmin ? 'ใบประกาศทั้งหมด'
@@ -1439,7 +1445,7 @@ export default function DocumentsPage() {
 
           {/* Filter Bar */}
           <div className="flex flex-wrap gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50">
-            <input className="input-field w-full sm:max-w-xs" placeholder="ค้นหาชื่อเอกสาร, เจ้าของ, รหัส..."
+            <input className="input-field w-full sm:max-w-xs" placeholder="ค้นหาชื่อเอกสาร, เจ้าของ, รหัสนักศึกษา"
               value={search} onChange={e => setSearch(e.target.value)} />
             <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={docType} onChange={e => setDocType(e.target.value)}>
               <option value="">ทุกประเภท</option>
@@ -1454,21 +1460,21 @@ export default function DocumentsPage() {
             {showDegreeFilter && (
               <select className="input-field w-full sm:w-auto sm:max-w-[170px]" value={degreeFilter} onChange={e => handleDegreeChange(e.target.value)}>
                 <option value="">ทุกระดับปริญญา</option>
-                <option value="bachelor">ป.ตรี</option>
-                <option value="master">ป.โท</option>
-                <option value="doctoral">ป.เอก</option>
+                {availableDegrees.includes('bachelor') && <option value="bachelor">ป.ตรี</option>}
+                {availableDegrees.includes('master') && <option value="master">ป.โท</option>}
+                {availableDegrees.includes('doctoral') && <option value="doctoral">ป.เอก</option>}
               </select>
             )}
             {showAdvisorFilter && advisors.length > 0 && (
-              <select className="input-field w-full sm:w-auto sm:max-w-[180px]" value={advisorFilter} onChange={e => setAdvisorFilter(e.target.value)}>
+              <select className="input-field w-full sm:w-auto sm:max-w-[180px]" value={advisorFilter} onChange={e => handleAdvisorChange(e.target.value)}>
                 <option value="">ทุกอาจารย์</option>
                 {filteredAdvisors.map(a => <option key={a.user_id} value={a.user_id}>{a.name}</option>)}
               </select>
             )}
-            {showBranchFilter && (
-              <select className="input-field w-full sm:w-auto sm:max-w-[220px]" value={branchFilter} onChange={e => handleBranchChange(e.target.value)}>
-                <option value="">ทุกสาขา</option>
-                {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            {showProgramFilter && (
+              <select className="input-field w-full sm:w-auto sm:max-w-[220px]" value={programFilter} onChange={e => handleProgramChange(e.target.value)}>
+                <option value="">ทุกหลักสูตร</option>
+                {programOptions.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             )}
           </div>
@@ -1665,8 +1671,10 @@ export default function DocumentsPage() {
           search={search} docType={docType} status={status} sort={sort}
           ownerRole={currentTabParams.owner_role || ''}
           degreeLevel={currentTabParams.degree_level || degreeFilter}
-          branch={branchFilter}
+          program={programFilter}
           advisorId={advisorFilter}
+          programsByDegree={activeProgramsByDegree}
+          allProgramOptions={activeProgramOptions}
         />
       )}
       {modal === 'upload' && (

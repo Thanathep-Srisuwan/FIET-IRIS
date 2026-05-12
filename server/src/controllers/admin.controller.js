@@ -10,6 +10,13 @@ const ensureColumns = async (pool) => {
       ALTER TABLE dbo.USERS ADD student_id NVARCHAR(50) NULL;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='degree_level')
       ALTER TABLE dbo.USERS ADD degree_level NVARCHAR(20) NULL;
+    IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='department')
+       AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      EXEC sp_rename 'dbo.USERS.department', 'program', 'COLUMN';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='affiliation')
+      ALTER TABLE dbo.USERS ADD affiliation NVARCHAR(100) NULL;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='no_expire')
       ALTER TABLE dbo.DOCUMENTS ADD no_expire BIT NOT NULL DEFAULT 0;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='trashed_at')
@@ -84,7 +91,7 @@ const getAdminStats = async (req, res) => {
       WHERE status NOT IN ('deleted', 'trashed')
     `)
 
-    // ผู้ใช้แยกตามกลุ่ม (ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่) (ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่)
+    // ผู้ใช้แยกตามกลุ่ม (ป.ตรี / ป.โท / ป.เอก / อาจารย์ / เจ้าหน้าที่ / ผู้บริหาร)
     const userBreakdown = await pool.request().query(`
       SELECT
         CASE
@@ -93,6 +100,7 @@ const getAdminStats = async (req, res) => {
           WHEN u.role = 'student'                                  THEN 'bachelor'
           WHEN u.role = 'advisor'                                  THEN 'advisor'
           WHEN u.role = 'staff'                                    THEN 'staff'
+          WHEN u.role = 'executive'                                THEN 'executive'
           ELSE NULL
         END AS grp,
         COUNT(DISTINCT u.user_id)  AS user_count,
@@ -101,7 +109,7 @@ const getAdminStats = async (req, res) => {
       LEFT JOIN dbo.DOCUMENTS d
         ON d.user_id = u.user_id AND d.status NOT IN ('deleted', 'trashed')
       WHERE u.is_active = 1
-        AND u.role NOT IN ('admin', 'executive')
+        AND u.role NOT IN ('admin')
       GROUP BY
         CASE
           WHEN u.role = 'student' AND u.degree_level = 'master'   THEN 'master'
@@ -109,6 +117,7 @@ const getAdminStats = async (req, res) => {
           WHEN u.role = 'student'                                  THEN 'bachelor'
           WHEN u.role = 'advisor'                                  THEN 'advisor'
           WHEN u.role = 'staff'                                    THEN 'staff'
+          WHEN u.role = 'executive'                                THEN 'executive'
           ELSE NULL
         END
       HAVING
@@ -118,6 +127,7 @@ const getAdminStats = async (req, res) => {
           WHEN u.role = 'student'                                  THEN 'bachelor'
           WHEN u.role = 'advisor'                                  THEN 'advisor'
           WHEN u.role = 'staff'                                    THEN 'staff'
+          WHEN u.role = 'executive'                                THEN 'executive'
           ELSE NULL
         END IS NOT NULL
     `)
@@ -156,6 +166,8 @@ const getAdminStats = async (req, res) => {
         u.name AS owner_name,
         u.email AS owner_email,
         u.student_id AS owner_student_id,
+        u.program AS owner_program,
+        u.affiliation AS owner_affiliation,
         CASE
           WHEN (d.no_expire IS NULL OR d.no_expire = 0)
             AND d.expire_date IS NOT NULL
@@ -189,6 +201,8 @@ const getAdminStats = async (req, res) => {
         u.name AS owner_name,
         u.email AS owner_email,
         u.student_id AS owner_student_id,
+        u.program AS owner_program,
+        u.affiliation AS owner_affiliation,
         CASE
           WHEN d.expire_date < CAST(GETDATE() AS DATE) THEN 'already_expired'
           WHEN d.expire_date <= DATEADD(DAY, 30, CAST(GETDATE() AS DATE)) THEN 'within_30'
@@ -210,7 +224,7 @@ const getAdminStats = async (req, res) => {
         u.name,
         u.email,
         u.student_id,
-        u.department,
+        u.program,
         u.role,
         u.degree_level,
         a.name AS advisor_name,
@@ -220,13 +234,14 @@ const getAdminStats = async (req, res) => {
           WHEN u.role = 'student' THEN 'bachelor'
           WHEN u.role = 'advisor' THEN 'advisor'
           WHEN u.role = 'staff' THEN 'staff'
+          WHEN u.role = 'executive' THEN 'executive'
           ELSE NULL
         END AS grp,
         (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
       FROM dbo.USERS u
       LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
       WHERE u.is_active = 1
-        AND u.role NOT IN ('admin', 'executive')
+        AND u.role NOT IN ('admin')
       ORDER BY u.role, u.degree_level, u.name
     `)
 

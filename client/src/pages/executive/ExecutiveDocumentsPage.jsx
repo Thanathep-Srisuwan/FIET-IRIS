@@ -1,32 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { executiveService } from '../../services/api'
 import toast from 'react-hot-toast'
+import useAcademicOptions from '../../hooks/useAcademicOptions'
 
-const BRANCHES_BY_DEGREE = {
-  bachelor: [
-    'ครุศาสตร์โยธา',
-    'ครุศาสตร์เครื่องกล',
-    'ครุศาสตร์ไฟฟ้า',
-    'ครุศาสตร์อุตสาหการ',
-    'เทคโนโลยีการศึกษาและสื่อสารมวลชน',
-    'เทคโนโลยีการพิมพ์และบรรจุภัณฑ์',
-    'เทคโนโลยีอุตสาหกรรม',
-    'วิทยาการคอมพิวเตอร์ประยุกต์ – มัลติมีเดีย',
-  ],
-  master: [
-    'เทคโนโลยีการเรียนรู้และสื่อสารมวลชน',
-    'วิศวกรรมเครื่องกล',
-    'วิศวกรรมไฟฟ้า',
-    'วิศวกรรมโยธา',
-    'วิศวกรรมอุตสาหการ',
-    'เทคโนโลยีบรรจุภัณฑ์และนวัตกรรมการพิมพ์',
-    'คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
-  ],
-  doctoral: [
-    'นวัตกรรมการเรียนรู้และเทคโนโลยี',
-  ],
-}
-const ALL_BRANCHES = Object.values(BRANCHES_BY_DEGREE).flat()
 const statusColor = {
   active:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
   expiring_soon: 'bg-amber-50 text-amber-700 border border-amber-200',
@@ -35,29 +11,30 @@ const statusColor = {
 const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
 
 export default function ExecutiveDocumentsPage() {
+  const academicOptions = useAcademicOptions()
   const [docs, setDocs]     = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
   const [docType, setDocType] = useState('')
   const [status, setStatus]   = useState('')
   const [degree, setDegree]   = useState('')
-  const [branch, setBranch]   = useState('')
+  const [program, setProgram]   = useState('')
 
   const fetchDocs = useCallback(async () => {
     setLoading(true)
     try {
-      const { data } = await executiveService.getDocuments({ search, doc_type: docType, status, degree_level: degree, branch })
+      const { data } = await executiveService.getDocuments({ search, doc_type: docType, status, degree_level: degree, program })
       setDocs(data.documents || [])
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [search, docType, status, degree, branch])
+  }, [search, docType, status, degree, program])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
   const exportCSV = () => {
-    const header = 'ชื่อเอกสาร,ประเภท,เจ้าของ,สาขา,อาจารย์ที่ปรึกษา,วันออก,วันหมดอายุ,คงเหลือ,สถานะ'
+    const header = 'ชื่อเอกสาร,ประเภท,เจ้าของ,หลักสูตร,อาจารย์ที่ปรึกษา,วันออก,วันหมดอายุ,คงเหลือ,สถานะ'
     const rows = docs.map(d =>
-      `"${d.title}","${d.doc_type}","${d.owner_name}","${d.department||''}","${d.advisor_name||''}","${new Date(d.issue_date).toLocaleDateString('th-TH')}","${new Date(d.expire_date).toLocaleDateString('th-TH')}","${d.days_remaining}","${statusLabel[d.status]||d.status}"`
+      `"${d.title}","${d.doc_type}","${d.owner_name}","${d.program||''}","${d.advisor_name||''}","${new Date(d.issue_date).toLocaleDateString('th-TH')}","${new Date(d.expire_date).toLocaleDateString('th-TH')}","${d.days_remaining}","${statusLabel[d.status]||d.status}"`
     )
     const csv  = [header, ...rows].join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
@@ -97,15 +74,15 @@ export default function ExecutiveDocumentsPage() {
           <option value="expired">หมดอายุ</option>
         </select>
         <select className="input-field max-w-[140px]" value={degree}
-          onChange={e => { setDegree(e.target.value); setBranch('') }}>
+          onChange={e => { setDegree(e.target.value); setProgram('') }}>
           <option value="">ทุกระดับ</option>
           <option value="bachelor">ป.ตรี</option>
           <option value="master">ป.โท</option>
           <option value="doctoral">ป.เอก</option>
         </select>
-        <select className="input-field max-w-[220px]" value={branch} onChange={e => setBranch(e.target.value)}>
-          <option value="">ทุกสาขา</option>
-          {(degree ? BRANCHES_BY_DEGREE[degree] || [] : ALL_BRANCHES).map(b => (
+        <select className="input-field max-w-[220px]" value={program} onChange={e => setProgram(e.target.value)}>
+          <option value="">ทุกหลักสูตร</option>
+          {(degree ? academicOptions.programsByDegree[degree] || [] : academicOptions.programs).map(b => (
             <option key={b} value={b}>{b}</option>
           ))}
         </select>
@@ -117,7 +94,7 @@ export default function ExecutiveDocumentsPage() {
         <table className="w-full text-sm" style={{ minWidth: '800px' }}>
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              {['ชื่อเอกสาร','ประเภท','เจ้าของ','สาขา','อาจารย์ที่ปรึกษา','วันหมดอายุ','คงเหลือ','สถานะ'].map(h => (
+              {['ชื่อเอกสาร','ประเภท','เจ้าของ','หลักสูตร','อาจารย์ที่ปรึกษา','วันหมดอายุ','คงเหลือ','สถานะ'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -141,7 +118,7 @@ export default function ExecutiveDocumentsPage() {
                       style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{d.doc_type}</span>
                   </td>
                   <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{d.owner_name}</td>
-                  <td className="px-4 py-3.5 text-slate-500 text-xs max-w-[140px] truncate">{d.department || '—'}</td>
+                  <td className="px-4 py-3.5 text-slate-500 text-xs max-w-[140px] truncate">{d.program || '—'}</td>
                   <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{d.advisor_name || '—'}</td>
                   <td className="px-4 py-3.5 text-xs tabular-nums whitespace-nowrap">
                     {d.no_expire

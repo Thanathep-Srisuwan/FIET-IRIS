@@ -1,6 +1,6 @@
 require('dotenv').config()
 const bcrypt = require('bcrypt')
-const { getPool } = require('./db')
+const { getPool, sql } = require('./db')
 
 async function seed() {
   try {
@@ -23,10 +23,11 @@ async function seed() {
       .input('email', 'admin@kmutt.ac.th')
       .input('password_hash', hash)
       .input('role', 'admin')
-      .input('department', 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี')
+      .input('program', sql.NVarChar, null)
+      .input('affiliation', sql.NVarChar, 'สำนักงานคณบดี')
       .query(`
-        INSERT INTO dbo.USERS (name, email, password_hash, role, department, must_change_pw)
-        VALUES (@name, @email, @password_hash, @role, @department, 0)
+        INSERT INTO dbo.USERS (name, email, password_hash, role, program, affiliation, must_change_pw)
+        VALUES (@name, @email, @password_hash, @role, @program, @affiliation, 0)
       `)
 
     console.log('✅ Seed admin สำเร็จ!')

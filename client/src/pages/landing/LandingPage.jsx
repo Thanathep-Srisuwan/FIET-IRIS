@@ -135,7 +135,7 @@ const FEATURES = [
   {
     icon: <BarChart3 size={40} className="text-emerald-600" />,
     title: 'รายงานภาพรวม',
-    desc: 'ผู้บริหารดูสถิติและสถานะงานวิจัยของทุกสาขาวิชาได้ในที่เดียว พร้อม dashboard แบบ real-time',
+    desc: 'ผู้บริหารดูสถิติและสถานะงานวิจัยของทุกหลักสูตรได้ในที่เดียว พร้อม dashboard แบบ real-time',
   },
   {
     icon: <Users size={40} className="text-purple-600" />,
@@ -145,7 +145,7 @@ const FEATURES = [
   {
     icon: <Search size={40} className="text-pink-600" />,
     title: 'ค้นหาและกรองข้อมูล',
-    desc: 'ค้นหาเอกสารและข้อมูลวิจัยได้อย่างรวดเร็ว กรองตามปีการศึกษา สถานะ หรือสาขาวิชา',
+    desc: 'ค้นหาเอกสารและข้อมูลวิจัยได้อย่างรวดเร็ว กรองตามปีการศึกษา สถานะ หรือหลักสูตร',
   },
   {
     icon: <LinkIcon size={40} className="text-cyan-600" />,

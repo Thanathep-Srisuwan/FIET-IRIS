@@ -12,11 +12,12 @@ import AdminUsersPage          from './pages/admin/AdminUsersPage'
 import AdminLogsPage           from './pages/admin/AdminLogsPage'
 import AdminAnnouncementsPage  from './pages/admin/AdminAnnouncementsPage'
 import AdminDocTypesPage       from './pages/admin/AdminDocTypesPage'
+import AdminProgramsPage      from './pages/admin/AdminProgramsPage'
 import AdminTrashPage          from './pages/admin/AdminTrashPage'
 import AdminSettingsPage       from './pages/admin/AdminSettingsPage'
 import AdminEmailTemplatesPage from './pages/admin/AdminEmailTemplatesPage'
 import ExecutiveDashboard  from './pages/executive/ExecutiveDashboard'
-import BranchSummaryPage   from './pages/executive/BranchSummaryPage'
+import ProgramSummaryPage  from './pages/executive/ProgramSummaryPage'
 import ExecutiveDocumentsPage from './pages/executive/ExecutiveDocumentsPage'
 import MainLayout          from './components/layout/MainLayout'
 
@@ -48,13 +49,15 @@ export default function App() {
         <Route path="admin/logs"           element={<PrivateRoute roles={['admin']}><AdminLogsPage /></PrivateRoute>} />
         <Route path="admin/announcements"  element={<PrivateRoute roles={['admin']}><AdminAnnouncementsPage /></PrivateRoute>} />
         <Route path="admin/doc-types"      element={<PrivateRoute roles={['admin']}><AdminDocTypesPage /></PrivateRoute>} />
+        <Route path="admin/programs"       element={<PrivateRoute roles={['admin']}><AdminProgramsPage /></PrivateRoute>} />
         <Route path="admin/trash"            element={<PrivateRoute roles={['admin']}><AdminTrashPage /></PrivateRoute>} />
         <Route path="admin/settings"         element={<PrivateRoute roles={['admin']}><AdminSettingsPage /></PrivateRoute>} />
         <Route path="admin/email-templates"  element={<PrivateRoute roles={['admin']}><AdminEmailTemplatesPage /></PrivateRoute>} />
 
         {/* Executive */}
         <Route path="executive/overview"   element={<PrivateRoute roles={['admin','executive']}><ExecutiveDashboard /></PrivateRoute>} />
-        <Route path="executive/branches"   element={<PrivateRoute roles={['admin','executive']}><BranchSummaryPage /></PrivateRoute>} />
+        <Route path="executive/programs"   element={<PrivateRoute roles={['admin','executive']}><ProgramSummaryPage /></PrivateRoute>} />
+        <Route path="executive/branches"   element={<PrivateRoute roles={['admin','executive']}><ProgramSummaryPage /></PrivateRoute>} />
         <Route path="executive/documents"  element={<PrivateRoute roles={['admin','executive']}><ExecutiveDocumentsPage /></PrivateRoute>} />
       </Route>
 

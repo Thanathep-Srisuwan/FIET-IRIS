@@ -55,7 +55,7 @@ FIET-IRIS/
 |       |   |-- auth/            # Login, Change Password
 |       |   |-- dashboard/       # Role-based dashboards
 |       |   |-- documents/       # Document list and upload
-|       |   |-- executive/       # Overview, branches, executive documents
+|       |   |-- executive/       # Overview, program summary, executive documents
 |       |   `-- landing/
 |       |-- services/            # API service layer
 |       `-- utils/
@@ -102,6 +102,10 @@ cd ../client && npm install
 2. `SQL/migration_v3.sql`
 3. `SQL/migration_trash.sql`
 4. `SQL/migration_v4_settings.sql`
+5. `SQL/migration_v5_performance_indexes.sql`
+6. `SQL/migration_v6_programs.sql`
+7. `SQL/migration_v7_affiliations.sql`
+8. `SQL/migration_v8_academic_reference.sql`
 
 หลังจากสร้าง schema แล้ว สามารถ seed ข้อมูลเริ่มต้นได้:
 
@@ -188,7 +192,7 @@ node node_modules/vite/bin/vite.js build
 - `advisor`: ดูแลและติดตามเอกสารของนักศึกษาในความรับผิดชอบ
 - `staff`: ช่วยจัดการข้อมูลและเอกสารในระดับปฏิบัติการ
 - `admin`: จัดการผู้ใช้ ประกาศ ประเภทเอกสาร การตั้งค่า เทมเพลตอีเมล ถังขยะ และ logs
-- `executive`: ดูภาพรวม สรุปตามสาขา และรายการเอกสารเพื่อประกอบการตัดสินใจ
+- `executive`: ดูภาพรวม สรุปตามหลักสูตร และรายการเอกสารเพื่อประกอบการตัดสินใจ
 
 ## ฟีเจอร์หลัก
 
@@ -201,7 +205,7 @@ node node_modules/vite/bin/vite.js build
 - Document type management พร้อมป้องกันการลบประเภทที่ถูกใช้งานอยู่
 - System settings สำหรับชื่อระบบ ชื่อหน่วยงาน และค่าแจ้งเตือน
 - Email template management ที่เชื่อมกับ settings และ scheduler
-- Executive overview, branch summary และ document explorer
+- Executive overview, program summary และ document explorer
 - Audit logs และ admin statistics
 - Light/dark theme ทั้ง public และ authenticated pages
 
@@ -250,7 +254,7 @@ Email template และ system settings ถูกเก็บในฐานข
 - เปิด landing และ login แล้ว toggle theme ได้ก่อน login
 - Login แล้วตรวจ Sidebar / Topbar / Dashboard / Documents
 - ตรวจ Admin pages: Users, Announcements, Doc Types, Settings, Email Templates, Trash, Logs
-- ตรวจ Executive pages: Overview, Branch Summary, Documents
+- ตรวจ Executive pages: Overview, Program Summary, Documents
 - Refresh หน้าแล้ว theme ยังจำค่าเดิม
 - ลบ `localStorage.theme` แล้วตรวจว่าค่าเริ่มต้นตาม system preference
 - ตรวจ mobile และ desktop ว่า navigation, modal, table และ form อ่านง่ายใน dark mode

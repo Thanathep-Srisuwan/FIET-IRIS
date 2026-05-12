@@ -2,34 +2,22 @@ import { useEffect, useState, useCallback } from 'react'
 import { userService } from '../../services/api'
 import toast from 'react-hot-toast'
 import useDebouncedValue from '../../hooks/useDebouncedValue'
+import useAcademicOptions from '../../hooks/useAcademicOptions'
+import { DEAN_OFFICE } from '../../constants/programs'
 
 const LIMIT = 20
 
-const DEPARTMENTS_BY_DEGREE = {
-  bachelor: [
-    'ครุศาสตร์โยธา',
-    'ครุศาสตร์เครื่องกล',
-    'ครุศาสตร์ไฟฟ้า',
-    'ครุศาสตร์อุตสาหการ',
-    'เทคโนโลยีการศึกษาและสื่อสารมวลชน',
-    'เทคโนโลยีการพิมพ์และบรรจุภัณฑ์',
-    'เทคโนโลยีอุตสาหกรรม',
-    'วิทยาการคอมพิวเตอร์ประยุกต์ – มัลติมีเดีย',
-  ],
-  master: [
-    'เทคโนโลยีการเรียนรู้และสื่อสารมวลชน',
-    'วิศวกรรมเครื่องกล',
-    'วิศวกรรมไฟฟ้า',
-    'วิศวกรรมโยธา',
-    'วิศวกรรมอุตสาหการ',
-    'เทคโนโลยีบรรจุภัณฑ์และนวัตกรรมการพิมพ์',
-    'คอมพิวเตอร์และเทคโนโลยีสารสนเทศ',
-  ],
-  doctoral: [
-    'นวัตกรรมการเรียนรู้และเทคโนโลยี',
-  ],
+const compactDate = (date = new Date()) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}${m}${d}`
 }
-const ALL_DEPARTMENTS = ['สำนักงานคณบดี', ...Object.values(DEPARTMENTS_BY_DEGREE).flat()]
+
+const safeFilePart = (value) => String(value || '')
+  .trim()
+  .replace(/[\\/:*?"<>|]/g, '')
+  .replace(/\s+/g, '-')
 
 // columns: key = backend sort key, null = not sortable
 const COLUMNS = [
@@ -39,7 +27,8 @@ const COLUMNS = [
   { key: 'role',         label: 'Role',              sort: true  },
   { key: 'degree_level', label: 'ระดับ',             sort: true  },
   { key: null,           label: 'อาจารย์ที่ปรึกษา',  sort: false },
-  { key: 'department',   label: 'สาขาวิชา',          sort: true  },
+  { key: 'program',   label: 'หลักสูตร',          sort: true  },
+  { key: 'affiliation', label: 'สังกัด',            sort: true  },
   { key: 'doc_count',    label: 'เอกสาร',            sort: true  },
   { key: null,           label: '',                   sort: false },
 ]
@@ -66,20 +55,30 @@ const degreeColor = {
 }
 
 // ─── Modal: เพิ่ม/แก้ไข User ───────────────────────────────────────────────
-function UserModal({ user, advisors, onClose, onSaved }) {
+function UserModal({ user, advisors, academicOptions, onClose, onSaved }) {
   const isEdit = !!user?.user_id
   const [form, setForm] = useState({
     name:         user?.name         || '',
     email:        user?.email        || '',
     role:         user?.role         || 'student',
     advisor_id:   user?.advisor_id   || '',
-    department:   user?.department   || '',
+    program:   user?.program   || '',
+    affiliation: user?.affiliation || '',
     student_id:   user?.student_id   || '',
     degree_level: user?.degree_level || 'bachelor',
   })
   const [loading, setLoading] = useState(false)
   const isStudent = form.role === 'student'
-  const deptOptions = isStudent ? (DEPARTMENTS_BY_DEGREE[form.degree_level] || []) : ALL_DEPARTMENTS
+  const isExecutive = form.role === 'executive'
+  const deanOffice = academicOptions.deanOffice || DEAN_OFFICE
+  const programOptions = academicOptions.programsByDegree[form.degree_level] || []
+  const affiliationOptions = academicOptions.affiliations
+
+  useEffect(() => {
+    if (isExecutive && form.affiliation !== deanOffice) {
+      setForm(p => ({ ...p, affiliation: deanOffice }))
+    }
+  }, [isExecutive, form.affiliation, deanOffice])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -135,6 +134,8 @@ function UserModal({ user, advisors, onClose, onSaved }) {
                 ...p,
                 role:         e.target.value,
                 advisor_id:   '',
+                program:      e.target.value === 'student' ? p.program : '',
+                affiliation:  e.target.value === 'student' ? '' : e.target.value === 'executive' ? deanOffice : p.affiliation,
                 degree_level: e.target.value === 'student' ? 'bachelor' : '',
                 student_id:   e.target.value === 'student' ? p.student_id : '',
               }))}>
@@ -150,7 +151,7 @@ function UserModal({ user, advisors, onClose, onSaved }) {
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">ระดับการศึกษา</label>
               <select className="input-field" value={form.degree_level}
-                onChange={e => setForm(p => ({ ...p, degree_level: e.target.value, department: '' }))}>
+                onChange={e => setForm(p => ({ ...p, degree_level: e.target.value, program: '' }))}>
                 <option value="bachelor">ปริญญาตรี (ป.ตรี)</option>
                 <option value="master">ปริญญาโท (ป.โท)</option>
                 <option value="doctoral">ปริญญาเอก (ป.เอก)</option>
@@ -180,14 +181,28 @@ function UserModal({ user, advisors, onClose, onSaved }) {
             </div>
           )}
 
+          {isStudent && (
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">สาขาวิชา</label>
-            <select className="input-field" value={form.department}
-              onChange={e => setForm(p => ({ ...p, department: e.target.value }))}>
-              <option value="">-- เลือกสาขาวิชา --</option>
-              {deptOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">หลักสูตร</label>
+            <select className="input-field" value={form.program}
+              onChange={e => setForm(p => ({ ...p, program: e.target.value }))}>
+              <option value="">-- เลือกหลักสูตร --</option>
+              {programOptions.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
+          )}
+
+          {!isStudent && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">สังกัด</label>
+            <select className="input-field" value={form.affiliation}
+              disabled={isExecutive}
+              onChange={e => setForm(p => ({ ...p, affiliation: e.target.value }))}>
+              {!isExecutive && <option value="">-- เลือกสังกัด --</option>}
+              {affiliationOptions.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
@@ -204,10 +219,11 @@ function UserModal({ user, advisors, onClose, onSaved }) {
 }
 
 // ─── Modal: Import CSV ──────────────────────────────────────────────────────
-function ImportModal({ advisors, onClose, onSaved }) {
+function ImportModal({ advisors, academicOptions, onClose, onSaved }) {
   const [rows, setRows]       = useState([])
   const [loading, setLoading] = useState(false)
   const [errors, setErrors]   = useState([])
+  const deanOffice = academicOptions.deanOffice || DEAN_OFFICE
 
   const handleFile = (e) => {
     const file = e.target.files[0]
@@ -222,14 +238,15 @@ function ImportModal({ advisors, onClose, onSaved }) {
       if (allRows.length < 2) { setRows([]); return }
       const firstDataIndex = allRows.findIndex((cols, idx) => idx > 0 && String(cols?.[1] || '').includes('@'))
       const parsed = allRows.slice(firstDataIndex >= 0 ? firstDataIndex : 1).map(cols => {
-        const [name, email, role, student_id, advisor_email, department, degree_level] = cols
+        const [name, email, role, student_id, advisor_email, program, affiliation, degree_level] = cols
         return {
           name:          String(name          || '').trim(),
           email:         String(email         || '').trim(),
           role:          String(role          || '').trim(),
           student_id:    String(student_id    || '').trim(),
           advisor_email: String(advisor_email || '').trim(),
-          department:    String(department    || '').trim(),
+          program:    String(program    || '').trim(),
+          affiliation: String(affiliation || '').trim(),
           degree_level:  String(degree_level  || '').trim(),
         }
       }).filter(r => r.name && r.email)
@@ -246,7 +263,8 @@ function ImportModal({ advisors, onClose, onSaved }) {
         name:         r.name,
         email:        r.email,
         role:         r.role || 'student',
-        department:   r.department || null,
+        program:      r.role === 'student' ? (r.program || null) : null,
+        affiliation:  r.role === 'executive' ? deanOffice : (r.affiliation || null),
         student_id:   r.student_id || null,
         degree_level: r.degree_level || (r.role === 'student' ? 'bachelor' : null),
         advisor_id:   advisors.find(a => a.email === r.advisor_email)?.user_id || null,
@@ -266,47 +284,48 @@ function ImportModal({ advisors, onClose, onSaved }) {
     const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
     worksheet.columns = [
       { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
-      { width: 30 }, { width: 30 }, { width: 18 },
+      { width: 30 }, { width: 58 }, { width: 38 }, { width: 18 },
     ]
-    worksheet.mergeCells('A1:G1')
+    worksheet.mergeCells('A1:H1')
     worksheet.getCell('A1').value = 'FIET-IRIS'
     worksheet.getCell('A1').font = { name: 'TH Sarabun New', bold: true, size: 14 }
     worksheet.getCell('A1').alignment = { horizontal: 'right', vertical: 'middle' }
-    worksheet.mergeCells('A2:G2')
+    worksheet.mergeCells('A2:H2')
     worksheet.getCell('A2').value = 'แบบฟอร์มนำเข้าผู้ใช้งาน'
     worksheet.getCell('A2').font = { name: 'TH Sarabun New', bold: true, size: 14 }
     worksheet.getCell('A2').alignment = { horizontal: 'right', vertical: 'middle' }
-    worksheet.mergeCells('A3:G3')
+    worksheet.mergeCells('A3:H3')
     worksheet.getCell('A3').value = `วันที่พิมพ์ : ${new Date().toLocaleDateString('th-TH')}`
     worksheet.getCell('A3').font = { name: 'TH Sarabun New', bold: true, size: 14 }
     worksheet.getCell('A3').alignment = { horizontal: 'right', vertical: 'middle' }
     worksheet.addRow([])
     const headerRow = worksheet.addRow([
       'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
-      'อีเมลอาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา',
+      'อีเมลอาจารย์ที่ปรึกษา', 'หลักสูตร', 'สังกัด', 'ระดับการศึกษา',
     ])
     headerRow.eachCell(cell => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF42B5E1' } }
       cell.font = { name: 'TH Sarabun New', bold: true, color: { argb: 'FFFFFFFF' }, size: 14 }
-      cell.alignment = { vertical: 'middle', horizontal: 'center' }
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
     })
     const examples = [
-      ['ชื่อนักศึกษาตัวอย่าง', 'student@kmutt.ac.th', 'student', '66080502xxx', 'advisor@kmutt.ac.th', 'ครุศาสตร์ไฟฟ้า', 'bachelor'],
-      ['อาจารย์ตัวอย่าง',      'advisor@kmutt.ac.th', 'advisor', '',             '',                    'ครุศาสตร์ไฟฟ้า', ''],
-      ['เจ้าหน้าที่ตัวอย่าง',  'staff@kmutt.ac.th',   'staff',   '',             '',                    'สำนักงานคณบดี',  ''],
+      ['ชื่อนักศึกษาตัวอย่าง', 'student@kmutt.ac.th', 'student', '66080502xxx', 'advisor@kmutt.ac.th', 'ค.อ.บ. วิศวกรรมไฟฟ้า (หลักสูตร 5 ปี)', '', 'bachelor'],
+      ['อาจารย์ตัวอย่าง',      'advisor@kmutt.ac.th', 'advisor', '',             '',                    '', 'ครุศาสตร์ไฟฟ้า', ''],
+      ['เจ้าหน้าที่ตัวอย่าง',  'staff@kmutt.ac.th',   'staff',   '',             '',                    '', 'สำนักงานคณบดี',  ''],
+      ['ผู้บริหารตัวอย่าง',    'executive@kmutt.ac.th', 'executive', '',          '',                    '', deanOffice,  ''],
     ]
     examples.forEach(ex => {
       const row = worksheet.addRow(ex)
       row.eachCell({ includeEmpty: true }, cell => {
         cell.font      = { name: 'TH Sarabun New', size: 14 }
-        cell.alignment = { vertical: 'middle' }
+        cell.alignment = { vertical: 'middle', wrapText: true }
       })
     })
     const buffer = await workbook.xlsx.writeBuffer()
     const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url    = URL.createObjectURL(blob)
     const a      = document.createElement('a')
-    a.href = url; a.download = 'FIET-IRIS_user_template.xlsx'; a.click()
+    a.href = url; a.download = `IRIS_บัญชีผู้ใช้งาน_แม่แบบนำเข้า_${compactDate()}.xlsx`; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -321,12 +340,12 @@ function ImportModal({ advisors, onClose, onSaved }) {
         <div className="p-6 space-y-4">
           <button onClick={downloadTemplate}
             className="w-full py-2 rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 hover:border-fiet-blue hover:text-fiet-blue transition-all">
-            ⬇ ดาวน์โหลด Template Excel
+            ⬇ ดาวน์โหลดแบบฟอร์มนำเข้าบัญชีผู้ใช้งาน
           </button>
 
           <div className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2 space-y-0.5">
             <p className="font-semibold text-slate-500">คอลัมน์ที่รองรับ (ตามลำดับ):</p>
-            <p>ชื่อ-นามสกุล · อีเมล · บทบาท · รหัสนักศึกษา · อีเมลอาจารย์ที่ปรึกษา · สาขาวิชา · ระดับการศึกษา</p>
+            <p>ชื่อ-นามสกุล · อีเมล · บทบาท · รหัสนักศึกษา · อีเมลอาจารย์ที่ปรึกษา · หลักสูตร · สังกัด · ระดับการศึกษา</p>
             <p>• บทบาท: student / advisor / staff / executive / admin</p>
             <p>• ระดับการศึกษา: bachelor / master / doctoral (สำหรับนักศึกษาเท่านั้น)</p>
           </div>
@@ -436,6 +455,7 @@ function DeleteConfirmModal({ users, onClose, onConfirm, loading }) {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function AdminUsersPage() {
+  const academicOptions = useAcademicOptions()
   const [users, setUsers]               = useState([])
   const [advisors, setAdvisors]         = useState([])
   const [total, setTotal]               = useState(0)
@@ -443,7 +463,8 @@ export default function AdminUsersPage() {
   const [search, setSearch]             = useState('')
   const debouncedSearch = useDebouncedValue(search, 350)
   const [roleFilter, setRoleFilter]     = useState('')
-  const [deptFilter, setDeptFilter]     = useState('')
+  const [programFilter, setProgramFilter] = useState('')
+  const [affiliationFilter, setAffiliationFilter] = useState('')
   const [degreeFilter, setDegreeFilter] = useState('')
   const [sortBy, setSortBy]             = useState('created_at')
   const [sortDir, setSortDir]           = useState('desc')
@@ -460,7 +481,8 @@ export default function AdminUsersPage() {
     setLoading(true)
     try {
       const { data } = await userService.getAll({
-        search: debouncedSearch, role: roleFilter, department: deptFilter,
+        search: debouncedSearch, role: roleFilter, program: programFilter,
+        affiliation: affiliationFilter,
         degree_level: degreeFilter,
         sortBy, sortDir, page, limit: LIMIT,
       })
@@ -468,7 +490,7 @@ export default function AdminUsersPage() {
       setTotal(data.total || 0)
     } catch { toast.error('โหลดข้อมูลล้มเหลว') }
     finally { setLoading(false) }
-  }, [debouncedSearch, roleFilter, deptFilter, degreeFilter, sortBy, sortDir, page])
+  }, [debouncedSearch, roleFilter, programFilter, affiliationFilter, degreeFilter, sortBy, sortDir, page])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
@@ -524,7 +546,8 @@ export default function AdminUsersPage() {
         const { data } = await userService.getAll({
           search: exportScope === 'all' ? '' : debouncedSearch,
           role: exportScope === 'all' ? '' : roleFilter,
-          department: exportScope === 'all' ? '' : deptFilter,
+          program: exportScope === 'all' ? '' : programFilter,
+          affiliation: exportScope === 'all' ? '' : affiliationFilter,
           degree_level: exportScope === 'all' ? '' : degreeFilter,
           sortBy, sortDir, limit: 9999, page: 1,
         })
@@ -537,29 +560,29 @@ export default function AdminUsersPage() {
       const worksheet = workbook.addWorksheet('ผู้ใช้งาน')
       worksheet.columns = [
         { width: 25 }, { width: 30 }, { width: 15 }, { width: 18 },
-        { width: 25 }, { width: 30 }, { width: 18 }, { width: 15 },
+        { width: 25 }, { width: 58 }, { width: 38 }, { width: 18 }, { width: 15 },
       ]
-      worksheet.mergeCells('A1:H1')
+      worksheet.mergeCells('A1:I1')
       worksheet.getCell('A1').value = 'FIET-IRIS'
       worksheet.getCell('A1').font = { name: 'TH Sarabun New', bold: true, size: 14 }
       worksheet.getCell('A1').alignment = { horizontal: 'right', vertical: 'middle' }
-      worksheet.mergeCells('A2:H2')
+      worksheet.mergeCells('A2:I2')
       worksheet.getCell('A2').value = 'รายงานผู้ใช้งานในระบบ'
       worksheet.getCell('A2').font = { name: 'TH Sarabun New', bold: true, size: 14 }
       worksheet.getCell('A2').alignment = { horizontal: 'right', vertical: 'middle' }
-      worksheet.mergeCells('A3:H3')
+      worksheet.mergeCells('A3:I3')
       worksheet.getCell('A3').value = `วันที่พิมพ์ : ${new Date().toLocaleDateString('th-TH')} | รวมทั้งหมด : ${all.length} รายการ`
       worksheet.getCell('A3').font = { name: 'TH Sarabun New', bold: true, size: 14 }
       worksheet.getCell('A3').alignment = { horizontal: 'right', vertical: 'middle' }
       worksheet.addRow([])
       const headerRow = worksheet.addRow([
         'ชื่อ-นามสกุล', 'อีเมล', 'บทบาท', 'รหัสนักศึกษา',
-        'อาจารย์ที่ปรึกษา', 'สาขาวิชา', 'ระดับการศึกษา', 'วันที่สร้าง',
+        'อาจารย์ที่ปรึกษา', 'หลักสูตร', 'สังกัด', 'ระดับการศึกษา', 'วันที่สร้าง',
       ])
       headerRow.eachCell(cell => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF42B5E1' } }
         cell.font = { name: 'TH Sarabun New', bold: true, color: { argb: 'FFFFFFFF' }, size: 14 }
-        cell.alignment = { vertical: 'middle', horizontal: 'center' }
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
       })
       all.forEach(u => {
         const row = worksheet.addRow([
@@ -568,20 +591,28 @@ export default function AdminUsersPage() {
           roleLabel[u.role]         || u.role,
           u.student_id              || '',
           u.advisor_name            || '',
-          u.department              || '',
+          u.program              || '',
+          u.affiliation           || '',
           degreeLabel[u.degree_level] || '',
           new Date(u.created_at).toLocaleDateString('th-TH'),
         ])
         row.eachCell({ includeEmpty: true }, cell => {
           cell.font      = { name: 'TH Sarabun New', size: 14 }
-          cell.alignment = { vertical: 'middle' }
+          cell.alignment = { vertical: 'middle', wrapText: true }
         })
       })
+      const scopeLabel = exportScope === 'selected'
+        ? 'เฉพาะรายการที่เลือก'
+        : exportScope === 'all'
+          ? 'ทั้งหมด'
+          : 'ตามตัวกรอง'
+      const fileParts = ['IRIS', 'บัญชีผู้ใช้งาน', 'รายงาน', compactDate(), scopeLabel]
+
       const buffer = await workbook.xlsx.writeBuffer()
       const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       const url    = URL.createObjectURL(blob)
       const a      = document.createElement('a')
-      a.href = url; a.download = `FIET-IRIS_users_${new Date().toISOString().slice(0, 10)}.xlsx`; a.click()
+      a.href = url; a.download = `${fileParts.map(safeFilePart).filter(Boolean).join('_')}.xlsx`; a.click()
       URL.revokeObjectURL(url)
       toast.success(`Export ${all.length} รายการสำเร็จ`)
     } catch { toast.error('Export ล้มเหลว') }
@@ -603,7 +634,9 @@ export default function AdminUsersPage() {
   const someSelected  = users.some(u => selectedIds.has(u.user_id))
   const selectedUsers = users.filter(u => selectedIds.has(u.user_id))
   const degreeDisabled = roleFilter && roleFilter !== 'student'
-  const userDeptOptions = !degreeDisabled && degreeFilter ? DEPARTMENTS_BY_DEGREE[degreeFilter] || [] : ALL_DEPARTMENTS
+  const userProgramOptions = !degreeDisabled && degreeFilter
+      ? academicOptions.programsByDegree[degreeFilter] || []
+      : academicOptions.programs
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
@@ -668,7 +701,8 @@ export default function AdminUsersPage() {
             const nextRole = e.target.value
             setRoleFilter(nextRole)
             if (nextRole && nextRole !== 'student') setDegreeFilter('')
-            setDeptFilter('')
+            setProgramFilter('')
+            setAffiliationFilter(nextRole === 'executive' ? academicOptions.deanOffice : '')
             setPage(1)
           }}>
           <option value="">ทุก Role</option>
@@ -680,16 +714,25 @@ export default function AdminUsersPage() {
         </select>
         <select className="input-field w-full sm:w-auto disabled:bg-slate-50 disabled:text-slate-400" value={degreeFilter}
           disabled={degreeDisabled}
-          onChange={e => { setDegreeFilter(e.target.value); setDeptFilter(''); setPage(1) }}>
+          onChange={e => { setDegreeFilter(e.target.value); setProgramFilter(''); setPage(1) }}>
           <option value="">ทุกระดับ</option>
           <option value="bachelor">ป.ตรี</option>
           <option value="master">ป.โท</option>
           <option value="doctoral">ป.เอก</option>
         </select>
-        <select className="input-field w-full sm:w-auto" value={deptFilter}
-          onChange={e => { setDeptFilter(e.target.value); setPage(1) }}>
-          <option value="">ทุกสาขาวิชา</option>
-          {userDeptOptions.map(d => (
+        <select className="input-field w-full sm:w-auto" value={programFilter}
+          disabled={roleFilter && roleFilter !== 'student'}
+          onChange={e => { setProgramFilter(e.target.value); setPage(1) }}>
+          <option value="">ทุกหลักสูตร</option>
+          {userProgramOptions.map(d => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+        <select className="input-field w-full sm:w-auto" value={affiliationFilter}
+          disabled={roleFilter === 'student' || roleFilter === 'executive'}
+          onChange={e => { setAffiliationFilter(e.target.value); setPage(1) }}>
+          {roleFilter !== 'executive' && <option value="">ทุกสังกัด</option>}
+          {academicOptions.affiliations.map(d => (
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
@@ -715,7 +758,7 @@ export default function AdminUsersPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ minWidth: '1020px' }}>
+          <table className="w-full text-sm" style={{ minWidth: '1320px' }}>
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th className="px-4 py-3 w-10">
@@ -729,7 +772,7 @@ export default function AdminUsersPage() {
                 {COLUMNS.map((col, i) => (
                   <th key={i}
                     onClick={() => col.sort && col.key && handleSort(col.key)}
-                    className={`text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap ${col.sort && col.key ? 'cursor-pointer hover:text-slate-700 select-none' : ''}`}>
+                    className={`text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap ${col.key === 'program' ? 'min-w-[300px]' : ''} ${col.key === 'affiliation' ? 'min-w-[220px]' : ''} ${col.sort && col.key ? 'cursor-pointer hover:text-slate-700 select-none' : ''}`}>
                     {col.label}
                     {col.sort && col.key && (
                       <span className="ml-1" style={sortBy === col.key ? { color: '#42b5e1' } : { color: '#cbd5e1' }}>
@@ -742,9 +785,9 @@ export default function AdminUsersPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
-                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400 text-sm">ไม่พบข้อมูล</td></tr>
               ) : users.map(u => (
                 <tr key={u.user_id}
                   className={`hover:bg-slate-50 transition-colors ${selectedIds.has(u.user_id) ? 'bg-blue-50/40' : ''}`}>
@@ -771,7 +814,12 @@ export default function AdminUsersPage() {
                     ) : <span className="text-slate-300 text-xs">—</span>}
                   </td>
                   <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{u.advisor_name || '—'}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs max-w-[120px] truncate">{u.department || '—'}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs min-w-[300px] max-w-[380px]" title={u.program || ''}>
+                    <span className="block truncate">{u.program || '—'}</span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 text-xs min-w-[220px] max-w-[280px]" title={u.affiliation || ''}>
+                    <span className="block truncate">{u.affiliation || '—'}</span>
+                  </td>
                   <td className="px-4 py-3 text-center text-slate-600 text-xs tabular-nums">{u.doc_count}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 whitespace-nowrap">
@@ -822,6 +870,7 @@ export default function AdminUsersPage() {
         <UserModal
           user={modal === 'edit' ? selected : null}
           advisors={advisors}
+          academicOptions={academicOptions}
           onClose={() => setModal(null)}
           onSaved={handleUserSaved}
         />
@@ -829,6 +878,7 @@ export default function AdminUsersPage() {
       {modal === 'import' && (
         <ImportModal
           advisors={advisors}
+          academicOptions={academicOptions}
           onClose={() => setModal(null)}
           onSaved={fetchUsers}
         />

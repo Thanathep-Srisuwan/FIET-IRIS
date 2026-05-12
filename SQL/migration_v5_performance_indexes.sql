@@ -17,18 +17,31 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IDX_USERS_role_degree_department' AND object_id = OBJECT_ID('dbo.USERS'))
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.USERS') AND name = 'department')
+   AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.USERS') AND name = 'program')
 BEGIN
-  CREATE INDEX IDX_USERS_role_degree_department
-  ON dbo.USERS(role, degree_level, department)
+  EXEC sp_rename 'dbo.USERS.department', 'program', 'COLUMN';
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.USERS') AND name = 'program')
+BEGIN
+  ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IDX_USERS_role_degree_program' AND object_id = OBJECT_ID('dbo.USERS'))
+BEGIN
+  CREATE INDEX IDX_USERS_role_degree_program
+  ON dbo.USERS(role, degree_level, program)
   INCLUDE (user_id, advisor_id, is_active, name, email, student_id);
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IDX_USERS_advisor_degree_department' AND object_id = OBJECT_ID('dbo.USERS'))
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IDX_USERS_advisor_degree_program' AND object_id = OBJECT_ID('dbo.USERS'))
 BEGIN
-  CREATE INDEX IDX_USERS_advisor_degree_department
-  ON dbo.USERS(advisor_id, degree_level, department)
+  CREATE INDEX IDX_USERS_advisor_degree_program
+  ON dbo.USERS(advisor_id, degree_level, program)
   INCLUDE (user_id, role, is_active);
 END
 GO

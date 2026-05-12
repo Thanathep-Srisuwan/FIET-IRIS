@@ -2,6 +2,16 @@ const bcrypt = require('bcrypt')
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 const { sendMail, temporaryPasswordTemplate } = require('../utils/mailer')
+const { DEAN_OFFICE } = require('../constants/programs')
+
+const normalizeProgramForRole = (role, program) => (
+  role === 'student' ? (program || null) : null
+)
+
+const normalizeAffiliationForRole = (role, affiliation) => {
+  if (role === 'executive') return DEAN_OFFICE
+  return affiliation || null
+}
 
 // เพิ่ม columns ถ้ายังไม่มี (idempotent)
 const ensureColumns = async (pool) => {
@@ -10,13 +20,21 @@ const ensureColumns = async (pool) => {
       ALTER TABLE dbo.USERS ADD student_id NVARCHAR(50) NULL;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='degree_level')
       ALTER TABLE dbo.USERS ADD degree_level NVARCHAR(20) NULL;
+    IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='department')
+       AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      EXEC sp_rename 'dbo.USERS.department', 'program', 'COLUMN';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
+      ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='affiliation')
+      ALTER TABLE dbo.USERS ADD affiliation NVARCHAR(100) NULL;
   `)
 }
 
 // GET /api/users
 const getUsers = async (req, res) => {
   try {
-    const { role, search, department, status, degree_level, sortBy = 'created_at', sortDir = 'desc', page = 1, limit = 20 } = req.query
+    const { role, search, status, degree_level, affiliation, sortBy = 'created_at', sortDir = 'desc', page = 1, limit = 20 } = req.query
+    const program = req.query.program || req.query.department
     const offset = (page - 1) * limit
     const pool = await getPool()
     await ensureColumns(pool)
@@ -32,9 +50,13 @@ const getUsers = async (req, res) => {
       where += ' AND (u.name LIKE @search OR u.email LIKE @search OR u.student_id LIKE @search)'
       inputs.push({ name: 'search', type: sql.NVarChar, value: `%${search}%` })
     }
-    if (department) {
-      where += ' AND u.department = @department'
-      inputs.push({ name: 'department', type: sql.NVarChar, value: department })
+    if (program) {
+      where += ' AND u.program = @program'
+      inputs.push({ name: 'program', type: sql.NVarChar, value: program })
+    }
+    if (affiliation) {
+      where += ' AND u.affiliation = @affiliation'
+      inputs.push({ name: 'affiliation', type: sql.NVarChar, value: affiliation })
     }
     if (status === 'active') {
       where += ' AND u.is_active = 1'
@@ -48,7 +70,7 @@ const getUsers = async (req, res) => {
 
     const SORT_COLS = {
       name: 'u.name', student_id: 'u.student_id', email: 'u.email',
-      role: 'u.role', department: 'u.department', degree_level: 'u.degree_level',
+      role: 'u.role', program: 'u.program', affiliation: 'u.affiliation', degree_level: 'u.degree_level',
       is_active: 'u.is_active', created_at: 'u.created_at', doc_count: 'doc_count',
     }
     const orderCol = SORT_COLS[sortBy] || 'u.created_at'
@@ -60,7 +82,7 @@ const getUsers = async (req, res) => {
     const result = await req2.query(`
       SELECT
         u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
-        u.department, u.is_active, u.must_change_pw, u.last_login, u.created_at,
+        u.program, u.affiliation, u.is_active, u.must_change_pw, u.last_login, u.created_at,
         a.name AS advisor_name,
         (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
       FROM dbo.USERS u
@@ -98,7 +120,7 @@ const searchUsers = async (req, res) => {
     const result = await pool.request()
       .input('q', sql.NVarChar, `%${q.trim()}%`)
       .query(`
-        SELECT TOP 15 user_id, name, email, student_id, role, degree_level, department
+        SELECT TOP 15 user_id, name, email, student_id, role, degree_level, program, affiliation
         FROM dbo.USERS
         WHERE is_active = 1 AND role != 'admin'
           AND (student_id LIKE @q OR name LIKE @q OR email LIKE @q)
@@ -114,7 +136,9 @@ const searchUsers = async (req, res) => {
 // POST /api/users
 const createUser = async (req, res) => {
   try {
-    const { name, email, role, advisor_id, department, student_id, degree_level } = req.body
+    const { name, email, role, advisor_id, student_id, degree_level } = req.body
+    const program = normalizeProgramForRole(role, req.body.program || req.body.department)
+    const affiliation = normalizeAffiliationForRole(role, req.body.affiliation)
 
     if (!name || !email || !role)
       return res.status(400).json({ message: 'กรุณากรอกข้อมูลให้ครบถ้วน' })
@@ -143,14 +167,15 @@ const createUser = async (req, res) => {
       .input('hash',         sql.NVarChar, hash)
       .input('role',         sql.NVarChar, role)
       .input('advisor_id',   sql.Int,      role === 'student' ? (advisor_id || null) : null)
-      .input('department',   sql.NVarChar, department || null)
+      .input('program',   sql.NVarChar, program)
+      .input('affiliation', sql.NVarChar, affiliation)
       .input('student_id',   sql.NVarChar, student_id?.trim() || null)
       .input('degree_level', sql.NVarChar, role === 'student' ? (degree_level || 'bachelor') : null)
       .query(`
         INSERT INTO dbo.USERS
-          (name, email, password_hash, role, advisor_id, department, student_id, degree_level, must_change_pw)
+          (name, email, password_hash, role, advisor_id, program, affiliation, student_id, degree_level, must_change_pw)
         VALUES
-          (@name, @email, @hash, @role, @advisor_id, @department, @student_id, @degree_level, 1)
+          (@name, @email, @hash, @role, @advisor_id, @program, @affiliation, @student_id, @degree_level, 1)
       `)
 
     await sendMail({
@@ -170,7 +195,9 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { name, role, advisor_id, department, student_id, degree_level } = req.body
+    const { name, role, advisor_id, student_id, degree_level } = req.body
+    const program = normalizeProgramForRole(role, req.body.program || req.body.department)
+    const affiliation = normalizeAffiliationForRole(role, req.body.affiliation)
     const pool = await getPool()
     await ensureColumns(pool)
 
@@ -179,13 +206,14 @@ const updateUser = async (req, res) => {
       .input('name',         sql.NVarChar, name)
       .input('role',         sql.NVarChar, role)
       .input('advisor_id',   sql.Int,      role === 'student' ? (advisor_id || null) : null)
-      .input('department',   sql.NVarChar, department || null)
+      .input('program',   sql.NVarChar, program)
+      .input('affiliation', sql.NVarChar, affiliation)
       .input('student_id',   sql.NVarChar, student_id?.trim() || null)
       .input('degree_level', sql.NVarChar, role === 'student' ? (degree_level || 'bachelor') : null)
       .query(`
         UPDATE dbo.USERS
         SET name=@name, role=@role, advisor_id=@advisor_id,
-            department=@department, student_id=@student_id,
+            program=@program, affiliation=@affiliation, student_id=@student_id,
             degree_level=@degree_level, updated_at=GETDATE()
         WHERE user_id=@user_id
       `)
@@ -195,7 +223,7 @@ const updateUser = async (req, res) => {
       .query(`
         SELECT
           u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
-          u.department, u.is_active, u.must_change_pw, u.last_login, u.created_at,
+          u.program, u.affiliation, u.is_active, u.must_change_pw, u.last_login, u.created_at,
           a.name AS advisor_name,
           (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
         FROM dbo.USERS u
@@ -309,22 +337,26 @@ const importUsers = async (req, res) => {
 
         const tempPassword = `Iris@${Math.random().toString(36).slice(-6).toUpperCase()}`
         const hash = await bcrypt.hash(tempPassword, 12)
-        const degLevel = u.role === 'student' ? (u.degree_level || 'bachelor') : null
+        const role = u.role
+        const degLevel = role === 'student' ? (u.degree_level || 'bachelor') : null
+        const program = normalizeProgramForRole(role, u.program || u.department)
+        const affiliation = normalizeAffiliationForRole(role, u.affiliation)
 
         await pool.request()
           .input('name',         sql.NVarChar, u.name)
           .input('email',        sql.NVarChar, u.email)
           .input('hash',         sql.NVarChar, hash)
-          .input('role',         sql.NVarChar, u.role)
-          .input('advisor_id',   sql.Int,      u.role === 'student' ? (u.advisor_id || null) : null)
-          .input('department',   sql.NVarChar, u.department || null)
+          .input('role',         sql.NVarChar, role)
+          .input('advisor_id',   sql.Int,      role === 'student' ? (u.advisor_id || null) : null)
+          .input('program',   sql.NVarChar, program)
+          .input('affiliation', sql.NVarChar, affiliation)
           .input('student_id',   sql.NVarChar, u.student_id?.trim() || null)
           .input('degree_level', sql.NVarChar, degLevel)
           .query(`
             INSERT INTO dbo.USERS
-              (name, email, password_hash, role, advisor_id, department, student_id, degree_level, must_change_pw)
+              (name, email, password_hash, role, advisor_id, program, affiliation, student_id, degree_level, must_change_pw)
             VALUES
-              (@name, @email, @hash, @role, @advisor_id, @department, @student_id, @degree_level, 1)
+              (@name, @email, @hash, @role, @advisor_id, @program, @affiliation, @student_id, @degree_level, 1)
           `)
 
         await sendMail({
@@ -358,7 +390,7 @@ const getAdvisors = async (req, res) => {
     }
 
     const relationsResult = await pool.request().query(`
-      SELECT advisor_id, degree_level, department
+      SELECT advisor_id, degree_level, program
       FROM dbo.USERS
       WHERE role = 'student'
         AND is_active = 1
@@ -366,9 +398,9 @@ const getAdvisors = async (req, res) => {
     `)
     const relations = {}
     relationsResult.recordset.forEach(row => {
-      if (!relations[row.advisor_id]) relations[row.advisor_id] = { degrees: new Set(), branches: new Set() }
+      if (!relations[row.advisor_id]) relations[row.advisor_id] = { degrees: new Set(), programs: new Set() }
       if (row.degree_level) relations[row.advisor_id].degrees.add(row.degree_level)
-      if (row.department) relations[row.advisor_id].branches.add(row.department)
+      if (row.program) relations[row.advisor_id].programs.add(row.program)
     })
 
     res.json({
@@ -376,7 +408,7 @@ const getAdvisors = async (req, res) => {
       relations: Object.fromEntries(
         Object.entries(relations).map(([id, value]) => [id, {
           degrees: [...value.degrees],
-          branches: [...value.branches],
+          programs: [...value.programs],
         }])
       ),
     })

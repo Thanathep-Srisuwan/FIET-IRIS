@@ -7,31 +7,31 @@ const statusColor = {
   expired:       { bg: '#fff1f2', text: '#be123c' },
 }
 
-export default function BranchSummaryPage() {
-  const [branches, setBranches] = useState([])
+export default function ProgramSummaryPage() {
+  const [programs, setPrograms] = useState([])
   const [loading, setLoading]   = useState(true)
   const [sortBy, setSortBy]     = useState('total_docs')
 
   useEffect(() => {
-    executiveService.getBranches()
-      .then(r => setBranches(r.data.branches || []))
+    executiveService.getPrograms()
+      .then(r => setPrograms(r.data.programs || []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  const sorted = [...branches].sort((a, b) => b[sortBy] - a[sortBy])
+  const sorted = [...programs].sort((a, b) => b[sortBy] - a[sortBy])
   const maxDocs = Math.max(...sorted.map(b => b.total_docs), 1)
 
   const exportCSV = () => {
-    const header = 'สาขาวิชา,นักศึกษา,เอกสารทั้งหมด,ปกติ,ใกล้หมดอายุ,หมดอายุ,RI,IRB'
+    const header = 'หลักสูตร,นักศึกษา,เอกสารทั้งหมด,ปกติ,ใกล้หมดอายุ,หมดอายุ,RI,IRB'
     const rows = sorted.map(b =>
-      `"${b.department || 'ไม่ระบุ'}",${b.user_count},${b.total_docs},${b.active},${b.expiring_soon},${b.expired},${b.ri_count},${b.irb_count}`
+      `"${b.program || 'ไม่ระบุ'}",${b.user_count},${b.total_docs},${b.active},${b.expiring_soon},${b.expired},${b.ri_count},${b.irb_count}`
     )
     const csv  = [header, ...rows].join('\n')
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url
-    a.download = 'FIET-IRIS_branch_summary.csv'; a.click()
+    a.download = 'FIET-IRIS_program_summary.csv'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -43,8 +43,8 @@ export default function BranchSummaryPage() {
           <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>
             ผู้บริหาร
           </p>
-          <h1 className="text-2xl font-bold text-slate-800">สรุปรายสาขาวิชา</h1>
-          <p className="text-slate-400 text-sm mt-0.5">เปรียบเทียบเอกสาร RI/IRB ทั้ง 7 สาขา</p>
+          <h1 className="text-2xl font-bold text-slate-800">สรุปรายหลักสูตร</h1>
+          <p className="text-slate-400 text-sm mt-0.5">เปรียบเทียบเอกสาร RI/IRB ตามหลักสูตร</p>
         </div>
         <button onClick={exportCSV}
           className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all">
@@ -75,7 +75,7 @@ export default function BranchSummaryPage() {
 
       {/* Bar Chart */}
       <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h2 className="text-sm font-semibold text-slate-700 mb-5">เปรียบเทียบจำนวนเอกสารรายสาขา</h2>
+        <h2 className="text-sm font-semibold text-slate-700 mb-5">เปรียบเทียบจำนวนเอกสารรายหลักสูตร</h2>
         {loading ? (
           <div className="text-center py-8 text-slate-400 text-sm">กำลังโหลด...</div>
         ) : (
@@ -83,7 +83,7 @@ export default function BranchSummaryPage() {
             {sorted.map((b, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-medium text-slate-700 truncate max-w-[280px]">{b.department || 'ไม่ระบุสาขา'}</span>
+                  <span className="font-medium text-slate-700 truncate max-w-[280px]">{b.program || 'ไม่ระบุหลักสูตร'}</span>
                   <span className="text-slate-400 tabular-nums ml-2">{b.total_docs} ฉบับ</span>
                 </div>
                 <div className="h-3 bg-slate-100 rounded-full overflow-hidden flex">
@@ -113,7 +113,7 @@ export default function BranchSummaryPage() {
         <table className="w-full text-sm" style={{ minWidth: '650px' }}>
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              {['สาขาวิชา','นักศึกษา','เอกสารทั้งหมด','ปกติ','ใกล้หมดอายุ','หมดอายุ','RI','IRB'].map(h => (
+              {['หลักสูตร','นักศึกษา','เอกสารทั้งหมด','ปกติ','ใกล้หมดอายุ','หมดอายุ','RI','IRB'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
                   {h}
                 </th>
@@ -126,7 +126,7 @@ export default function BranchSummaryPage() {
             ) : sorted.map((b, i) => (
               <tr key={i} className="hover:bg-slate-50 transition-colors">
                 <td className="px-4 py-3.5 font-medium text-slate-700 max-w-[200px] truncate">
-                  {b.department || <span className="text-slate-400 italic">ไม่ระบุสาขา</span>}
+                  {b.program || <span className="text-slate-400 italic">ไม่ระบุหลักสูตร</span>}
                 </td>
                 <td className="px-4 py-3.5 text-center text-slate-600 tabular-nums">{b.user_count}</td>
                 <td className="px-4 py-3.5 text-center font-semibold text-slate-700 tabular-nums">{b.total_docs}</td>

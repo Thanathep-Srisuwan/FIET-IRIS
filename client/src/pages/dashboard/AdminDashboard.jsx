@@ -9,19 +9,20 @@ const statusColor = {
 const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
 
 const USER_GROUPS = [
-  { key: 'bachelor', label: 'นักศึกษาปริญญาตรี',      color: '#42b5e1' },
-  { key: 'master',   label: 'นักศึกษาปริญญาโท',       color: '#8b5cf6' },
-  { key: 'doctoral', label: 'นักศึกษาปริญญาเอก',      color: '#f43f5e' },
-  { key: 'advisor',  label: 'อาจารย์',    color: '#10b981' },
-  { key: 'staff',    label: 'เจ้าหน้าที่', color: '#f7924a' },
+  { key: 'bachelor',  label: 'นักศึกษาปริญญาตรี', color: '#42b5e1' },
+  { key: 'master',    label: 'นักศึกษาปริญญาโท',  color: '#8b5cf6' },
+  { key: 'doctoral',  label: 'นักศึกษาปริญญาเอก', color: '#f43f5e' },
+  { key: 'advisor',   label: 'อาจารย์',           color: '#10b981' },
+  { key: 'staff',     label: 'เจ้าหน้าที่',        color: '#f7924a' },
+  { key: 'executive', label: 'ผู้บริหาร',          color: '#0d9488' },
 ]
 
 function StatCard({ label, value, color, sub, onClick }) {
   const palette = {
-    blue:   { bg: '#f0f9ff', border: '#bae6fd', text: '#0369a1', val: '#0c4a6e' },
-    orange: { bg: '#fff7ed', border: '#fed7aa', text: '#c2410c', val: '#7c2d12' },
-    red:    { bg: '#fff1f2', border: '#fecdd3', text: '#be123c', val: '#881337' },
-    slate:  { bg: '#f8fafc', border: '#e2e8f0', text: '#475569', val: '#1e293b' },
+    blue:   { bg: '#dbeafe', border: '#60a5fa', text: '#1d4ed8', val: '#1e3a5f' },
+    orange: { bg: '#ffedd5', border: '#fb923c', text: '#9a3412', val: '#7c2d12' },
+    red:    { bg: '#ffe4e6', border: '#f87171', text: '#9f1239', val: '#881337' },
+    slate:  { bg: '#e2e8f0', border: '#94a3b8', text: '#334155', val: '#0f172a' },
   }
   const p = palette[color] || palette.slate
   return (
@@ -60,8 +61,8 @@ function DetailListModal({ title, subtitle, items, type, onClose }) {
                     <p className="truncate text-sm font-semibold text-slate-800">{item.doc_title || item.name}</p>
                     <p className="mt-0.5 truncate text-xs text-slate-500">
                       {type === 'user'
-                        ? [item.email, item.student_id, item.department, item.advisor_name && `อาจารย์: ${item.advisor_name}`].filter(Boolean).join(' • ')
-                        : [item.owner_name, item.owner_student_id, item.doc_type].filter(Boolean).join(' • ')}
+                        ? [item.email, item.student_id, item.program, item.advisor_name && `อาจารย์: ${item.advisor_name}`].filter(Boolean).join(' • ')
+                        : [item.owner_name, item.owner_student_id, item.owner_program, item.owner_affiliation].filter(Boolean).join(' • ')}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 sm:justify-end">
@@ -108,10 +109,12 @@ function RecentDocumentModal({ doc, loading, onClose }) {
                 ['ประเภท', doc?.doc_type],
                 ['เจ้าของ', doc?.owner_name],
                 ['อีเมล', doc?.owner_email],
+                ['หลักสูตร', doc?.owner_program],
+                ['สังกัด', doc?.owner_affiliation],
                 ['วันที่อัปโหลด', doc?.created_at ? new Date(doc.created_at).toLocaleDateString('th-TH') : '-'],
                 ['วันที่ออก', doc?.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '-'],
                 ['วันหมดอายุ', doc?.no_expire ? 'ไม่มีวันหมดอายุ' : (doc?.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : '-')],
-              ].map(([label, value]) => (
+              ].filter(([, v]) => v != null && v !== '').map(([label, value]) => (
                 <div key={label} className="rounded-xl bg-slate-50 p-3">
                   <p className="text-xs font-semibold text-slate-400">{label}</p>
                   <p className="mt-1 truncate text-sm font-semibold text-slate-700">{value || '-'}</p>
@@ -252,7 +255,7 @@ export default function AdminDashboard() {
       {/* ── Row 2: User Breakdown ─────────────────────────────────────────── */}
       <div>
         <h2 className="text-sm font-semibold text-slate-600 mb-3">ผู้ใช้งานในระบบ</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {groupData.map(g => (
             <div key={g.key}
               className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:shadow-md transition-shadow"

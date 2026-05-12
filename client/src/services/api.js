@@ -116,7 +116,7 @@ export default api
 // Executive
 export const executiveService = {
   getOverview:     ()       => api.get('/executive/overview'),
-  getBranches:     ()       => api.get('/executive/branches'),
+  getPrograms:     ()       => api.get('/executive/programs'),
   getDocuments:    (params) => api.get('/executive/documents', { params }),
 }
 
@@ -131,4 +131,21 @@ export const settingsService = {
   bulkUpdate:      (settings)  => api.put('/settings', { settings }),
   getTemplates:    ()           => api.get('/settings/email-templates'),
   updateTemplate:  (key, data) => api.put(`/settings/email-templates/${key}`, data),
+}
+
+// Reference data
+export const referenceService = {
+  getAcademicOptions: () => api.get('/reference/academic-options'),
+}
+
+// Program & Affiliation management (admin only)
+export const programService = {
+  getPrograms:        ()          => api.get('/reference/programs'),
+  createProgram:      (data)      => api.post('/reference/programs', data),
+  updateProgram:      (id, data)  => api.put(`/reference/programs/${id}`, data),
+  deleteProgram:      (id)        => api.delete(`/reference/programs/${id}`),
+  getAffiliations:    ()          => api.get('/reference/affiliations'),
+  createAffiliation:  (data)      => api.post('/reference/affiliations', data),
+  updateAffiliation:  (id, data)  => api.put(`/reference/affiliations/${id}`, data),
+  deleteAffiliation:  (id)        => api.delete(`/reference/affiliations/${id}`),
 }

@@ -20,12 +20,12 @@ const pageMeta = [
   { match: /^\/admin\/settings/, titleKey: 'topbar.adminSettings', eyebrow: 'Admin' },
   { match: /^\/admin\/email-templates/, titleKey: 'topbar.adminEmailTemplates', eyebrow: 'Admin' },
   { match: /^\/executive\/overview/, titleKey: 'topbar.executiveOverview', eyebrow: 'Executive' },
-  { match: /^\/executive\/branches/, titleKey: 'topbar.executiveBranches', eyebrow: 'Executive' },
+  { match: /^\/executive\/(programs|branches)/, titleKey: 'topbar.executivePrograms', eyebrow: 'Executive' },
   { match: /^\/executive\/documents/, titleKey: 'topbar.executiveDocuments', eyebrow: 'Executive' },
 ]
 
 function getPageMeta(pathname) {
-  return pageMeta.find(item => item.match.test(pathname)) || { titleKey: 'topbar.workspace', eyebrow: 'Workspace' }
+  return pageMeta.find(item => item.match.test(pathname)) || { titleKey: 'programs', eyebrow: 'Programs' }
 }
 
 export default function Topbar({ onMenuClick }) {
