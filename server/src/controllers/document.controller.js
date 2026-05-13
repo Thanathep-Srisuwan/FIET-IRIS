@@ -88,6 +88,47 @@ const ensureTrashReasonColumn = async (pool) => {
   `)
 }
 
+const ensureNotificationsTypeConstraint = async (pool) => {
+  // Expand NOTIFICATIONS.type CHECK to include approval types
+  await pool.request().query(`
+    IF NOT EXISTS (
+      SELECT 1 FROM sys.check_constraints
+      WHERE parent_object_id = OBJECT_ID('dbo.NOTIFICATIONS') AND name = 'CHK_NOTIFICATIONS_type_v2'
+    )
+    BEGIN
+      DECLARE @cn NVARCHAR(200)
+      SELECT @cn = cc.name
+      FROM sys.check_constraints cc
+      JOIN sys.columns c ON cc.parent_object_id = c.object_id AND cc.parent_column_id = c.column_id
+      WHERE cc.parent_object_id = OBJECT_ID('dbo.NOTIFICATIONS') AND c.name = 'type'
+      IF @cn IS NOT NULL
+        EXEC('ALTER TABLE dbo.NOTIFICATIONS DROP CONSTRAINT [' + @cn + ']')
+      ALTER TABLE dbo.NOTIFICATIONS
+      ADD CONSTRAINT CHK_NOTIFICATIONS_type_v2
+      CHECK (type IN ('expiry_warning','expired','deleted','replaced','approved','rejected'))
+    END
+  `)
+}
+
+const ensureApprovalColumns = async (pool) => {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='approval_status')
+      ALTER TABLE dbo.DOCUMENTS ADD approval_status NVARCHAR(20) NOT NULL DEFAULT 'pending'
+  `)
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='approval_by')
+      ALTER TABLE dbo.DOCUMENTS ADD approval_by INT NULL
+  `)
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='approval_at')
+      ALTER TABLE dbo.DOCUMENTS ADD approval_at DATETIME NULL
+  `)
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='approval_note')
+      ALTER TABLE dbo.DOCUMENTS ADD approval_note NVARCHAR(1000) NULL
+  `)
+}
+
 const ensureDocTypeColumn = async (pool) => {
   // Drop hardcoded CHECK constraint on doc_type (RI/IRB only) if column is still narrow
   await pool.request().query(`
@@ -112,6 +153,28 @@ const ensureDocTypeColumn = async (pool) => {
       WHERE object_id = OBJECT_ID('dbo.DOCUMENTS') AND name = 'doc_type' AND max_length < 100
     )
       ALTER TABLE dbo.DOCUMENTS ALTER COLUMN doc_type NVARCHAR(50) NOT NULL
+  `)
+}
+
+const ensureProjectCategoryConstraintDropped = async (pool) => {
+  // Drop the old hardcoded CHECK on project_category ('urgent','exempt','evaluation')
+  // because categories are now managed dynamically via DOC_TYPE_CATEGORIES table
+  await pool.request().query(`
+    DECLARE @cn NVARCHAR(200)
+    SELECT @cn = cc.name
+    FROM sys.check_constraints cc
+    JOIN sys.columns c ON cc.parent_object_id = c.object_id AND cc.parent_column_id = c.column_id
+    WHERE cc.parent_object_id = OBJECT_ID('dbo.DOCUMENTS') AND c.name = 'project_category'
+    IF @cn IS NOT NULL
+      EXEC('ALTER TABLE dbo.DOCUMENTS DROP CONSTRAINT [' + @cn + ']')
+  `)
+  // Widen project_category to NVARCHAR(50) to match DOC_TYPE_CATEGORIES.category_code
+  await pool.request().query(`
+    IF EXISTS (
+      SELECT 1 FROM sys.columns
+      WHERE object_id = OBJECT_ID('dbo.DOCUMENTS') AND name = 'project_category' AND max_length < 100
+    )
+      ALTER TABLE dbo.DOCUMENTS ALTER COLUMN project_category NVARCHAR(50) NULL
   `)
 }
 
@@ -204,6 +267,7 @@ const getDocuments = async (req, res) => {
   try {
     const {
       search, doc_type, status,
+      approval_status,
       page = 1, limit = 15,
       degree_level, advisor_id, owner_role,
       sort_by, sort_dir,
@@ -219,7 +283,9 @@ const getDocuments = async (req, res) => {
     await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
     await ensureDocTypeColumn(pool)
+    await ensureProjectCategoryConstraintDropped(pool)
     await ensureDocumentVersioningSchema(pool)
+    await ensureApprovalColumns(pool)
 
     // Collect params so we can reuse across count + data requests
     const filterParams = []
@@ -229,7 +295,9 @@ const getDocuments = async (req, res) => {
     addParam('user_id', sql.Int, user_id)
     let where = "WHERE d.status NOT IN ('deleted','trashed')"
 
-    if (role === 'student' || role === 'staff') {
+    const isAdvisorOwnScope = role === 'advisor' && (owner_role === 'advisor' || req.query.scope === 'mine')
+
+    if (role === 'student' || role === 'staff' || isAdvisorOwnScope) {
       where += ' AND d.user_id = @user_id'
     } else if (role === 'advisor') {
       where += ' AND u.advisor_id = @user_id'
@@ -237,6 +305,10 @@ const getDocuments = async (req, res) => {
 
     if (doc_type)     { where += ' AND d.doc_type = @doc_type';         addParam('doc_type',           sql.NVarChar, doc_type) }
     if (status)       { where += ' AND d.status = @status';             addParam('status',             sql.NVarChar, status) }
+    if (approval_status) {
+      where += " AND ISNULL(d.approval_status, 'pending') = @approval_status"
+      addParam('approval_status', sql.NVarChar, approval_status)
+    }
     if (search)       { where += ' AND (d.title LIKE @search OR u.name LIKE @search OR u.student_id LIKE @search)'; addParam('search', sql.NVarChar, `%${search}%`) }
     if (degree_level) {
       // NULL degree_level is treated as 'bachelor' (matches summary fallback logic)
@@ -279,6 +351,8 @@ const getDocuments = async (req, res) => {
         d.doc_id, d.title, d.doc_type, d.description,
         d.issue_date, d.expire_date, d.no_expire, d.status, d.version,
         d.created_at, d.project_category,
+        ISNULL(d.approval_status, 'pending') AS approval_status,
+        d.approval_note, d.approval_at,
         CASE WHEN d.no_expire = 1 THEN NULL ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) END AS days_remaining,
         u.user_id AS owner_id, u.name AS owner_name, u.email AS owner_email,
         u.student_id AS owner_student_id, u.role AS owner_role, u.degree_level AS owner_degree_level,
@@ -365,6 +439,11 @@ const createDocument = async (req, res) => {
     await ensureNoExpireColumn(pool)
     await ensureTrashedColumns(pool)
     await ensureDocTypeColumn(pool)
+    await ensureProjectCategoryConstraintDropped(pool)
+    await ensureApprovalColumns(pool)
+
+    // admin อัปโหลดแทน → อนุมัติอัตโนมัติ, user อัปโหลดเอง → pending
+    const initialApproval = (role === 'admin') ? 'approved' : 'pending'
 
     const docResult = await pool.request()
       .input('user_id',          sql.Int,      effectiveUserId)
@@ -375,11 +454,12 @@ const createDocument = async (req, res) => {
       .input('expire_date',      sql.Date,     isNoExpire ? null : expire_date)
       .input('project_category', sql.NVarChar, project_category || null)
       .input('no_expire',        sql.Bit,      isNoExpire ? 1 : 0)
+      .input('approval_status',  sql.NVarChar, initialApproval)
       .query(`
         INSERT INTO dbo.DOCUMENTS
-          (user_id, doc_type, title, description, issue_date, expire_date, project_category, status, no_expire)
+          (user_id, doc_type, title, description, issue_date, expire_date, project_category, status, no_expire, approval_status)
         OUTPUT INSERTED.doc_id
-        VALUES (@user_id, @doc_type, @title, @description, @issue_date, @expire_date, @project_category, 'active', @no_expire)
+        VALUES (@user_id, @doc_type, @title, @description, @issue_date, @expire_date, @project_category, 'active', @no_expire, @approval_status)
       `)
 
     const doc_id = docResult.recordset[0].doc_id
@@ -1033,10 +1113,239 @@ const getDocumentSummary = async (req, res) => {
   }
 }
 
+// GET /api/documents/my-trash — student/staff เห็นขยะของตัวเอง
+const getMyTrashedDocuments = async (req, res) => {
+  try {
+    const { user_id } = req.user
+    const { search, doc_type, page = 1, limit = 20 } = req.query
+    const parsedPage  = Math.max(1, parseInt(page) || 1)
+    const parsedLimit = Math.min(100, Math.max(1, parseInt(limit) || 20))
+    const offset = (parsedPage - 1) * parsedLimit
+    const pool = await getPool()
+    await ensureTrashedColumns(pool)
+    await ensureTrashReasonColumn(pool)
+
+    const filterParams = []
+    const addParam = (name, type, value) => filterParams.push({ name, type, value })
+    const applyParams = (req) => { filterParams.forEach(({ name, type, value }) => req.input(name, type, value)); return req }
+
+    addParam('user_id', sql.Int, user_id)
+    let where = "WHERE d.status = 'trashed' AND d.user_id = @user_id"
+    if (doc_type) { where += ' AND d.doc_type = @doc_type'; addParam('doc_type', sql.NVarChar, doc_type) }
+    if (search)   { where += ' AND d.title LIKE @search';   addParam('search',   sql.NVarChar, `%${search}%`) }
+
+    const countResult = await applyParams(pool.request()).query(`
+      SELECT COUNT(*) AS total FROM dbo.DOCUMENTS d ${where}
+    `)
+
+    const result = await applyParams(pool.request()).query(`
+      SELECT
+        d.doc_id, d.title, d.doc_type, d.status,
+        d.issue_date, d.expire_date, d.no_expire,
+        d.trashed_at, d.trash_reason,
+        DATEADD(DAY, 30, d.trashed_at) AS trash_expires_at,
+        DATEDIFF(DAY, GETDATE(), DATEADD(DAY, 30, d.trashed_at)) AS days_until_purge,
+        (SELECT COUNT(*) FROM dbo.DOCUMENT_FILES f WHERE f.doc_id = d.doc_id) AS file_count
+      FROM dbo.DOCUMENTS d
+      ${where}
+      ORDER BY d.trashed_at DESC
+      OFFSET ${offset} ROWS FETCH NEXT ${parsedLimit} ROWS ONLY
+    `)
+
+    res.json({
+      documents: result.recordset,
+      total: countResult.recordset[0].total,
+      page: parsedPage,
+      limit: parsedLimit,
+    })
+  } catch (err) {
+    logger.error(`getMyTrashedDocuments: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PUT /api/documents/my-trash/:id/restore — student/staff กู้เอกสารของตัวเอง
+const selfRestoreDocument = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { user_id } = req.user
+    const pool = await getPool()
+    await ensureTrashedColumns(pool)
+    await ensureNoExpireColumn(pool)
+
+    const result = await pool.request()
+      .input('doc_id',  sql.Int, id)
+      .input('user_id', sql.Int, user_id)
+      .query(`
+        SELECT doc_id, expire_date, no_expire
+        FROM dbo.DOCUMENTS
+        WHERE doc_id = @doc_id AND user_id = @user_id AND status = 'trashed'
+      `)
+
+    if (result.recordset.length === 0)
+      return res.status(404).json({ message: 'ไม่พบเอกสารในถังขยะของคุณ' })
+
+    const doc = result.recordset[0]
+    let newStatus = 'active'
+    if (!doc.no_expire && doc.expire_date) {
+      const daysLeft = Math.ceil((new Date(doc.expire_date) - new Date()) / 86400000)
+      if (daysLeft < 0) newStatus = 'expired'
+      else if (daysLeft <= 90) newStatus = 'expiring_soon'
+    }
+
+    await pool.request()
+      .input('doc_id',  sql.Int,      id)
+      .input('status',  sql.NVarChar, newStatus)
+      .query(`
+        UPDATE dbo.DOCUMENTS
+        SET status=@status, trashed_at=NULL, trashed_by=NULL, trash_reason=NULL, updated_at=GETDATE()
+        WHERE doc_id=@doc_id
+      `)
+
+    await logDocumentTimeline(pool, {
+      doc_id: parseInt(id),
+      actor_id: user_id,
+      event_type: 'restored',
+      title: 'กู้คืนเอกสารโดยเจ้าของ',
+      detail: 'เจ้าของเอกสารกู้คืนเอกสารจากถังขยะ',
+    })
+
+    res.json({ message: 'กู้คืนเอกสารสำเร็จ' })
+  } catch (err) {
+    logger.error(`selfRestoreDocument: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PUT /api/documents/:id/approve — admin อนุมัติเอกสาร
+const approveDocument = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { user_id } = req.user
+    const { note } = req.body
+    const pool = await getPool()
+    await ensureApprovalColumns(pool)
+    await ensureNotificationsTypeConstraint(pool)
+
+    const result = await pool.request()
+      .input('doc_id', sql.Int, id)
+      .query(`
+        SELECT d.doc_id, d.title, d.user_id, u.email AS owner_email, u.name AS owner_name
+        FROM dbo.DOCUMENTS d
+        JOIN dbo.USERS u ON d.user_id = u.user_id
+        WHERE d.doc_id = @doc_id AND d.status NOT IN ('deleted','trashed')
+      `)
+
+    if (result.recordset.length === 0)
+      return res.status(404).json({ message: 'ไม่พบเอกสาร' })
+
+    const doc = result.recordset[0]
+
+    await pool.request()
+      .input('doc_id',       sql.Int,      id)
+      .input('approval_by',  sql.Int,      user_id)
+      .input('approval_note',sql.NVarChar, note?.trim() || null)
+      .query(`
+        UPDATE dbo.DOCUMENTS
+        SET approval_status='approved', approval_by=@approval_by,
+            approval_at=GETDATE(), approval_note=@approval_note, updated_at=GETDATE()
+        WHERE doc_id=@doc_id
+      `)
+
+    await logDocumentTimeline(pool, {
+      doc_id: parseInt(id),
+      actor_id: user_id,
+      event_type: 'approved',
+      title: 'อนุมัติเอกสาร',
+      detail: note?.trim() || 'เอกสารได้รับการอนุมัติแล้ว',
+    })
+
+    // แจ้งเจ้าของ
+    await pool.request()
+      .input('user_id',  sql.Int,      doc.user_id)
+      .input('doc_id',   sql.Int,      parseInt(id))
+      .input('type',     sql.NVarChar, 'approved')
+      .input('message',  sql.NVarChar, `เอกสาร "${doc.title}" ได้รับการอนุมัติแล้ว${note?.trim() ? ': ' + note.trim() : ''}`)
+      .query(`
+        INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel)
+        VALUES (@user_id, @doc_id, @type, @message, 'in_app')
+      `)
+
+    logger.info(`Document approved: ${id} by admin ${user_id}`)
+    res.json({ message: 'อนุมัติเอกสารสำเร็จ' })
+  } catch (err) {
+    logger.error(`approveDocument: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PUT /api/documents/:id/reject — admin ปฏิเสธเอกสาร
+const rejectDocument = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { user_id } = req.user
+    const { note } = req.body
+    const pool = await getPool()
+    await ensureApprovalColumns(pool)
+    await ensureNotificationsTypeConstraint(pool)
+
+    const result = await pool.request()
+      .input('doc_id', sql.Int, id)
+      .query(`
+        SELECT d.doc_id, d.title, d.user_id, u.email AS owner_email
+        FROM dbo.DOCUMENTS d
+        JOIN dbo.USERS u ON d.user_id = u.user_id
+        WHERE d.doc_id = @doc_id AND d.status NOT IN ('deleted','trashed')
+      `)
+
+    if (result.recordset.length === 0)
+      return res.status(404).json({ message: 'ไม่พบเอกสาร' })
+
+    const doc = result.recordset[0]
+
+    await pool.request()
+      .input('doc_id',       sql.Int,      id)
+      .input('approval_by',  sql.Int,      user_id)
+      .input('approval_note',sql.NVarChar, note?.trim() || null)
+      .query(`
+        UPDATE dbo.DOCUMENTS
+        SET approval_status='rejected', approval_by=@approval_by,
+            approval_at=GETDATE(), approval_note=@approval_note, updated_at=GETDATE()
+        WHERE doc_id=@doc_id
+      `)
+
+    await logDocumentTimeline(pool, {
+      doc_id: parseInt(id),
+      actor_id: user_id,
+      event_type: 'rejected',
+      title: 'ปฏิเสธเอกสาร',
+      detail: note?.trim() || 'เอกสารถูกปฏิเสธ',
+    })
+
+    await pool.request()
+      .input('user_id',  sql.Int,      doc.user_id)
+      .input('doc_id',   sql.Int,      parseInt(id))
+      .input('type',     sql.NVarChar, 'rejected')
+      .input('message',  sql.NVarChar, `เอกสาร "${doc.title}" ถูกปฏิเสธ${note?.trim() ? ': ' + note.trim() : ' กรุณาติดต่อผู้ดูแลระบบ'}`)
+      .query(`
+        INSERT INTO dbo.NOTIFICATIONS (user_id, doc_id, type, message, channel)
+        VALUES (@user_id, @doc_id, @type, @message, 'in_app')
+      `)
+
+    logger.info(`Document rejected: ${id} by admin ${user_id}`)
+    res.json({ message: 'ปฏิเสธเอกสารสำเร็จ' })
+  } catch (err) {
+    logger.error(`rejectDocument: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
 module.exports = {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
   bulkRestoreDocuments, bulkPermanentDeleteDocuments,
   uploadFileVersion, getDocumentTimeline,
   downloadFile, previewFile, getDocumentSummary,
+  getMyTrashedDocuments, selfRestoreDocument,
+  approveDocument, rejectDocument,
 }

@@ -11,6 +11,7 @@ const {
   forgotPassword,
   updateProfilePicture,
   removeProfilePicture,
+  getProfile,
 } = require('../controllers/auth.controller')
 const { authenticate } = require('../middlewares/auth')
 
@@ -41,6 +42,7 @@ router.post('/login',           login)
 router.post('/forgot-password', forgotPassword)
 router.post('/refresh',         refresh)
 router.post('/logout',          authenticate, logout)
+router.get('/profile',          authenticate, getProfile)
 router.put('/change-password',  authenticate, changePassword)
 router.put('/profile-picture',  authenticate, uploadProfileImage.single('image'), updateProfilePicture)
 router.delete('/profile-picture', authenticate, removeProfilePicture)

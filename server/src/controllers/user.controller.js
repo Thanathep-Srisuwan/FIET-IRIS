@@ -443,6 +443,12 @@ const toggleUser = async (req, res) => {
     const { id } = req.params
     const pool = await getPool()
     await ensureColumns(pool)
+    await pool.request().query(`
+      IF COL_LENGTH('dbo.DOCUMENTS', 'no_expire') IS NULL
+        ALTER TABLE dbo.DOCUMENTS ADD no_expire BIT NOT NULL CONSTRAINT DF_DOCUMENTS_no_expire_adv DEFAULT 0;
+      IF COL_LENGTH('dbo.DOCUMENTS', 'approval_status') IS NULL
+        ALTER TABLE dbo.DOCUMENTS ADD approval_status NVARCHAR(30) NOT NULL CONSTRAINT DF_DOCUMENTS_approval_status_adv DEFAULT 'pending';
+    `)
 
     const result = await pool.request()
       .input('user_id', sql.Int, id)
@@ -692,6 +698,77 @@ const getAdvisors = async (req, res) => {
   }
 }
 
+// GET /api/users/my-advisees
+const getMyAdvisees = async (req, res) => {
+  try {
+    if (req.user.role !== 'advisor') {
+      return res.status(403).json({ message: 'This page is available to advisors only' })
+    }
+
+    const pool = await getPool()
+    await ensureColumns(pool)
+
+    const result = await pool.request()
+      .input('advisor_id', sql.Int, req.user.user_id)
+      .query(`
+        SELECT
+          u.user_id,
+          u.name,
+          u.email,
+          u.student_id,
+          u.degree_level,
+          u.program,
+          u.account_status,
+          COUNT(d.doc_id) AS document_count,
+          SUM(CASE
+            WHEN d.doc_id IS NOT NULL AND ISNULL(d.no_expire, 0) = 0 AND d.expire_date < CAST(GETDATE() AS DATE)
+            THEN 1 ELSE 0 END) AS expired_count,
+          SUM(CASE
+            WHEN d.doc_id IS NOT NULL AND ISNULL(d.no_expire, 0) = 0
+              AND d.expire_date >= CAST(GETDATE() AS DATE)
+              AND DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) <= 90
+            THEN 1 ELSE 0 END) AS expiring_count,
+          SUM(CASE
+            WHEN d.doc_id IS NOT NULL AND ISNULL(d.approval_status, 'pending') = 'pending'
+            THEN 1 ELSE 0 END) AS pending_count,
+          MAX(d.created_at) AS last_document_at
+        FROM dbo.USERS u
+        LEFT JOIN dbo.DOCUMENTS d
+          ON d.user_id = u.user_id
+          AND d.status NOT IN ('deleted','trashed')
+        WHERE u.role = 'student'
+          AND u.advisor_id = @advisor_id
+          AND u.is_active = 1
+          AND ISNULL(u.account_status, 'active') = 'active'
+        GROUP BY
+          u.user_id, u.name, u.email, u.student_id,
+          u.degree_level, u.program, u.account_status
+        ORDER BY u.degree_level, u.student_id, u.name
+      `)
+
+    const students = result.recordset.map(row => ({
+      ...row,
+      document_count: row.document_count || 0,
+      expired_count: row.expired_count || 0,
+      expiring_count: row.expiring_count || 0,
+      pending_count: row.pending_count || 0,
+    }))
+
+    res.json({
+      students,
+      summary: {
+        total: students.length,
+        with_expired: students.filter(s => s.expired_count > 0).length,
+        with_expiring: students.filter(s => s.expiring_count > 0).length,
+        pending_documents: students.reduce((sum, s) => sum + s.pending_count, 0),
+      },
+    })
+  } catch (err) {
+    logger.error(`getMyAdvisees error: ${err.message}`)
+    res.status(500).json({ message: 'Failed to load advisees' })
+  }
+}
+
 // DELETE /api/users/bulk
 const bulkDeleteUsers = async (req, res) => {
   try {
@@ -831,4 +908,4 @@ const bulkUpdateUserStatus = async (req, res) => {
   }
 }
 
-module.exports = { getUsers, searchUsers, createUser, updateUser, updateUserRole, toggleUser, updateUserStatus, resetPassword, importUsers, getAdvisors, bulkDeleteUsers, bulkToggleUsers, bulkUpdateUserStatus }
+module.exports = { getUsers, searchUsers, createUser, updateUser, updateUserRole, toggleUser, updateUserStatus, resetPassword, importUsers, getAdvisors, getMyAdvisees, bulkDeleteUsers, bulkToggleUsers, bulkUpdateUserStatus }

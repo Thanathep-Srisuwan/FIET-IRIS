@@ -310,7 +310,11 @@ export default function NotificationPanel({ onCountChange }) {
                 return (
                   <div
                     key={isAnnouncement ? `ann-${item.announcement_id}` : `doc-${item.notif_id}`}
-                    className={`cursor-pointer border-l-4 px-5 py-4 transition-all ${isUnread ? 'border-primary-400 bg-primary-50/40 dark:bg-primary-900/10' : 'border-transparent bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50'}`}
+                    className={`cursor-pointer border-l-4 px-5 py-4 transition-all ${
+                      isUnread
+                        ? 'border-primary-500 bg-primary-50/80 shadow-[inset_0_0_0_1px_rgba(66,181,225,0.12)] hover:bg-primary-50 dark:bg-primary-900/20 dark:hover:bg-primary-900/30'
+                        : 'border-transparent bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50'
+                    }`}
                     onClick={() => isAnnouncement ? handleAnnClick(item) : handleDocClick(item)}
                   >
                     <div className="flex gap-4">
@@ -319,12 +323,12 @@ export default function NotificationPanel({ onCountChange }) {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start gap-2">
-                          {isUnread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary-500" />}
-                          <p className={`min-w-0 flex-1 truncate text-[13px] font-bold ${isUnread ? 'text-slate-800 dark:text-slate-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {isUnread && <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-primary-600 ring-4 ring-primary-100 dark:ring-primary-900/40" />}
+                          <p className={`min-w-0 flex-1 truncate text-[13px] ${isUnread ? 'font-extrabold text-slate-950 dark:text-white' : 'font-bold text-slate-500 dark:text-slate-400'}`}>
                             {isAnnouncement ? item.title : item.doc_title}
                           </p>
                         </div>
-                        <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-relaxed text-slate-500 dark:text-slate-400">{isAnnouncement ? item.content : item.message}</p>
+                        <p className={`mt-1 line-clamp-2 text-[11px] leading-relaxed ${isUnread ? 'font-semibold text-slate-700 dark:text-slate-200' : 'font-medium text-slate-500 dark:text-slate-400'}`}>{isAnnouncement ? item.content : item.message}</p>
                         <div className="mt-2 flex items-center gap-2">
                           <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${colorClass}`}>
                             {isAnnouncement ? t('notifications.announcement') : item.doc_type}
@@ -333,9 +337,13 @@ export default function NotificationPanel({ onCountChange }) {
                             <Clock size={12} strokeWidth={2} />
                             {new Date(item.created_at).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            isUnread
+                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'
+                          }`}>
                             <CheckCheck size={12} />
-                            {isUnread ? t('common.read') : t('common.done')}
+                            {isUnread ? t('notifications.unreadStatus') : t('notifications.readStatus')}
                           </span>
                         </div>
                       </div>

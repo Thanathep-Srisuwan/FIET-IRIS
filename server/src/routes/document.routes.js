@@ -11,6 +11,8 @@ const {
   bulkRestoreDocuments, bulkPermanentDeleteDocuments,
   uploadFileVersion, getDocumentTimeline,
   downloadFile, previewFile, getDocumentSummary,
+  getMyTrashedDocuments, selfRestoreDocument,
+  approveDocument, rejectDocument,
 } = require('../controllers/document.controller')
 
 // Multer config
@@ -47,13 +49,19 @@ router.get('/summary',                      ...adminOnly, getDocumentSummary)
 router.get('/trash',                        ...adminOnly, getTrashedDocuments)
 router.put('/trash/bulk-restore',           ...adminOnly, bulkRestoreDocuments)
 router.delete('/trash/bulk-permanent',      ...adminOnly, bulkPermanentDeleteDocuments)
+router.get('/my-trash',                     ...auth,       getMyTrashedDocuments)
+router.put('/my-trash/:id/restore',         ...auth,       selfRestoreDocument)
 router.put('/:id/restore',                  ...adminOnly, restoreDocument)
+router.put('/:id/approve',                  ...adminOnly, approveDocument)
+router.put('/:id/reject',                   ...adminOnly, rejectDocument)
 router.delete('/:id/permanent',             ...adminOnly, permanentDeleteDocument)
 
 // Standard routes
 router.get('/',                              ...auth,      getDocuments)
 router.post('/:id/files/version', upload.array('files', 5), ...auth, uploadFileVersion)
 router.get('/:id/timeline',                  ...auth,      getDocumentTimeline)
+// Comment routes (nested)
+router.use('/:docId/comments', require('./comment.routes'))
 router.get('/:id',                           ...auth,      getDocument)
 router.post('/', upload.array('files', 5),   ...auth,      createDocument)
 router.delete('/:id',                        ...adminOnly, deleteDocument)

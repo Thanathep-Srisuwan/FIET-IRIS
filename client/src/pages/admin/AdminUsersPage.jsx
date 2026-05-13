@@ -721,7 +721,7 @@ export default function AdminUsersPage() {
 
   const COLUMNS = [
     { key: 'name',         label: `${t('adminUsers.colName')} / ${t('adminUsers.colStudentId')}`, sort: true, className: 'w-[28%]' },
-    { key: 'role',         label: `${t('adminUsers.colRole')} / ${t('adminUsers.colAccountStatus')}`, sort: true, className: 'w-[18%]' },
+    { key: 'role',         label: t('adminUsers.colAccess'), sort: true, className: 'w-[18%]' },
     { key: 'degree_level', label: `${t('adminUsers.colDegree')} / ${t('adminUsers.colAdvisor')} / ${t('adminUsers.colProgram')}`, sort: true, className: 'w-[31%]' },
     { key: 'affiliation',  label: t('adminUsers.colAffiliation'),  sort: true, className: 'w-[17%]' },
     { key: 'doc_count',    label: t('common.documents'),           sort: true, className: 'w-[6%]' },
@@ -1136,16 +1136,26 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="hidden">{u.email}</td>
                   <td className="px-3 py-3 align-top">
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap ${roleColor[u.role] || 'bg-slate-100 text-slate-500'}`}>
-                        {roleLabel[u.role] || u.role}
-                      </span>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap ${accountStatusColor[u.account_status || 'active'] || 'bg-slate-100 text-slate-500'}`}>
-                        {accountStatusLabel[u.account_status || 'active'] || u.account_status || 'active'}
-                      </span>
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          {t('adminUsers.colRole')}
+                        </p>
+                        <span className={`inline-flex w-fit max-w-full px-2 py-0.5 text-xs font-medium rounded-md whitespace-nowrap ${roleColor[u.role] || 'bg-slate-100 text-slate-500'}`}>
+                          {roleLabel[u.role] || u.role}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          {t('adminUsers.colAccountStatus')}
+                        </p>
+                        <span className={`inline-flex w-fit max-w-full px-2 py-0.5 text-xs font-medium rounded-md whitespace-nowrap ${accountStatusColor[u.account_status || 'active'] || 'bg-slate-100 text-slate-500'}`}>
+                          {accountStatusLabel[u.account_status || 'active'] || u.account_status || 'active'}
+                        </span>
+                      </div>
                     </div>
                     {u.account_status === 'graduated' && u.graduated_at && (
-                      <p className="mt-1 text-[11px] text-slate-400">{new Date(u.graduated_at).toLocaleDateString(locale)}</p>
+                      <p className="mt-2 text-[11px] text-slate-400">{new Date(u.graduated_at).toLocaleDateString(locale)}</p>
                     )}
                   </td>
                   <td className="hidden">

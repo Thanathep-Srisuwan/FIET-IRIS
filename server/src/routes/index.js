@@ -12,5 +12,6 @@ router.use('/doc-types',    require('./doctype.routes'))
 router.use('/admin',        require('./admin.routes'))
 router.use('/settings',     require('./settings.routes'))
 router.use('/reference',    require('./reference.routes'))
+router.use('/faq',          require('./faq.routes'))
 
 module.exports = router

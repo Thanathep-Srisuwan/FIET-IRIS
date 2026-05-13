@@ -10,27 +10,59 @@ import ThemeToggle from '../common/ThemeToggle'
 import LanguageToggle from '../common/LanguageToggle'
 
 const pageMeta = [
-  { match: /^\/dashboard/, titleKey: 'topbar.dashboard', eyebrowKey: 'topbar.workspace' },
-  { match: /^\/student\/tasks/, titleKey: 'topbar.studentTasks', eyebrowKey: 'roles.student' },
-  { match: /^\/student\/activity/, titleKey: 'topbar.studentActivity', eyebrowKey: 'roles.student' },
-  { match: /^\/documents/, titleKey: 'topbar.documents', eyebrowKey: 'common.documents' },
-  { match: /^\/admin\/users/, titleKey: 'topbar.adminUsers', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/announcements/, titleKey: 'topbar.adminAnnouncements', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/doc-types/, titleKey: 'topbar.adminDocTypes', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/programs/, titleKey: 'topbar.adminPrograms', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/trash/, titleKey: 'topbar.adminTrash', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/logs/, titleKey: 'topbar.adminLogs', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/settings/, titleKey: 'topbar.adminSettings', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/email-templates/, titleKey: 'topbar.adminEmailTemplates', eyebrowKey: 'roles.admin' },
-  { match: /^\/admin\/activity/,        titleKey: 'topbar.adminActivity',       eyebrowKey: 'roles.admin' },
-  { match: /^\/executive\/overview/, titleKey: 'topbar.executiveOverview', eyebrowKey: 'roles.executive' },
-  { match: /^\/executive\/(programs|branches)/, titleKey: 'topbar.executivePrograms', eyebrowKey: 'roles.executive' },
-  { match: /^\/executive\/documents/, titleKey: 'topbar.executiveDocuments', eyebrowKey: 'roles.executive' },
+  {
+    match: /^\/dashboard/,
+    titleByRole: {
+      student: 'topbar.dashboardStudent',
+      advisor: 'topbar.dashboardAdvisor',
+      staff: 'topbar.dashboardStaff',
+      admin: 'topbar.dashboardAdmin',
+      executive: 'topbar.dashboardExecutive',
+    },
+    eyebrowByRole: {
+      student: 'roles.student',
+      advisor: 'roles.advisor',
+      staff: 'roles.staff',
+      admin: 'roles.admin',
+      executive: 'roles.executive',
+    },
+  },
+  { match: /^\/student\/trash/, titleKey: 'topbar.studentTrash', eyebrowKey: 'topbar.sectionMyAccount' },
+  { match: /^\/advisor\/advisees/, titleKey: 'topbar.advisorAdvisees', eyebrowKey: 'roles.advisor' },
+  {
+    match: /^\/documents/,
+    titleByRole: {
+      student: 'topbar.documentsStudent',
+      advisor: 'topbar.documentsAdvisor',
+      staff: 'topbar.documentsStaff',
+      admin: 'topbar.documentsAdmin',
+    },
+    eyebrowKey: 'topbar.sectionDocuments',
+  },
+  { match: /^\/admin\/users/, titleKey: 'topbar.adminUsers', eyebrowKey: 'topbar.sectionAdminManage' },
+  { match: /^\/admin\/announcements/, titleKey: 'topbar.adminAnnouncements', eyebrowKey: 'topbar.sectionAdminManage' },
+  { match: /^\/admin\/doc-types/, titleKey: 'topbar.adminDocTypes', eyebrowKey: 'topbar.sectionAdminManage' },
+  { match: /^\/admin\/programs/, titleKey: 'topbar.adminPrograms', eyebrowKey: 'topbar.sectionAdminManage' },
+  { match: /^\/admin\/faq/, titleKey: 'topbar.adminFaq', eyebrowKey: 'topbar.sectionAdminManage' },
+  { match: /^\/admin\/trash/, titleKey: 'topbar.adminTrash', eyebrowKey: 'topbar.sectionAdminSystem' },
+  { match: /^\/admin\/logs/, titleKey: 'topbar.adminLogs', eyebrowKey: 'topbar.sectionAdminSystem' },
+  { match: /^\/admin\/settings/, titleKey: 'topbar.adminSettings', eyebrowKey: 'topbar.sectionAdminSystem' },
+  { match: /^\/admin\/email-templates/, titleKey: 'topbar.adminEmailTemplates', eyebrowKey: 'topbar.sectionAdminSystem' },
+  { match: /^\/admin\/activity/, titleKey: 'topbar.adminActivity', eyebrowKey: 'topbar.sectionAdminSystem' },
+  { match: /^\/executive\/overview/, titleKey: 'topbar.executiveOverview', eyebrowKey: 'topbar.sectionExecutive' },
+  { match: /^\/executive\/(programs|branches)/, titleKey: 'topbar.executivePrograms', eyebrowKey: 'topbar.sectionExecutive' },
+  { match: /^\/executive\/documents/, titleKey: 'topbar.executiveDocuments', eyebrowKey: 'topbar.sectionExecutive' },
   { match: /^\/profile/, titleKey: 'topbar.profile', eyebrowKey: 'profile.eyebrow' },
+  { match: /^\/help/, titleKey: 'topbar.help', eyebrowKey: 'topbar.sectionSupport' },
 ]
 
-function getPageMeta(pathname) {
-  return pageMeta.find(item => item.match.test(pathname)) || { titleKey: 'topbar.workspace', eyebrowKey: 'topbar.workspace' }
+function getPageMeta(pathname, role) {
+  const matched = pageMeta.find(item => item.match.test(pathname))
+    || { titleKey: 'topbar.workspace', eyebrowKey: 'topbar.workspace' }
+  return {
+    titleKey: matched.titleByRole?.[role] || matched.titleKey || matched.titleByRole?.user || 'topbar.workspace',
+    eyebrowKey: matched.eyebrowByRole?.[role] || matched.eyebrowKey || matched.eyebrowByRole?.user || 'topbar.workspace',
+  }
 }
 
 export default function Topbar({ onMenuClick }) {
@@ -41,7 +73,7 @@ export default function Topbar({ onMenuClick }) {
   const [, setUnreadCount] = useState(0)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
-  const meta = getPageMeta(location.pathname)
+  const meta = getPageMeta(location.pathname, user?.role)
 
   const today = new Date().toLocaleDateString(locale, {
     weekday: 'short',
@@ -101,7 +133,7 @@ export default function Topbar({ onMenuClick }) {
 
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-[11px] font-semibold text-primary-600 dark:text-primary-400">{t(meta.eyebrowKey)}</p>
+            <p className="text-[11px] font-semibold text-primary-600 dark:text-primary-400">{t(`roles.${user?.role || 'user'}`)}</p>
             <span className="hidden h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-700 sm:inline-block" />
             <p className="hidden text-[11px] font-medium text-slate-400 dark:text-slate-500 sm:block">{today}</p>
           </div>

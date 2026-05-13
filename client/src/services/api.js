@@ -50,19 +50,22 @@ export const authService = {
   updateProfilePicture: (data) => api.put('/auth/profile-picture', data),
   removeProfilePicture: () => api.delete('/auth/profile-picture'),
   refresh:        (data) => api.post('/auth/refresh', data),
+  getProfile:     ()     => api.get('/auth/profile'),
 }
 
 // Documents
 export const documentService = {
-  getAll:      (params) => api.get('/documents', { params }),
-  getSummary:  ()       => api.get('/documents/summary'),
-  getById:     (id)     => api.get(`/documents/${id}`),
-  upload:      (data)   => api.post('/documents', data),
-  delete:      (id)     => api.delete(`/documents/${id}`),
-  download:    (id, fileId) => api.get(`/documents/${id}/files/${fileId}/download`, { responseType: 'blob' }),
-  preview:     (id, fileId) => api.get(`/documents/${id}/files/${fileId}/preview`, { responseType: 'blob' }),
-  uploadVersion: (id, data) => api.post(`/documents/${id}/files/version`, data),
-  getTimeline: (id) => api.get(`/documents/${id}/timeline`),
+  getAll:        (params)       => api.get('/documents', { params }),
+  getSummary:    ()             => api.get('/documents/summary'),
+  getById:       (id)           => api.get(`/documents/${id}`),
+  upload:        (data)         => api.post('/documents', data),
+  delete:        (id)           => api.delete(`/documents/${id}`),
+  download:      (id, fileId)   => api.get(`/documents/${id}/files/${fileId}/download`, { responseType: 'blob' }),
+  preview:       (id, fileId)   => api.get(`/documents/${id}/files/${fileId}/preview`, { responseType: 'blob' }),
+  uploadVersion: (id, data)     => api.post(`/documents/${id}/files/version`, data),
+  getTimeline:   (id)           => api.get(`/documents/${id}/timeline`),
+  approve:       (id, data)     => api.put(`/documents/${id}/approve`, data),
+  reject:        (id, data)     => api.put(`/documents/${id}/reject`, data),
 }
 
 // Trash (admin only)
@@ -72,6 +75,28 @@ export const trashService = {
   permanentDelete:     (id)     => api.delete(`/documents/${id}/permanent`),
   bulkRestore:         (ids)    => api.put('/documents/trash/bulk-restore', { ids }),
   bulkPermanentDelete: (ids)    => api.delete('/documents/trash/bulk-permanent', { data: { ids } }),
+}
+
+// My Trash (student/staff)
+export const myTrashService = {
+  getAll:   (params) => api.get('/documents/my-trash', { params }),
+  restore:  (id)     => api.put(`/documents/my-trash/${id}/restore`),
+}
+
+// Comments
+export const commentService = {
+  getAll:   (docId)              => api.get(`/documents/${docId}/comments`),
+  create:   (docId, data)        => api.post(`/documents/${docId}/comments`, data),
+  update:   (docId, commentId, data) => api.put(`/documents/${docId}/comments/${commentId}`, data),
+  remove:   (docId, commentId)   => api.delete(`/documents/${docId}/comments/${commentId}`),
+}
+
+// FAQ
+export const faqService = {
+  getAll:   (params) => api.get('/faq', { params }),
+  create:   (data)   => api.post('/faq', data),
+  update:   (id, data) => api.put(`/faq/${id}`, data),
+  remove:   (id)     => api.delete(`/faq/${id}`),
 }
 
 // Notifications
@@ -87,6 +112,7 @@ export const userService = {
   getAll:        (params)         => api.get('/users', { params }),
   search:        (q)              => api.get('/users/search', { params: { q } }),
   getAdvisors:   (params)         => api.get('/users/advisors', { params }),
+  getMyAdvisees: ()               => api.get('/users/my-advisees'),
   create:        (data)           => api.post('/users', data),
   update:        (id, data)       => api.put(`/users/${id}`, data),
   toggle:        (id)             => api.patch(`/users/${id}/toggle`),

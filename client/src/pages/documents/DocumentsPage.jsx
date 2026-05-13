@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { documentService, docTypeService, userService } from '../../services/api'
+import { useSearchParams } from 'react-router-dom'
+import { documentService, docTypeService, userService, commentService } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+
 import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
 import useDebouncedValue from '../../hooks/useDebouncedValue'
@@ -23,7 +25,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  MoreHorizontal
+  MoreHorizontal,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  Send,
 } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -32,6 +38,17 @@ const statusColor = {
   expiring_soon: 'bg-amber-50 text-amber-700 border border-amber-200',
   expired:       'bg-red-50 text-red-600 border border-red-200',
 }
+
+const approvalColor = {
+  pending:  'bg-yellow-50 text-yellow-700 border border-yellow-200',
+  approved: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  rejected: 'bg-red-50 text-red-600 border border-red-200',
+}
+const approvalLabel = (status, t) => ({
+  pending:  t('documents.approvalPending'),
+  approved: t('documents.approvalApproved'),
+  rejected: t('documents.approvalRejected'),
+}[status] || status)
 const programsByDegree = PROGRAMS_BY_DEGREE
 const allProgramOptions = ALL_PROGRAMS
 const LIMIT = 15
@@ -355,7 +372,7 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
 }
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
-function DetailModal({ doc, onClose, onDeleted, role }) {
+function DetailModal({ doc, onClose, onDeleted, role, approvalPanel = false }) {
   const { t, locale } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState({})
@@ -364,6 +381,67 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
   const [versionFileType, setVersionFileType] = useState('attachment')
   const [versionNote, setVersionNote] = useState('')
   const [uploadingVersion, setUploadingVersion] = useState(false)
+  const [approvalNote, setApprovalNote] = useState('')
+  const [approvalAction, setApprovalAction] = useState(null) // 'approve'|'reject'|null
+  const [approvingId, setApprovingId] = useState(null) // 'approve'|'reject'|null
+  const [timelineOpen, setTimelineOpen] = useState(false)
+  // Comments
+  const [comments, setComments] = useState([])
+  const [commentText, setCommentText] = useState('')
+  const [sendingComment, setSendingComment] = useState(false)
+  const { user: currentUser } = useAuthStore()
+
+  useEffect(() => {
+    commentService.getAll(doc.doc_id)
+      .then(({ data }) => setComments(data.comments || []))
+      .catch(() => {})
+  }, [doc.doc_id])
+
+  const handleApprove = async () => {
+    setApprovingId('approve')
+    try {
+      await documentService.approve(currentDoc.doc_id, { note: approvalNote })
+      toast.success(t('documents.approvalApproveSuccess'))
+      setCurrentDoc(prev => ({ ...prev, approval_status: 'approved', approval_note: approvalNote }))
+      setApprovalNote('')
+      setApprovalAction(null)
+      onDeleted()
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')) }
+    finally { setApprovingId(null) }
+  }
+
+  const handleReject = async () => {
+    if (!approvalNote.trim()) { toast.error(t('documents.approvalRejectNoteRequired')); return }
+    setApprovingId('reject')
+    try {
+      await documentService.reject(currentDoc.doc_id, { note: approvalNote })
+      toast.success(t('documents.approvalRejectSuccess'))
+      setCurrentDoc(prev => ({ ...prev, approval_status: 'rejected', approval_note: approvalNote }))
+      setApprovalNote('')
+      setApprovalAction(null)
+      onDeleted()
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')) }
+    finally { setApprovingId(null) }
+  }
+
+  const handleSendComment = async (e) => {
+    e.preventDefault()
+    if (!commentText.trim()) return
+    setSendingComment(true)
+    try {
+      const { data } = await commentService.create(currentDoc.doc_id, { content: commentText.trim() })
+      setComments(prev => [...prev, data.comment])
+      setCommentText('')
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')) }
+    finally { setSendingComment(false) }
+  }
+
+  const handleDeleteComment = async (commentId) => {
+    try {
+      await commentService.remove(currentDoc.doc_id, commentId)
+      setComments(prev => prev.filter(c => c.comment_id !== commentId))
+    } catch { toast.error(t('documents.commentDeleteError')) }
+  }
 
   const statusLabel = {
     active:        t('documents.statusActive'),
@@ -467,9 +545,17 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
                 <span className="px-2 py-0.5 text-xs font-semibold rounded"
                   style={{ backgroundColor: gb.bg, color: gb.color }}>{gb.text}</span>
               )}
-              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColor[computedStatus(currentDoc)] || ''}`}>
-                {statusLabel[computedStatus(currentDoc)] || currentDoc.status}
-              </span>
+              {(!currentDoc.approval_status || currentDoc.approval_status === 'approved') ? (
+                computedStatus(currentDoc) && (
+                  <span className={`px-2 py-0.5 text-xs font-medium rounded-md ${statusColor[computedStatus(currentDoc)] || ''}`}>
+                    {statusLabel[computedStatus(currentDoc)] || currentDoc.status}
+                  </span>
+                )
+              ) : (
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded-md ${approvalColor[currentDoc.approval_status] || ''}`}>
+                  {approvalLabel(currentDoc.approval_status, t)}
+                </span>
+              )}
             </div>
             <h2 className="text-base font-semibold text-slate-800 mt-1">{currentDoc.title}</h2>
           </div>
@@ -594,17 +680,23 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <select className="input-field" value={versionFileType} onChange={e => setVersionFileType(e.target.value)}>
-                <option value="main">{t('documents.fileTypeMain')}</option>
-                <option value="certificate">{t('documents.fileTypeCertificate')}</option>
-                <option value="attachment">{t('documents.fileTypeAttachment')}</option>
-              </select>
-              <input
-                className="input-field"
-                value={versionNote}
-                onChange={e => setVersionNote(e.target.value)}
-                placeholder={t('documents.modalVersionNotePlaceholder')}
-              />
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">{t('documents.uploadDocTypeLabel2')}</label>
+                <select className="input-field" value={versionFileType} onChange={e => setVersionFileType(e.target.value)}>
+                  <option value="main">{t('documents.fileTypeMain')}</option>
+                  <option value="certificate">{t('documents.fileTypeCertificate')}</option>
+                  <option value="attachment">{t('documents.fileTypeAttachment')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">{t('documents.modalVersionNoteLabel')}</label>
+                <input
+                  className="input-field"
+                  value={versionNote}
+                  onChange={e => setVersionNote(e.target.value)}
+                  placeholder={t('documents.modalVersionNotePlaceholder')}
+                />
+              </div>
             </div>
             <label className="block cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-sm text-slate-500 hover:bg-slate-50">
               {t('documents.modalVersionSelectFile')}
@@ -629,42 +721,63 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
             </button>
           </form>
 
-          {currentDoc.timeline?.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <History size={16} className="text-slate-400" />
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                  {t('documents.modalTimeline')}
-                </p>
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setTimelineOpen(prev => !prev)}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                  <History size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{t('documents.modalTimeline')}</p>
+                  <p className="text-xs text-slate-500">{t('documents.modalTimelineDesc')}</p>
+                </div>
               </div>
-              <div className="space-y-3">
-                {currentDoc.timeline.map(item => {
-                  const Icon = timelineIcon[item.event_type] || ClipboardList
-                  return (
-                    <div key={item.timeline_id} className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                        <Icon size={15} />
-                      </div>
-                      <div className="min-w-0 flex-1 pb-3 border-b border-slate-100 last:border-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-700">{item.title}</p>
-                          <span className="text-[11px] text-slate-400">
-                            {new Date(item.created_at).toLocaleString(locale)}
-                          </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                  {t('documents.modalTimelineCount', { count: currentDoc.timeline?.length || 0 })}
+                </span>
+                <ChevronRight size={16} className={`text-slate-400 transition-transform ${timelineOpen ? 'rotate-90' : ''}`} />
+              </div>
+            </button>
+            {timelineOpen && (
+              <div className="border-t border-slate-100 px-4 py-3">
+                {currentDoc.timeline?.length > 0 ? (
+                  <div className="space-y-3">
+                    {currentDoc.timeline.map(item => {
+                      const Icon = timelineIcon[item.event_type] || ClipboardList
+                      return (
+                        <div key={item.timeline_id} className="flex gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+                            <Icon size={15} />
+                          </div>
+                          <div className="min-w-0 flex-1 pb-3 border-b border-slate-100 last:border-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-700">{item.title}</p>
+                              <span className="text-[11px] text-slate-400">
+                                {new Date(item.created_at).toLocaleString(locale)}
+                              </span>
+                            </div>
+                            {item.detail && <p className="text-xs text-slate-500 mt-1">{item.detail}</p>}
+                            {item.actor_name && (
+                              <p className="text-[11px] text-slate-400 mt-1">
+                                {t('documents.modalTimelineBy', { name: item.actor_name })}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        {item.detail && <p className="text-xs text-slate-500 mt-1">{item.detail}</p>}
-                        {item.actor_name && (
-                          <p className="text-[11px] text-slate-400 mt-1">
-                            {t('documents.modalTimelineBy', { name: item.actor_name })}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">{t('documents.modalTimelineEmpty')}</p>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {currentDoc.description && (
             <div>
@@ -674,6 +787,183 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
               <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{currentDoc.description}</p>
             </div>
           )}
+
+          {/* Approval section — admin only */}
+          {role === 'admin' && approvalPanel && currentDoc.approval_status !== undefined && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 dark:border-slate-700 dark:bg-slate-800">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                    <CheckCircle2 size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{t('documents.approvalSectionTitle')}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t('documents.approvalSectionDesc')}</p>
+                  </div>
+                </div>
+                <span className={`inline-flex w-fit items-center px-2.5 py-1 text-xs font-semibold rounded-md ${approvalColor[currentDoc.approval_status] || ''}`}>
+                  {approvalLabel(currentDoc.approval_status, t)}
+                </span>
+              </div>
+              {currentDoc.approval_note && (
+                <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{t('documents.approvalNotePrefix')}</p>
+                  <p className="mt-1 text-sm text-slate-600">{currentDoc.approval_note}</p>
+                </div>
+              )}
+
+              {!approvalAction ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => { setApprovalAction('approve'); setApprovalNote('') }}
+                    disabled={approvingId !== null}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+                  >
+                    <CheckCircle2 size={16} />
+                    {t('documents.approvalApproveBtn')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setApprovalAction('reject'); setApprovalNote('') }}
+                    disabled={approvingId !== null}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-60"
+                  >
+                    <XCircle size={16} />
+                    {t('documents.approvalRejectBtn')}
+                  </button>
+                </div>
+              ) : (
+                <div className={`rounded-xl border p-3 space-y-3 ${approvalAction === 'approve' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                  <div className="flex items-start gap-2">
+                    {approvalAction === 'approve'
+                      ? <CheckCircle2 size={17} className="mt-0.5 text-emerald-700" />
+                      : <XCircle size={17} className="mt-0.5 text-red-700" />
+                    }
+                    <div>
+                      <p className={`text-sm font-semibold ${approvalAction === 'approve' ? 'text-emerald-800' : 'text-red-800'}`}>
+                        {approvalAction === 'approve' ? t('documents.approvalApproveConfirmTitle') : t('documents.approvalRejectConfirmTitle')}
+                      </p>
+                      <p className={`mt-0.5 text-xs ${approvalAction === 'approve' ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {approvalAction === 'approve' ? t('documents.approvalApproveConfirmDesc') : t('documents.approvalRejectConfirmDesc')}
+                      </p>
+                    </div>
+                  </div>
+                  <textarea
+                    value={approvalNote}
+                    onChange={(e) => setApprovalNote(e.target.value)}
+                    placeholder={approvalAction === 'approve' ? t('documents.approvalApproveNotePlaceholder') : t('documents.approvalRejectNotePlaceholder')}
+                    className="input-field min-h-[88px] w-full resize-y bg-white text-sm"
+                  />
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button
+                      type="button"
+                      onClick={() => { setApprovalAction(null); setApprovalNote('') }}
+                      disabled={approvingId !== null}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    {approvalAction === 'approve' ? (
+                      <button
+                        type="button"
+                        onClick={handleApprove}
+                        disabled={approvingId !== null}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      >
+                        {approvingId === 'approve'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <CheckCircle2 size={14} />
+                        }
+                        {t('documents.approvalConfirmApproveBtn')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleReject}
+                        disabled={approvingId !== null || !approvalNote.trim()}
+                        className="flex items-center justify-center gap-2 rounded-xl bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                      >
+                        {approvingId === 'reject'
+                          ? <Loader2 size={14} className="animate-spin" />
+                          : <XCircle size={14} />
+                        }
+                        {t('documents.approvalConfirmRejectBtn')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                  <MessageSquare size={16} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {t('documents.commentsTitle', { count: comments.length })}
+                  </p>
+                  <p className="text-xs text-slate-500">{t('documents.commentsDesc')}</p>
+                </div>
+              </div>
+            </div>
+            {comments.length > 0 ? (
+              <div className="mb-3 space-y-3">
+                {comments.map(c => (
+                  <div key={c.comment_id} className="flex gap-3">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+                      {c.user_name?.[0]?.toUpperCase() || '?'}
+                    </div>
+                    <div className="min-w-0 flex-1 rounded-xl bg-slate-50 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-slate-700">{c.user_name}</span>
+                        <span className="text-[11px] text-slate-400">
+                          {new Date(c.created_at).toLocaleString(locale)}
+                        </span>
+                        {(c.user_id === currentUser?.user_id || role === 'admin') && (
+                          <button
+                            onClick={() => handleDeleteComment(c.comment_id)}
+                            className="ml-auto text-slate-300 hover:text-red-400"
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                      <p className="mt-0.5 text-sm text-slate-600">{c.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mb-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-4 text-center">
+                <p className="text-sm font-medium text-slate-500">{t('documents.commentsEmpty')}</p>
+                <p className="mt-0.5 text-xs text-slate-400">{t('documents.commentsEmptyDesc')}</p>
+              </div>
+            )}
+            <form onSubmit={handleSendComment} className="space-y-2">
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder={t('documents.commentPlaceholder')}
+                className="input-field min-h-[84px] w-full resize-y text-sm"
+                disabled={sendingComment}
+              />
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={sendingComment || !commentText.trim()}
+                  className="flex items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {sendingComment ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {t('documents.commentSendBtn')}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
 
         <div className="px-6 py-4 border-t border-slate-100 flex justify-between">
@@ -1350,15 +1640,13 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DocumentsPage() {
   const { language, locale, t } = useLanguage()
+  const [searchParams] = useSearchParams()
   const academicOptions = useAcademicOptions()
   const activeProgramsByDegree = academicOptions.programsByDegree || programsByDegree
   const activeProgramOptions = academicOptions.programs || allProgramOptions
   const { user } = useAuthStore()
   const isAdmin   = user?.role === 'admin'
   const isAdvisor = user?.role === 'advisor'
-  const hasTabs   = isAdmin || isAdvisor
-
-  const tabs = isAdmin ? getAdminTabs(t) : isAdvisor ? getAdvisorTabs(t) : []
 
   const [docs, setDocs]                       = useState([])
   const [docTypes, setDocTypes]               = useState([])
@@ -1369,8 +1657,9 @@ export default function DocumentsPage() {
   const [total, setTotal]       = useState(0)
   const [loading, setLoading]   = useState(true)
 
+  const [panel, setPanel]                 = useState(isAdvisor ? 'advisees' : 'library')
   const [activeTab, setActiveTab]       = useState('all')
-  const [search, setSearch]             = useState('')
+  const [search, setSearch]             = useState(searchParams.get('search') || '')
   const debouncedSearch = useDebouncedValue(search, 350)
   const [docType, setDocType]           = useState('')
   const [status, setStatus]             = useState('')
@@ -1381,6 +1670,10 @@ export default function DocumentsPage() {
   const [page, setPage]                 = useState(1)
   const [modal, setModal]               = useState(null)
   const [selected, setSelected]         = useState(null)
+
+  const advisorOwnPanel = isAdvisor && panel === 'mine'
+  const hasTabs   = isAdmin || (isAdvisor && !advisorOwnPanel)
+  const tabs = isAdmin ? getAdminTabs(t) : (isAdvisor && !advisorOwnPanel) ? getAdvisorTabs(t) : []
 
   const statusLabel = useMemo(() => ({
     active:        t('documents.statusActive'),
@@ -1402,7 +1695,7 @@ export default function DocumentsPage() {
   }, [isAdmin])
 
   // Reset page when filters change
-  useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, degreeFilter, programFilter, sort])
+  useEffect(() => { setPage(1) }, [panel, activeTab, search, docType, status, advisorFilter, degreeFilter, programFilter, sort])
 
   useEffect(() => {
     const allowedPrograms = degreeFilter ? activeProgramsByDegree[degreeFilter] || [] : activeProgramOptions
@@ -1410,6 +1703,12 @@ export default function DocumentsPage() {
   }, [degreeFilter, programFilter])
 
   useEffect(() => {
+    if (advisorOwnPanel) {
+      if (degreeFilter) setDegreeFilter('')
+      if (programFilter) setProgramFilter('')
+      if (advisorFilter) setAdvisorFilter('')
+      return
+    }
     const tabParams = tabs.find(t => t.key === activeTab)?.params || {}
     if (tabParams.owner_role && tabParams.owner_role !== 'student') {
       setDegreeFilter('')
@@ -1417,7 +1716,7 @@ export default function DocumentsPage() {
       setAdvisorFilter('')
     }
     if (tabParams.degree_level && degreeFilter) setDegreeFilter('')
-  }, [activeTab, degreeFilter])
+  }, [activeTab, degreeFilter, advisorOwnPanel])
 
   useEffect(() => {
     if (!advisorFilter) return
@@ -1434,20 +1733,21 @@ export default function DocumentsPage() {
     try {
       const tabParams = tabs.find(tab => tab.key === activeTab)?.params || {}
       const params = {
-        ...tabParams,
+        ...(advisorOwnPanel ? { owner_role: 'advisor' } : tabParams),
         search: debouncedSearch, doc_type: docType, status,
+        ...(isAdmin && panel === 'approval' && { approval_status: 'pending' }),
         sort_by: sort.by, sort_dir: sort.dir,
         page, limit: LIMIT,
         ...(advisorFilter && { advisor_id: advisorFilter }),
-        ...(degreeFilter && !tabParams.degree_level && { degree_level: degreeFilter }),
-        ...(programFilter  && { program: programFilter }),
+        ...(degreeFilter && !tabParams.degree_level && !advisorOwnPanel && { degree_level: degreeFilter }),
+        ...(programFilter && !advisorOwnPanel && { program: programFilter }),
       }
       const { data } = await documentService.getAll(params)
       setDocs(data.documents || [])
       setTotal(data.total || 0)
     } catch { toast.error(t('documents.loadError')) }
     finally { setLoading(false) }
-  }, [activeTab, debouncedSearch, docType, status, sort, page, advisorFilter, degreeFilter, programFilter])
+  }, [activeTab, debouncedSearch, docType, status, sort, page, advisorFilter, degreeFilter, programFilter, isAdmin, panel, advisorOwnPanel])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
@@ -1460,6 +1760,15 @@ export default function DocumentsPage() {
 
   const handleSort = (key) => {
     setSort(prev => prev.by === key ? { by: key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { by: key, dir: 'desc' })
+  }
+
+  const handlePanelChange = (nextPanel) => {
+    setPanel(nextPanel)
+    setActiveTab('all')
+    setStatus('')
+    setAdvisorFilter('')
+    setDegreeFilter('')
+    setProgramFilter('')
   }
 
   const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setDegreeFilter(''); setProgramFilter('') }
@@ -1508,12 +1817,12 @@ export default function DocumentsPage() {
   }, [fetchDocs, isAdmin])
 
   const isStudentTab = ['all', 'bachelor', 'master', 'doctoral'].includes(activeTab)
-  const showStudentId = isAdmin || isAdvisor
-  const showOwner     = isAdmin || isAdvisor
+  const showStudentId = isAdmin || (isAdvisor && !advisorOwnPanel)
+  const showOwner     = isAdmin || (isAdvisor && !advisorOwnPanel)
   const showGroup     = isAdmin && activeTab === 'all'
   const showAdvisorFilter = isAdmin && isStudentTab
   const degreeTabKey  = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : null
-  const showDegreeFilter = (isAdmin || isAdvisor) && activeTab === 'all'
+  const showDegreeFilter = (isAdmin || isAdvisor) && !advisorOwnPanel && activeTab === 'all'
   const programFilterDegree = degreeTabKey || degreeFilter
   const currentTabParams = tabs.find(tab => tab.key === activeTab)?.params || {}
 
@@ -1524,7 +1833,7 @@ export default function DocumentsPage() {
 
   const advisorProgramList = advisorRelation?.programs?.length > 0 ? advisorRelation.programs : null
   const basePrograms = programFilterDegree ? activeProgramsByDegree[programFilterDegree] || [] : activeProgramOptions
-  const showProgramFilter = (isAdmin || isAdvisor) && (activeTab === 'all' || degreeTabKey != null)
+  const showProgramFilter = (isAdmin || isAdvisor) && !advisorOwnPanel && (activeTab === 'all' || degreeTabKey != null)
   const programOptions = advisorProgramList ? basePrograms.filter(p => advisorProgramList.includes(p)) : basePrograms
 
   const filteredAdvisors = advisors.filter(advisor => {
@@ -1537,6 +1846,7 @@ export default function DocumentsPage() {
   })
 
   const pageTitle = isAdmin ? t('documents.titleAdmin')
+    : advisorOwnPanel        ? t('documents.titleAdvisorMine')
     : isAdvisor              ? t('documents.titleAdvisor')
     : user?.role === 'staff' ? t('documents.titleStaff')
     : t('documents.titleStudent')
@@ -1546,6 +1856,15 @@ export default function DocumentsPage() {
     : user?.role === 'staff' ? t('documents.roleDisplayStaff')
     : t('documents.roleDisplayStudent')
 
+  const panelTitle = isAdmin && panel === 'approval' ? t('documents.panelApprovalTitle') : pageTitle
+  const panelDesc = isAdmin && panel === 'approval'
+    ? t('documents.panelApprovalDesc')
+    : advisorOwnPanel
+      ? t('documents.panelAdvisorMineDesc')
+      : isAdvisor
+        ? t('documents.panelAdvisorAdviseesDesc')
+        : t('documents.panelLibraryDesc')
+
   return (
     <div className="space-y-5 max-w-full">
       {/* Header */}
@@ -1554,7 +1873,8 @@ export default function DocumentsPage() {
           <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>
             {roleDisplay}
           </p>
-          <h1 className="text-2xl font-bold text-slate-800">{pageTitle}</h1>
+          <h1 className="text-2xl font-bold text-slate-800">{panelTitle}</h1>
+          <p className="mt-1 text-sm text-slate-500">{panelDesc}</p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {isAdmin && (
@@ -1563,7 +1883,7 @@ export default function DocumentsPage() {
               <span>⬇</span> {t('documents.exportExcelBtn')}
             </button>
           )}
-          {(isAdmin || user?.role === 'student' || user?.role === 'staff') && (
+          {(isAdmin || user?.role === 'student' || user?.role === 'staff' || advisorOwnPanel) && (
             <button onClick={() => setModal('upload')}
               className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all whitespace-nowrap"
               style={{ backgroundColor: '#42b5e1' }}>
@@ -1573,13 +1893,100 @@ export default function DocumentsPage() {
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => handlePanelChange('library')}
+            className={`rounded-xl border p-4 text-left transition-all ${
+              panel === 'library'
+                ? 'border-[#42b5e1] bg-[#f0f9ff] shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <FileText size={20} className={panel === 'library' ? 'text-[#42b5e1]' : 'text-slate-400'} />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{t('documents.panelLibraryTitle')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelLibraryHint')}</p>
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePanelChange('approval')}
+            className={`rounded-xl border p-4 text-left transition-all ${
+              panel === 'approval'
+                ? 'border-amber-300 bg-amber-50 shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <CheckCircle2 size={20} className={panel === 'approval' ? 'text-amber-600' : 'text-slate-400'} />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{t('documents.panelApprovalTitle')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelApprovalHint')}</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {isAdvisor && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => handlePanelChange('advisees')}
+            className={`rounded-xl border p-4 text-left transition-all ${
+              panel === 'advisees'
+                ? 'border-[#42b5e1] bg-[#f0f9ff] shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Users size={20} className={panel === 'advisees' ? 'text-[#42b5e1]' : 'text-slate-400'} />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{t('documents.panelAdvisorAdviseesTitle')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelAdvisorAdviseesHint')}</p>
+              </div>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePanelChange('mine')}
+            className={`rounded-xl border p-4 text-left transition-all ${
+              panel === 'mine'
+                ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <FileText size={20} className={panel === 'mine' ? 'text-emerald-600' : 'text-slate-400'} />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{t('documents.panelAdvisorMineTitle')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelAdvisorMineHint')}</p>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* Summary Cards — admin only */}
-      {isAdmin && summary && <SummaryCards summary={summary} activeTab={activeTab} />}
+      {isAdmin && panel === 'library' && summary && <SummaryCards summary={summary} activeTab={activeTab} />}
 
       {/* Tab Bar */}
       {hasTabs && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <TabBar tabs={tabs} activeTab={activeTab} onChange={handleTabChange} summary={isAdmin ? summary : null} />
+          <TabBar tabs={tabs} activeTab={activeTab} onChange={handleTabChange} summary={isAdmin && panel === 'library' ? summary : null} />
+
+          {isAdmin && panel === 'approval' && (
+            <div className="border-b border-amber-100 bg-amber-50 px-4 py-3">
+              <div className="flex items-start gap-2 text-sm text-amber-800">
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                <p>{t('documents.panelApprovalNotice')}</p>
+              </div>
+            </div>
+          )}
 
           {/* Filter Bar */}
           <div className="flex flex-wrap gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50">
@@ -1589,12 +1996,14 @@ export default function DocumentsPage() {
               <option value="">{t('documents.filterAllTypes')}</option>
               {docTypes.map(dt => <option key={dt.type_id} value={dt.type_code}>{dt.type_code}</option>)}
             </select>
-            <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="">{t('documents.filterAllStatus')}</option>
-              <option value="active">{t('documents.statusActive')}</option>
-              <option value="expiring_soon">{t('documents.statusExpiring')}</option>
-              <option value="expired">{t('documents.statusExpired')}</option>
-            </select>
+            {panel !== 'approval' && (
+              <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={status} onChange={e => setStatus(e.target.value)}>
+                <option value="">{t('documents.filterAllExpiryStatus')}</option>
+                <option value="active">{t('documents.statusActive')}</option>
+                <option value="expiring_soon">{t('documents.statusExpiring')}</option>
+                <option value="expired">{t('documents.statusExpired')}</option>
+              </select>
+            )}
             {showDegreeFilter && (
               <select className="input-field w-full sm:w-auto sm:max-w-[170px]" value={degreeFilter} onChange={e => handleDegreeChange(e.target.value)}>
                 <option value="">{t('documents.filterAllDegrees')}</option>
@@ -1619,7 +2028,7 @@ export default function DocumentsPage() {
 
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth: showOwner ? '780px' : '580px' }}>
+            <table className="w-full text-sm" style={{ minWidth: showOwner ? '900px' : '680px' }}>
               <thead className="border-b border-slate-200">
                 <tr className="bg-slate-50">
                   <SortTh sortKey="title"        currentSort={sort} onSort={handleSort}>{t('documents.colTitle')}</SortTh>
@@ -1630,7 +2039,8 @@ export default function DocumentsPage() {
                   <SortTh sortKey="issue_date"   currentSort={sort} onSort={handleSort}>{t('documents.colIssueDate')}</SortTh>
                   <SortTh sortKey="expire_date"  currentSort={sort} onSort={handleSort}>{t('documents.colExpireDate')}</SortTh>
                   <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>{t('documents.colRemaining')}</SortTh>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colStatus')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colExpiryStatus')}</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colApprovalStatus')}</th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colFiles')}</th>
                   <th />
                 </tr>
@@ -1642,7 +2052,9 @@ export default function DocumentsPage() {
                   <tr>
                     <td colSpan={12} className="text-center py-16">
                       <p className="text-slate-300 text-4xl mb-3">○</p>
-                      <p className="text-slate-400 text-sm">{t('documents.noDocuments')}</p>
+                      <p className="text-slate-400 text-sm">
+                        {isAdmin && panel === 'approval' ? t('documents.noApprovalDocuments') : t('documents.noDocuments')}
+                      </p>
                     </td>
                   </tr>
                 ) : docs.map(doc => {
@@ -1691,9 +2103,14 @@ export default function DocumentsPage() {
                           : t('documents.daysLeft', { days })}
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full whitespace-nowrap
+                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-md whitespace-nowrap
                           ${noExp ? 'bg-slate-50 text-slate-500 border border-slate-200' : statusColor[computedStatus(doc)] || 'bg-slate-100 text-slate-500'}`}>
                           {noExp ? t('documents.noExpireShort') : statusLabel[computedStatus(doc)] || doc.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap ${approvalColor[doc.approval_status] || ''}`}>
+                          {approvalLabel(doc.approval_status, t)}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
@@ -1738,7 +2155,7 @@ export default function DocumentsPage() {
               {docTypes.map(dt => <option key={dt.type_id} value={dt.type_code}>{dt.type_code}</option>)}
             </select>
             <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="">{t('documents.filterAllStatus')}</option>
+              <option value="">{t('documents.filterAllExpiryStatus')}</option>
               <option value="active">{t('documents.statusActive')}</option>
               <option value="expiring_soon">{t('documents.statusExpiring')}</option>
               <option value="expired">{t('documents.statusExpired')}</option>
@@ -1747,7 +2164,7 @@ export default function DocumentsPage() {
 
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm" style={{ minWidth: '560px' }}>
+              <table className="w-full text-sm" style={{ minWidth: '680px' }}>
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     <SortTh sortKey="title"          currentSort={sort} onSort={handleSort}>{t('documents.colTitle')}</SortTh>
@@ -1755,7 +2172,8 @@ export default function DocumentsPage() {
                     <SortTh sortKey="issue_date"     currentSort={sort} onSort={handleSort}>{t('documents.colIssueDate')}</SortTh>
                     <SortTh sortKey="expire_date"    currentSort={sort} onSort={handleSort}>{t('documents.colExpireDate')}</SortTh>
                     <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>{t('documents.colRemaining')}</SortTh>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colStatus')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colExpiryStatus')}</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colApprovalStatus')}</th>
                     <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colFiles')}</th>
                     <th />
                   </tr>
@@ -1797,9 +2215,14 @@ export default function DocumentsPage() {
                             : t('documents.daysLeft', { days })}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full whitespace-nowrap
+                          <span className={`px-2.5 py-0.5 text-xs font-medium rounded-md whitespace-nowrap
                             ${noExp ? 'bg-slate-50 text-slate-500 border border-slate-200' : statusColor[computedStatus(doc)] || 'bg-slate-100 text-slate-500'}`}>
                             {noExp ? t('documents.noExpireShort') : statusLabel[computedStatus(doc)] || doc.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap ${approvalColor[doc.approval_status] || ''}`}>
+                            {approvalLabel(doc.approval_status, t)}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-center">
@@ -1848,7 +2271,7 @@ export default function DocumentsPage() {
           docTypes={docTypes} docTypeCategories={docTypeCategories} user={user} />
       )}
       {modal === 'detail' && selected && (
-        <DetailModal doc={selected} role={user?.role}
+        <DetailModal doc={selected} role={user?.role} approvalPanel={isAdmin && panel === 'approval'}
           onClose={() => { setModal(null); setSelected(null) }}
           onDeleted={refreshAll} />
       )}

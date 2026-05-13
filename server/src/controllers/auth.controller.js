@@ -323,4 +323,51 @@ const forgotPassword = async (req, res) => {
   }
 }
 
-module.exports = { login, refresh, logout, changePassword, forgotPassword, updateProfilePicture, removeProfilePicture }
+// GET /api/auth/profile — ดึงข้อมูลโปรไฟล์พร้อมข้อมูลอาจารย์ที่ปรึกษา
+const getProfile = async (req, res) => {
+  try {
+    const { user_id } = req.user
+    const pool = await getPool()
+    await ensureUserProfileColumns(pool)
+
+    const result = await pool.request()
+      .input('user_id', sql.Int, user_id)
+      .query(`
+        SELECT
+          u.user_id, u.name, u.email, u.role, u.program, u.affiliation,
+          u.profile_image_url, u.account_status, u.must_change_pw,
+          u.student_id, u.degree_level, u.phone,
+          a.user_id   AS advisor_id,
+          a.name      AS advisor_name,
+          a.email     AS advisor_email,
+          a.profile_image_url AS advisor_image_url
+        FROM dbo.USERS u
+        LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
+        WHERE u.user_id = @user_id AND u.is_active = 1
+      `)
+
+    if (!result.recordset[0])
+      return res.status(404).json({ message: 'ไม่พบข้อมูลผู้ใช้' })
+
+    const row = result.recordset[0]
+    res.json({
+      user: {
+        ...toPublicUser(row),
+        student_id:    row.student_id || null,
+        degree_level:  row.degree_level || null,
+        phone:         row.phone || null,
+        advisor: row.advisor_id ? {
+          user_id:           row.advisor_id,
+          name:              row.advisor_name,
+          email:             row.advisor_email,
+          profile_image_url: row.advisor_image_url,
+        } : null,
+      },
+    })
+  } catch (err) {
+    logger.error(`getProfile: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+module.exports = { login, refresh, logout, changePassword, forgotPassword, updateProfilePicture, removeProfilePicture, getProfile }
