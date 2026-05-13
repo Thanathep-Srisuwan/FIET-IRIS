@@ -19,6 +19,7 @@ import AdminEmailTemplatesPage from './pages/admin/AdminEmailTemplatesPage'
 import ExecutiveDashboard  from './pages/executive/ExecutiveDashboard'
 import ProgramSummaryPage  from './pages/executive/ProgramSummaryPage'
 import ExecutiveDocumentsPage from './pages/executive/ExecutiveDocumentsPage'
+import ProfilePage         from './pages/profile/ProfilePage'
 import MainLayout          from './components/layout/MainLayout'
 
 const PrivateRoute = ({ children, roles }) => {
@@ -40,6 +41,7 @@ export default function App() {
       {/* Private routes — wrapped by PrivateRoute + MainLayout (pathless layout route) */}
       <Route element={<PrivateRoute><MainLayout /></PrivateRoute>}>
         <Route path="dashboard"  element={<DashboardPage />} />
+        <Route path="profile"    element={<ProfilePage />} />
         <Route path="documents"  element={<DocumentsPage />} />
         <Route path="student/tasks" element={<PrivateRoute roles={['student']}><StudentTasksPage /></PrivateRoute>} />
         <Route path="student/activity" element={<PrivateRoute roles={['student']}><StudentActivityPage /></PrivateRoute>} />

@@ -11,9 +11,9 @@ const transporter = nodemailer.createTransport({
   },
 })
 
-const sendMail = async ({ to, subject, html }) => {
+const sendMail = async ({ to, subject, html, attachments }) => {
   try {
-    await transporter.sendMail({ from: process.env.MAIL_FROM, to, subject, html })
+    await transporter.sendMail({ from: process.env.MAIL_FROM, to, subject, html, attachments })
     logger.info(`Email sent to ${to}: ${subject}`)
     return { success: true }
   } catch (err) {

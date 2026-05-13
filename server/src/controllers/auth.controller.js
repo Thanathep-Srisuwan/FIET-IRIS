@@ -1,10 +1,12 @@
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
+const fs = require('fs')
+const path = require('path')
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 const { sendMail, temporaryPasswordTemplate } = require('../utils/mailer')
 
-const ensureUserProgramColumn = async (pool) => {
+const ensureUserProfileColumns = async (pool) => {
   await pool.request().query(`
     IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='department')
        AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='program')
@@ -13,7 +15,49 @@ const ensureUserProgramColumn = async (pool) => {
       ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='affiliation')
       ALTER TABLE dbo.USERS ADD affiliation NVARCHAR(100) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='profile_image_url')
+      ALTER TABLE dbo.USERS ADD profile_image_url NVARCHAR(500) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='account_status')
+      ALTER TABLE dbo.USERS ADD account_status NVARCHAR(30) NOT NULL CONSTRAINT DF_USERS_account_status DEFAULT 'active';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='graduated_at')
+      ALTER TABLE dbo.USERS ADD graduated_at DATETIME NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='archived_at')
+      ALTER TABLE dbo.USERS ADD archived_at DATETIME NULL;
+    EXEC('UPDATE dbo.USERS
+      SET account_status = CASE WHEN is_active = 1 THEN ''active'' ELSE ''inactive'' END
+      WHERE account_status IS NULL');
   `)
+}
+
+const toPublicUser = (user) => ({
+  user_id: user.user_id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  program: user.program,
+  affiliation: user.affiliation,
+  profile_image_url: user.profile_image_url || null,
+  account_status: user.account_status || 'active',
+  must_change_pw: user.must_change_pw,
+})
+
+const getPublicUserById = async (pool, userId) => {
+  const result = await pool.request()
+    .input('user_id', sql.Int, userId)
+    .query(`
+      SELECT user_id, name, email, role, program, affiliation, profile_image_url, account_status, must_change_pw
+      FROM dbo.USERS
+      WHERE user_id = @user_id AND is_active = 1
+    `)
+  return result.recordset[0] ? toPublicUser(result.recordset[0]) : null
+}
+
+const removeLocalProfileImage = (imageUrl) => {
+  if (!imageUrl || !imageUrl.startsWith('/uploads/profiles/')) return
+  const uploadRoot = path.resolve(__dirname, '../../uploads/profiles')
+  const filePath = path.resolve(__dirname, '../..', imageUrl.slice(1))
+  if (!filePath.startsWith(uploadRoot)) return
+  fs.promises.unlink(filePath).catch(() => {})
 }
 
 // สร้าง tokens
@@ -47,7 +91,7 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'กรุณาใช้อีเมลมหาวิทยาลัย @kmutt.ac.th เท่านั้น' })
 
     const pool = await getPool()
-    await ensureUserProgramColumn(pool)
+    await ensureUserProfileColumns(pool)
     const result = await pool.request()
       .input('email', sql.NVarChar, email)
       .query('SELECT * FROM dbo.USERS WHERE email = @email AND is_active = 1')
@@ -73,15 +117,7 @@ const login = async (req, res) => {
     res.json({
       token,
       refreshToken,
-      user: {
-        user_id:       user.user_id,
-        name:          user.name,
-        email:         user.email,
-        role:          user.role,
-        program:    user.program,
-        affiliation: user.affiliation,
-        must_change_pw: user.must_change_pw,
-      },
+      user: toPublicUser(user),
     })
   } catch (err) {
     logger.error(`Login error: ${err.message}`)
@@ -99,7 +135,7 @@ const refresh = async (req, res) => {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET)
 
     const pool = await getPool()
-    await ensureUserProgramColumn(pool)
+    await ensureUserProfileColumns(pool)
     const result = await pool.request()
       .input('user_id', sql.Int, decoded.user_id)
       .query('SELECT * FROM dbo.USERS WHERE user_id = @user_id AND is_active = 1')
@@ -112,18 +148,83 @@ const refresh = async (req, res) => {
 
     res.json({
       ...tokens,
-      user: {
-        user_id:       user.user_id,
-        name:          user.name,
-        email:         user.email,
-        role:          user.role,
-        program:       user.program,
-        affiliation:   user.affiliation,
-        must_change_pw: user.must_change_pw,
-      },
+      user: toPublicUser(user),
     })
   } catch (err) {
     res.status(401).json({ message: 'Refresh Token ไม่ถูกต้องหรือหมดอายุ' })
+  }
+}
+
+// PUT /api/auth/profile-picture
+const updateProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Please upload an image file' })
+    }
+
+    const userId = req.user.user_id
+    const imageUrl = `/uploads/profiles/${req.file.filename}`
+    const pool = await getPool()
+    await ensureUserProfileColumns(pool)
+
+    const current = await pool.request()
+      .input('user_id', sql.Int, userId)
+      .query('SELECT profile_image_url FROM dbo.USERS WHERE user_id = @user_id AND is_active = 1')
+
+    if (current.recordset.length === 0) {
+      removeLocalProfileImage(imageUrl)
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    await pool.request()
+      .input('user_id', sql.Int, userId)
+      .input('profile_image_url', sql.NVarChar(500), imageUrl)
+      .query(`
+        UPDATE dbo.USERS
+        SET profile_image_url = @profile_image_url, updated_at = GETDATE()
+        WHERE user_id = @user_id
+      `)
+
+    removeLocalProfileImage(current.recordset[0].profile_image_url)
+    const user = await getPublicUserById(pool, userId)
+    logger.info(`Profile picture updated: user_id ${userId}`)
+    res.json({ message: 'Profile picture updated', user })
+  } catch (err) {
+    logger.error(`Update profile picture error: ${err.message}`)
+    res.status(500).json({ message: 'Something went wrong. Please try again.' })
+  }
+}
+
+// DELETE /api/auth/profile-picture
+const removeProfilePicture = async (req, res) => {
+  try {
+    const userId = req.user.user_id
+    const pool = await getPool()
+    await ensureUserProfileColumns(pool)
+
+    const current = await pool.request()
+      .input('user_id', sql.Int, userId)
+      .query('SELECT profile_image_url FROM dbo.USERS WHERE user_id = @user_id AND is_active = 1')
+
+    if (current.recordset.length === 0) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    await pool.request()
+      .input('user_id', sql.Int, userId)
+      .query(`
+        UPDATE dbo.USERS
+        SET profile_image_url = NULL, updated_at = GETDATE()
+        WHERE user_id = @user_id
+      `)
+
+    removeLocalProfileImage(current.recordset[0].profile_image_url)
+    const user = await getPublicUserById(pool, userId)
+    logger.info(`Profile picture removed: user_id ${userId}`)
+    res.json({ message: 'Profile picture removed', user })
+  } catch (err) {
+    logger.error(`Remove profile picture error: ${err.message}`)
+    res.status(500).json({ message: 'Something went wrong. Please try again.' })
   }
 }
 
@@ -222,4 +323,4 @@ const forgotPassword = async (req, res) => {
   }
 }
 
-module.exports = { login, refresh, logout, changePassword, forgotPassword }
+module.exports = { login, refresh, logout, changePassword, forgotPassword, updateProfilePicture, removeProfilePicture }

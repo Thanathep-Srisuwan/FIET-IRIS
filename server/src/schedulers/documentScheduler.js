@@ -21,20 +21,61 @@ const loadThresholds = async (pool) => {
   return defaults
 }
 
+const ensureGraduationRetentionColumns = async (pool) => {
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='account_status')
+      ALTER TABLE dbo.USERS ADD account_status NVARCHAR(30) NOT NULL CONSTRAINT DF_USERS_account_status DEFAULT 'active';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='graduated_at')
+      ALTER TABLE dbo.USERS ADD graduated_at DATETIME NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='archived_at')
+      ALTER TABLE dbo.USERS ADD archived_at DATETIME NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOCUMENTS') AND name='trash_reason')
+      ALTER TABLE dbo.DOCUMENTS ADD trash_reason NVARCHAR(500) NULL;
+    EXEC('UPDATE dbo.USERS
+      SET account_status = CASE WHEN is_active = 1 THEN ''active'' ELSE ''inactive'' END
+      WHERE account_status IS NULL');
+  `)
+}
+
 const runStatusAndTrash = async () => {
   const pool = await getPool()
+  await ensureGraduationRetentionColumns(pool)
   await pool.request().execute('dbo.sp_UpdateDocumentStatus')
-  const trashedResult = await pool.request().query(`
-    UPDATE dbo.DOCUMENTS
+  const graduatedRetentionResult = await pool.request().query(`
+    UPDATE d
     SET status = 'trashed',
         trashed_at = GETDATE(),
         trashed_by = NULL,
-        trash_reason = N'เอกสารหมดอายุและถูกย้ายมาโดยอัตโนมัติ',
+        trash_reason = N'เอกสารของนักศึกษาที่จบการศึกษาถูกเก็บครบ 10 ปีและย้ายเข้าถังขยะโดยอัตโนมัติ',
         updated_at = GETDATE()
-    WHERE status = 'expired'
+    FROM dbo.DOCUMENTS d
+    JOIN dbo.USERS u ON d.user_id = u.user_id
+    WHERE u.role = 'student'
+      AND u.account_status = 'graduated'
+      AND u.graduated_at IS NOT NULL
+      AND u.graduated_at <= DATEADD(YEAR, -10, GETDATE())
+      AND d.status NOT IN ('deleted', 'trashed')
   `)
-  logger.info(`🗑️ Auto-trashed: ${trashedResult.rowsAffected[0]} เอกสาร`)
-  return trashedResult.rowsAffected[0]
+  const trashedResult = await pool.request().query(`
+    UPDATE d
+    SET d.status = 'trashed',
+        d.trashed_at = GETDATE(),
+        d.trashed_by = NULL,
+        d.trash_reason = N'เอกสารหมดอายุและถูกย้ายเข้าถังขยะโดยอัตโนมัติ',
+        d.updated_at = GETDATE()
+    FROM dbo.DOCUMENTS d
+    JOIN dbo.USERS u ON d.user_id = u.user_id
+    WHERE d.status = 'expired'
+      AND NOT (
+        u.role = 'student'
+        AND u.account_status = 'graduated'
+        AND u.graduated_at IS NOT NULL
+        AND u.graduated_at > DATEADD(YEAR, -10, GETDATE())
+      )
+  `)
+  const totalTrashed = (graduatedRetentionResult.rowsAffected[0] || 0) + (trashedResult.rowsAffected[0] || 0)
+  logger.info(`Auto-trashed: ${totalTrashed} documents (${graduatedRetentionResult.rowsAffected[0]} after 10-year graduation retention)`)
+  return totalTrashed
 }
 
 const purgeExpiredTrash = async (trashDays) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { executiveService } from '../../services/api'
 import { useLanguage } from '../../contexts/LanguageContext'
+import { getProgramDisplayName } from '../../constants/programs'
 
 const MONTHS = {
   th: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'],
@@ -124,7 +125,7 @@ export default function ExecutiveDashboard() {
               <div className="space-y-2">
                 {topExpiring.map((item, index) => (
                   <div key={index} className="flex items-center justify-between rounded-lg p-2.5" style={{ backgroundColor: '#fffbeb', border: '1px solid #fde68a' }}>
-                    <p className="max-w-[160px] truncate text-xs font-medium text-amber-800">{item.program || t('executive.unspecifiedProgram')}</p>
+                    <p className="max-w-[160px] truncate text-xs font-medium text-amber-800">{getProgramDisplayName(item.program, language) || t('executive.unspecifiedProgram')}</p>
                     <span className="ml-2 flex-shrink-0 text-xs font-bold text-amber-700">{item.expiring_count} {t('executive.copies')}</span>
                   </div>
                 ))}

@@ -13,6 +13,9 @@ const normalizeAffiliationForRole = (role, affiliation) => {
   return affiliation || null
 }
 
+const VALID_ACCOUNT_STATUSES = ['active', 'graduated', 'inactive', 'archived']
+const VALID_ROLES = ['student', 'advisor', 'admin', 'executive', 'staff']
+
 // เพิ่ม columns ถ้ายังไม่มี (idempotent)
 const ensureColumns = async (pool) => {
   await pool.request().query(`
@@ -27,13 +30,94 @@ const ensureColumns = async (pool) => {
       ALTER TABLE dbo.USERS ADD program NVARCHAR(100) NULL;
     IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='affiliation')
       ALTER TABLE dbo.USERS ADD affiliation NVARCHAR(100) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='profile_image_url')
+      ALTER TABLE dbo.USERS ADD profile_image_url NVARCHAR(500) NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='account_status')
+      ALTER TABLE dbo.USERS ADD account_status NVARCHAR(30) NOT NULL CONSTRAINT DF_USERS_account_status DEFAULT 'active';
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='graduated_at')
+      ALTER TABLE dbo.USERS ADD graduated_at DATETIME NULL;
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.USERS') AND name='archived_at')
+      ALTER TABLE dbo.USERS ADD archived_at DATETIME NULL;
+    EXEC('UPDATE dbo.USERS
+      SET account_status = CASE WHEN is_active = 1 THEN ''active'' ELSE ''inactive'' END
+      WHERE account_status IS NULL');
   `)
+}
+
+const ensureAdminRoleLogs = async (pool) => {
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.ADMIN_ROLE_LOGS', 'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.ADMIN_ROLE_LOGS (
+        role_log_id INT IDENTITY(1,1) PRIMARY KEY,
+        actor_id INT NOT NULL,
+        target_user_id INT NOT NULL,
+        old_role NVARCHAR(30) NULL,
+        new_role NVARCHAR(30) NOT NULL,
+        action NVARCHAR(50) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT GETDATE()
+      )
+    END
+  `)
+}
+
+const getActiveAdminCount = async (pool) => {
+  const result = await pool.request().query(`
+    SELECT COUNT(*) AS total
+    FROM dbo.USERS
+    WHERE role = 'admin'
+      AND is_active = 1
+      AND account_status = 'active'
+  `)
+  return result.recordset[0]?.total || 0
+}
+
+const assertCanRemoveAdminAccess = async (pool, userId) => {
+  const current = await pool.request()
+    .input('user_id', sql.Int, userId)
+    .query(`
+      SELECT user_id, role, is_active, account_status
+      FROM dbo.USERS
+      WHERE user_id = @user_id
+    `)
+
+  if (current.recordset.length === 0) {
+    const err = new Error('User not found')
+    err.status = 404
+    throw err
+  }
+
+  const user = current.recordset[0]
+  const removesActiveAdmin = user.role === 'admin' && user.is_active && (user.account_status || 'active') === 'active'
+  if (removesActiveAdmin) {
+    const activeAdmins = await getActiveAdminCount(pool)
+    if (activeAdmins <= 1) {
+      const err = new Error('Cannot remove the last active admin. Assign another admin first.')
+      err.status = 400
+      throw err
+    }
+  }
+  return user
+}
+
+const logAdminRoleChange = async (pool, { actorId, targetUserId, oldRole, newRole, action }) => {
+  await ensureAdminRoleLogs(pool)
+  await pool.request()
+    .input('actor_id', sql.Int, actorId)
+    .input('target_user_id', sql.Int, targetUserId)
+    .input('old_role', sql.NVarChar, oldRole || null)
+    .input('new_role', sql.NVarChar, newRole)
+    .input('action', sql.NVarChar, action)
+    .query(`
+      INSERT INTO dbo.ADMIN_ROLE_LOGS (actor_id, target_user_id, old_role, new_role, action)
+      VALUES (@actor_id, @target_user_id, @old_role, @new_role, @action)
+    `)
 }
 
 // GET /api/users
 const getUsers = async (req, res) => {
   try {
-    const { role, search, status, degree_level, affiliation, sortBy = 'created_at', sortDir = 'desc', page = 1, limit = 20 } = req.query
+    const { role, search, status, account_status, degree_level, affiliation, sortBy = 'created_at', sortDir = 'desc', page = 1, limit = 20 } = req.query
     const program = req.query.program || req.query.department
     const offset = (page - 1) * limit
     const pool = await getPool()
@@ -63,6 +147,10 @@ const getUsers = async (req, res) => {
     } else if (status === 'inactive') {
       where += ' AND u.is_active = 0'
     }
+    if (account_status) {
+      where += ' AND u.account_status = @account_status'
+      inputs.push({ name: 'account_status', type: sql.NVarChar, value: account_status })
+    }
     if (degree_level) {
       where += ' AND u.degree_level = @degree_level'
       inputs.push({ name: 'degree_level', type: sql.NVarChar, value: degree_level })
@@ -71,7 +159,7 @@ const getUsers = async (req, res) => {
     const SORT_COLS = {
       name: 'u.name', student_id: 'u.student_id', email: 'u.email',
       role: 'u.role', program: 'u.program', affiliation: 'u.affiliation', degree_level: 'u.degree_level',
-      is_active: 'u.is_active', created_at: 'u.created_at', doc_count: 'doc_count',
+      account_status: 'u.account_status', is_active: 'u.is_active', created_at: 'u.created_at', doc_count: 'doc_count',
     }
     const orderCol = SORT_COLS[sortBy] || 'u.created_at'
     const orderDir = sortDir === 'asc' ? 'ASC' : 'DESC'
@@ -82,7 +170,8 @@ const getUsers = async (req, res) => {
     const result = await req2.query(`
       SELECT
         u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
-        u.program, u.affiliation, u.is_active, u.must_change_pw, u.last_login, u.created_at,
+        u.program, u.affiliation, u.profile_image_url, u.account_status, u.graduated_at, u.archived_at,
+        u.is_active, u.must_change_pw, u.last_login, u.created_at,
         a.name AS advisor_name,
         (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
       FROM dbo.USERS u
@@ -120,9 +209,9 @@ const searchUsers = async (req, res) => {
     const result = await pool.request()
       .input('q', sql.NVarChar, `%${q.trim()}%`)
       .query(`
-        SELECT TOP 15 user_id, name, email, student_id, role, degree_level, program, affiliation
+        SELECT TOP 15 user_id, name, email, student_id, role, degree_level, program, affiliation, profile_image_url
         FROM dbo.USERS
-        WHERE is_active = 1 AND role != 'admin'
+        WHERE is_active = 1 AND account_status = 'active' AND role != 'admin'
           AND (student_id LIKE @q OR name LIKE @q OR email LIKE @q)
         ORDER BY student_id, name
       `)
@@ -144,7 +233,7 @@ const createUser = async (req, res) => {
       return res.status(400).json({ message: 'กรุณากรอกข้อมูลให้ครบถ้วน' })
     if (!email.endsWith('@kmutt.ac.th'))
       return res.status(400).json({ message: 'กรุณาใช้อีเมล @kmutt.ac.th เท่านั้น' })
-    if (!['student','advisor','admin','executive','staff'].includes(role))
+    if (!VALID_ROLES.includes(role))
       return res.status(400).json({ message: 'Role ไม่ถูกต้อง' })
     if (role === 'student' && !advisor_id)
       return res.status(400).json({ message: 'นักศึกษาต้องระบุอาจารย์ที่ปรึกษา' })
@@ -173,9 +262,9 @@ const createUser = async (req, res) => {
       .input('degree_level', sql.NVarChar, role === 'student' ? (degree_level || 'bachelor') : null)
       .query(`
         INSERT INTO dbo.USERS
-          (name, email, password_hash, role, advisor_id, program, affiliation, student_id, degree_level, must_change_pw)
+          (name, email, password_hash, role, advisor_id, program, affiliation, student_id, degree_level, must_change_pw, account_status)
         VALUES
-          (@name, @email, @hash, @role, @advisor_id, @program, @affiliation, @student_id, @degree_level, 1)
+          (@name, @email, @hash, @role, @advisor_id, @program, @affiliation, @student_id, @degree_level, 1, 'active')
       `)
 
     await sendMail({
@@ -201,6 +290,23 @@ const updateUser = async (req, res) => {
     const pool = await getPool()
     await ensureColumns(pool)
 
+    const current = await pool.request()
+      .input('user_id', sql.Int, id)
+      .query('SELECT user_id, role FROM dbo.USERS WHERE user_id = @user_id')
+
+    if (current.recordset.length === 0) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ message: 'Role is invalid' })
+    }
+    if (parseInt(id, 10) === req.user.user_id && current.recordset[0].role === 'admin' && role !== 'admin') {
+      return res.status(400).json({ message: 'Cannot remove your own admin role' })
+    }
+    if (current.recordset[0].role === 'admin' && role !== 'admin') {
+      await assertCanRemoveAdminAccess(pool, parseInt(id, 10))
+    }
+
     await pool.request()
       .input('user_id',      sql.Int,      id)
       .input('name',         sql.NVarChar, name)
@@ -223,7 +329,8 @@ const updateUser = async (req, res) => {
       .query(`
         SELECT
           u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
-          u.program, u.affiliation, u.is_active, u.must_change_pw, u.last_login, u.created_at,
+          u.program, u.affiliation, u.profile_image_url, u.account_status, u.graduated_at, u.archived_at,
+          u.is_active, u.must_change_pw, u.last_login, u.created_at,
           a.name AS advisor_name,
           (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
         FROM dbo.USERS u
@@ -231,10 +338,102 @@ const updateUser = async (req, res) => {
         WHERE u.user_id = @user_id
       `)
 
-    res.json({ message: 'แก้ไขข้อมูลสำเร็จ', user: updated.recordset[0] })
+    if (current.recordset[0].role !== role) {
+      await logAdminRoleChange(pool, {
+        actorId: req.user.user_id,
+        targetUserId: parseInt(id, 10),
+        oldRole: current.recordset[0].role,
+        newRole: role,
+        action: role === 'admin' ? 'promote_admin' : current.recordset[0].role === 'admin' ? 'demote_admin' : 'change_role',
+      })
+      logger.info(`User ${id} role changed from ${current.recordset[0].role} to ${role} by admin ${req.user.user_id}`)
+    }
+
+    res.json({ message: 'User updated', user: updated.recordset[0] })
   } catch (err) {
     logger.error(`updateUser error: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PATCH /api/users/:id/role
+const updateUserRole = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { role } = req.body
+    const userId = parseInt(id, 10)
+
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ message: 'Role is invalid' })
+    }
+    if (userId === req.user.user_id && role !== 'admin') {
+      return res.status(400).json({ message: 'Cannot remove your own admin role' })
+    }
+
+    const pool = await getPool()
+    await ensureColumns(pool)
+
+    const currentResult = await pool.request()
+      .input('user_id', sql.Int, userId)
+      .query('SELECT user_id, role FROM dbo.USERS WHERE user_id = @user_id')
+
+    if (currentResult.recordset.length === 0) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const current = currentResult.recordset[0]
+    if (current.role === 'admin' && role !== 'admin') {
+      await assertCanRemoveAdminAccess(pool, userId)
+    }
+
+    await pool.request()
+      .input('user_id', sql.Int, userId)
+      .input('role', sql.NVarChar, role)
+      .input('program', sql.NVarChar, null)
+      .input('affiliation', sql.NVarChar, role === 'executive' ? DEAN_OFFICE : null)
+      .query(`
+        UPDATE dbo.USERS
+        SET role = @role,
+            advisor_id = NULL,
+            program = @program,
+            affiliation = @affiliation,
+            student_id = CASE WHEN @role = 'student' THEN student_id ELSE NULL END,
+            degree_level = CASE WHEN @role = 'student' THEN ISNULL(degree_level, 'bachelor') ELSE NULL END,
+            account_status = CASE WHEN account_status IN ('inactive', 'archived') THEN account_status ELSE 'active' END,
+            is_active = CASE WHEN account_status IN ('inactive', 'archived') THEN is_active ELSE 1 END,
+            updated_at = GETDATE()
+        WHERE user_id = @user_id
+      `)
+
+    const updated = await pool.request()
+      .input('user_id', sql.Int, userId)
+      .query(`
+        SELECT
+          u.user_id, u.name, u.email, u.student_id, u.role, u.degree_level, u.advisor_id,
+          u.program, u.affiliation, u.profile_image_url, u.account_status, u.graduated_at, u.archived_at,
+          u.is_active, u.must_change_pw, u.last_login, u.created_at,
+          a.name AS advisor_name,
+          (SELECT COUNT(*) FROM dbo.DOCUMENTS d WHERE d.user_id = u.user_id AND d.status NOT IN ('deleted','trashed')) AS doc_count
+        FROM dbo.USERS u
+        LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id
+        WHERE u.user_id = @user_id
+      `)
+
+    if (current.role !== role) {
+      await logAdminRoleChange(pool, {
+        actorId: req.user.user_id,
+        targetUserId: userId,
+        oldRole: current.role,
+        newRole: role,
+        action: role === 'admin' ? 'promote_admin' : current.role === 'admin' ? 'demote_admin' : 'change_role',
+      })
+      logger.info(`User ${id} role changed from ${current.role} to ${role} by admin ${req.user.user_id}`)
+    }
+
+    res.json({ message: 'User role updated', user: updated.recordset[0] })
+  } catch (err) {
+    logger.error(`updateUserRole error: ${err.message}`)
+    res.status(err.status || 500).json({ message: err.message || 'Internal server error' })
   }
 }
 
@@ -243,27 +442,101 @@ const toggleUser = async (req, res) => {
   try {
     const { id } = req.params
     const pool = await getPool()
+    await ensureColumns(pool)
 
     const result = await pool.request()
       .input('user_id', sql.Int, id)
-      .query('SELECT is_active, name FROM dbo.USERS WHERE user_id = @user_id')
+      .query('SELECT is_active, name, role FROM dbo.USERS WHERE user_id = @user_id')
 
     if (result.recordset.length === 0)
       return res.status(404).json({ message: 'ไม่พบผู้ใช้' })
 
     const current = result.recordset[0]
     const newStatus = current.is_active ? 0 : 1
+    if (!newStatus && current.role === 'admin') {
+      await assertCanRemoveAdminAccess(pool, parseInt(id, 10))
+    }
 
     await pool.request()
       .input('user_id',   sql.Int, id)
       .input('is_active', sql.Bit, newStatus)
-      .query('UPDATE dbo.USERS SET is_active=@is_active, updated_at=GETDATE() WHERE user_id=@user_id')
+      .input('account_status', sql.NVarChar, newStatus ? 'active' : 'inactive')
+      .query(`
+        UPDATE dbo.USERS
+        SET is_active=@is_active,
+            account_status=@account_status,
+            graduated_at = CASE WHEN @account_status = 'active' THEN NULL ELSE graduated_at END,
+            archived_at = CASE WHEN @account_status = 'active' THEN NULL ELSE archived_at END,
+            updated_at=GETDATE()
+        WHERE user_id=@user_id
+      `)
 
     logger.info(`User ${id} toggled to ${newStatus ? 'active' : 'inactive'}`)
     res.json({ message: `${newStatus ? 'เปิด' : 'ปิด'}บัญชี ${current.name} สำเร็จ`, is_active: newStatus })
   } catch (err) {
     logger.error(`toggleUser error: ${err.message}`)
     res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PATCH /api/users/:id/status
+const updateUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { account_status } = req.body
+
+    if (!VALID_ACCOUNT_STATUSES.includes(account_status)) {
+      return res.status(400).json({ message: 'Account status is invalid' })
+    }
+    if (parseInt(id, 10) === req.user.user_id && account_status !== 'active') {
+      return res.status(400).json({ message: 'Cannot disable your own account' })
+    }
+
+    const pool = await getPool()
+    await ensureColumns(pool)
+
+    const current = await pool.request()
+      .input('user_id', sql.Int, id)
+      .query('SELECT user_id, role FROM dbo.USERS WHERE user_id = @user_id')
+
+    if (current.recordset.length === 0) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+    if (account_status === 'graduated' && current.recordset[0].role !== 'student') {
+      return res.status(400).json({ message: 'Only student accounts can be marked as graduated' })
+    }
+    if (current.recordset[0].role === 'admin' && account_status !== 'active') {
+      await assertCanRemoveAdminAccess(pool, parseInt(id, 10))
+    }
+
+    await pool.request()
+      .input('user_id', sql.Int, id)
+      .input('account_status', sql.NVarChar, account_status)
+      .input('is_active', sql.Bit, account_status === 'active' ? 1 : 0)
+      .input('archived_at', sql.DateTime, account_status === 'archived' ? new Date() : null)
+      .query(`
+        UPDATE dbo.USERS
+        SET account_status = @account_status,
+            is_active = @is_active,
+            graduated_at = CASE
+              WHEN @account_status = 'graduated' THEN ISNULL(graduated_at, GETDATE())
+              WHEN @account_status = 'active' THEN NULL
+              ELSE graduated_at
+            END,
+            archived_at = CASE
+              WHEN @account_status = 'archived' THEN ISNULL(archived_at, @archived_at)
+              WHEN @account_status = 'active' THEN NULL
+              ELSE archived_at
+            END,
+            updated_at = GETDATE()
+        WHERE user_id = @user_id
+      `)
+
+    logger.info(`User ${id} status changed to ${account_status} by admin ${req.user.user_id}`)
+    res.json({ message: 'Account status updated', account_status, is_active: account_status === 'active' })
+  } catch (err) {
+    logger.error(`updateUserStatus error: ${err.message}`)
+    res.status(500).json({ message: 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”เธ เธฒเธขเนเธเธฃเธฐเธเธ' })
   }
 }
 
@@ -354,9 +627,9 @@ const importUsers = async (req, res) => {
           .input('degree_level', sql.NVarChar, degLevel)
           .query(`
             INSERT INTO dbo.USERS
-              (name, email, password_hash, role, advisor_id, program, affiliation, student_id, degree_level, must_change_pw)
+              (name, email, password_hash, role, advisor_id, program, affiliation, student_id, degree_level, must_change_pw, account_status)
             VALUES
-              (@name, @email, @hash, @role, @advisor_id, @program, @affiliation, @student_id, @degree_level, 1)
+              (@name, @email, @hash, @role, @advisor_id, @program, @affiliation, @student_id, @degree_level, 1, 'active')
           `)
 
         await sendMail({
@@ -383,8 +656,9 @@ const importUsers = async (req, res) => {
 const getAdvisors = async (req, res) => {
   try {
     const pool = await getPool()
+    await ensureColumns(pool)
     const result = await pool.request()
-      .query("SELECT user_id, name, email FROM dbo.USERS WHERE role = 'advisor' AND is_active = 1 ORDER BY name")
+      .query("SELECT user_id, name, email FROM dbo.USERS WHERE role = 'advisor' AND is_active = 1 AND account_status = 'active' ORDER BY name")
     if (req.query.include_relations !== '1') {
       return res.json({ advisors: result.recordset })
     }
@@ -394,6 +668,7 @@ const getAdvisors = async (req, res) => {
       FROM dbo.USERS
       WHERE role = 'student'
         AND is_active = 1
+        AND account_status = 'active'
         AND advisor_id IS NOT NULL
     `)
     const relations = {}
@@ -425,7 +700,12 @@ const bulkDeleteUsers = async (req, res) => {
       return res.status(400).json({ message: 'กรุณาเลือกผู้ใช้ที่ต้องการลบ' })
 
     const pool = await getPool()
+    await ensureColumns(pool)
     const placeholders = ids.map((_, i) => `@id${i}`).join(',')
+
+    for (const id of ids) {
+      await assertCanRemoveAdminAccess(pool, parseInt(id, 10))
+    }
 
     const checkReq = pool.request()
     ids.forEach((id, i) => checkReq.input(`id${i}`, sql.Int, id))
@@ -466,13 +746,25 @@ const bulkToggleUsers = async (req, res) => {
       return res.status(400).json({ message: 'กรุณาเลือกผู้ใช้' })
 
     const pool = await getPool()
+    await ensureColumns(pool)
     const placeholders = ids.map((_, i) => `@id${i}`).join(',')
+    if (!is_active) {
+      for (const id of ids) {
+        await assertCanRemoveAdminAccess(pool, parseInt(id, 10))
+      }
+    }
     const req2 = pool.request()
     ids.forEach((id, i) => req2.input(`id${i}`, sql.Int, id))
     req2.input('is_active', sql.Bit, is_active ? 1 : 0)
+    req2.input('account_status', sql.NVarChar, is_active ? 'active' : 'inactive')
     req2.input('self_id', sql.Int, req.user.user_id)
     const result = await req2.query(`
-      UPDATE dbo.USERS SET is_active=@is_active, updated_at=GETDATE()
+      UPDATE dbo.USERS
+      SET is_active=@is_active,
+          account_status=@account_status,
+          graduated_at = CASE WHEN @account_status = 'active' THEN NULL ELSE graduated_at END,
+          archived_at = CASE WHEN @account_status = 'active' THEN NULL ELSE archived_at END,
+          updated_at=GETDATE()
       WHERE user_id IN (${placeholders}) AND user_id != @self_id
     `)
 
@@ -484,4 +776,59 @@ const bulkToggleUsers = async (req, res) => {
   }
 }
 
-module.exports = { getUsers, searchUsers, createUser, updateUser, toggleUser, resetPassword, importUsers, getAdvisors, bulkDeleteUsers, bulkToggleUsers }
+// PATCH /api/users/bulk/status
+const bulkUpdateUserStatus = async (req, res) => {
+  try {
+    const { ids, account_status } = req.body
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'เธเธฃเธธเธ“เธฒเน€เธฅเธทเธญเธเธเธนเนเนเธเน' })
+    }
+    if (!VALID_ACCOUNT_STATUSES.includes(account_status)) {
+      return res.status(400).json({ message: 'Account status is invalid' })
+    }
+
+    const pool = await getPool()
+    await ensureColumns(pool)
+    const placeholders = ids.map((_, i) => `@id${i}`).join(',')
+    if (account_status !== 'active') {
+      for (const id of ids) {
+        await assertCanRemoveAdminAccess(pool, parseInt(id, 10))
+      }
+    }
+    const req2 = pool.request()
+    ids.forEach((id, i) => req2.input(`id${i}`, sql.Int, id))
+    req2.input('self_id', sql.Int, req.user.user_id)
+    req2.input('account_status', sql.NVarChar, account_status)
+    req2.input('is_active', sql.Bit, account_status === 'active' ? 1 : 0)
+    req2.input('archived_at', sql.DateTime, account_status === 'archived' ? new Date() : null)
+
+    const roleGuard = account_status === 'graduated' ? "AND role = 'student'" : ''
+    const result = await req2.query(`
+      UPDATE dbo.USERS
+      SET account_status = @account_status,
+          is_active = @is_active,
+          graduated_at = CASE
+            WHEN @account_status = 'graduated' THEN ISNULL(graduated_at, GETDATE())
+            WHEN @account_status = 'active' THEN NULL
+            ELSE graduated_at
+          END,
+          archived_at = CASE
+            WHEN @account_status = 'archived' THEN ISNULL(archived_at, @archived_at)
+            WHEN @account_status = 'active' THEN NULL
+            ELSE archived_at
+          END,
+          updated_at = GETDATE()
+      WHERE user_id IN (${placeholders})
+        AND user_id != @self_id
+        ${roleGuard}
+    `)
+
+    logger.info(`Bulk status ${result.rowsAffected[0]} users to ${account_status} by admin ${req.user.user_id}`)
+    res.json({ message: 'Account status updated', updated: result.rowsAffected[0], account_status })
+  } catch (err) {
+    logger.error(`bulkUpdateUserStatus error: ${err.message}`)
+    res.status(500).json({ message: 'เน€เธเธดเธ”เธเนเธญเธเธดเธ”เธเธฅเธฒเธ”เธ เธฒเธขเนเธเธฃเธฐเธเธ' })
+  }
+}
+
+module.exports = { getUsers, searchUsers, createUser, updateUser, updateUserRole, toggleUser, updateUserStatus, resetPassword, importUsers, getAdvisors, bulkDeleteUsers, bulkToggleUsers, bulkUpdateUserStatus }

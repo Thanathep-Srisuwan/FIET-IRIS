@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { 
-  Megaphone, 
-  Image as ImageIcon, 
-  Link as LinkIcon, 
-  X, 
+import {
+  Megaphone,
+  Image as ImageIcon,
+  Link as LinkIcon,
+  X,
   Search,
   UploadCloud,
   FileImage,
@@ -12,6 +12,7 @@ import {
   Info
 } from 'lucide-react'
 import { announcementService } from '../../services/api'
+import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
 
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024
@@ -33,31 +34,14 @@ function getImageRatio(width, height) {
   return value > 1 ? `${value.toFixed(2)}:1` : `1:${(1 / value).toFixed(2)}`
 }
 
-function getImageFitMessage(dimensions) {
-  if (!dimensions) return 'ระบบจะแสดงรูปแบบเต็มภาพโดยไม่ตัดส่วนสำคัญ'
-  const ratio = dimensions.width / dimensions.height
-  if (Math.abs(ratio - 16 / 9) < 0.08) return 'อัตราส่วนนี้เหมาะกับพื้นที่แนะนำ'
-  return 'รองรับอัตราส่วนนี้ และจะแสดงแบบเต็มภาพโดยไม่ครอป'
-}
-
-function formatDate(value) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function AnnouncementPreview({ form, preview }) {
+  const { t } = useLanguage()
   const hasContent = form.title.trim() || form.content.trim() || preview || form.link_url.trim()
 
   return (
     <aside className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
       <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30">
-        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">ตัวอย่างประกาศ</p>
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('adminAnnouncements.previewTitle')}</p>
       </div>
 
       {!hasContent ? (
@@ -65,7 +49,7 @@ function AnnouncementPreview({ form, preview }) {
           <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
             <Megaphone size={28} strokeWidth={1.8} />
           </div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">เริ่มกรอกข้อมูลเพื่อดูตัวอย่าง</p>
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('adminAnnouncements.previewStart')}</p>
         </div>
       ) : (
         <div className="p-5">
@@ -78,17 +62,17 @@ function AnnouncementPreview({ form, preview }) {
               <ImageIcon size={32} strokeWidth={1.8} />
             </div>
           )}
-          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-2">ประกาศล่าสุด</p>
+          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-2">{t('adminAnnouncements.latestLabel')}</p>
           <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 leading-snug">
-            {form.title.trim() || 'หัวข้อประกาศ'}
+            {form.title.trim() || t('adminAnnouncements.titleLabel')}
           </h3>
           <p className="text-sm text-slate-600 dark:text-slate-300 mt-3 whitespace-pre-wrap leading-relaxed">
-            {form.content.trim() || 'รายละเอียดประกาศจะแสดงที่นี่'}
+            {form.content.trim() || t('adminAnnouncements.contentLabel')}
           </p>
           {form.link_url.trim() && (
             <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary-700 dark:text-primary-300">
               <LinkIcon size={16} strokeWidth={2} />
-              เปิดลิงก์ประกอบ
+              {t('adminAnnouncements.openLink')}
             </div>
           )}
         </div>
@@ -98,6 +82,7 @@ function AnnouncementPreview({ form, preview }) {
 }
 
 function AnnouncementForm({ onSaved }) {
+  const { t } = useLanguage()
   const [form, setForm] = useState({ title: '', content: '', link_url: '' })
   const [image, setImage] = useState(null)
   const [preview, setPreview] = useState(null)
@@ -114,14 +99,21 @@ function AnnouncementForm({ onSaved }) {
 
   const updateField = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
 
+  const getImageFitMessage = (dimensions) => {
+    if (!dimensions) return t('adminAnnouncements.fitDefault')
+    const ratio = dimensions.width / dimensions.height
+    if (Math.abs(ratio - 16 / 9) < 0.08) return t('adminAnnouncements.fit169')
+    return t('adminAnnouncements.fitOther')
+  }
+
   const setSelectedImage = (file) => {
     if (!file) return
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      toast.error('รองรับเฉพาะไฟล์ JPG, PNG หรือ WebP')
+      toast.error(t('adminAnnouncements.imageTypeError'))
       return
     }
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error('รูปภาพต้องมีขนาดไม่เกิน 20 MB')
+      toast.error(t('adminAnnouncements.imageSizeError'))
       return
     }
     if (preview) URL.revokeObjectURL(preview)
@@ -158,7 +150,7 @@ function AnnouncementForm({ onSaved }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.title.trim() || !form.content.trim()) {
-      toast.error('กรุณากรอกหัวข้อและเนื้อหาประกาศ')
+      toast.error(t('adminAnnouncements.validateError'))
       return
     }
     setLoading(true)
@@ -169,12 +161,12 @@ function AnnouncementForm({ onSaved }) {
       fd.append('link_url', form.link_url.trim())
       if (image) fd.append('image', image)
       const { data } = await announcementService.create(fd)
-      toast.success('เผยแพร่ประกาศสำเร็จ')
+      toast.success(t('adminAnnouncements.publishSuccess'))
       setForm({ title: '', content: '', link_url: '' })
       clearImage()
       onSaved(data?.announcement)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     } finally {
       setLoading(false)
     }
@@ -185,14 +177,14 @@ function AnnouncementForm({ onSaved }) {
       <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">สร้างประกาศใหม่</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">ประกาศจะแสดงบนหน้า Homepage และช่องการแจ้งเตือนของผู้ใช้</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('adminAnnouncements.createTitle')}</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('adminAnnouncements.createDesc')}</p>
           </div>
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">หัวข้อประกาศ</label>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminAnnouncements.titleLabel')}</label>
             <span className="text-[11px] text-slate-400">{form.title.length}/120</span>
           </div>
           <input
@@ -200,32 +192,34 @@ function AnnouncementForm({ onSaved }) {
             maxLength={120}
             value={form.title}
             onChange={e => updateField('title', e.target.value)}
-            placeholder="เช่น ประกาศเปิดรับเอกสารรับรองจริยธรรมรอบใหม่"
+            placeholder={t('adminAnnouncements.titleLabel')}
             className="input-field"
           />
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">เนื้อหาประกาศ</label>
-            <span className="text-[11px] text-slate-400">{form.content.length} ตัวอักษร</span>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminAnnouncements.contentLabel')}</label>
+            <span className="text-[11px] text-slate-400">{t('adminAnnouncements.contentChars', { count: form.content.length })}</span>
           </div>
           <textarea
             rows={7}
             value={form.content}
             onChange={e => updateField('content', e.target.value)}
-            placeholder="ระบุรายละเอียด วันเวลา เงื่อนไข หรือข้อมูลที่ผู้ใช้ต้องทราบ..."
+            placeholder={t('adminAnnouncements.contentLabel')}
             className="input-field resize-none leading-relaxed"
           />
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-200">รูปภาพประกอบ <span className="text-slate-400 font-normal">(ไม่บังคับ)</span></label>
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+            {t('adminAnnouncements.imageLabel')} <span className="text-slate-400 font-normal">{t('adminAnnouncements.imageOptional')}</span>
+          </label>
           <div className="mt-1 mb-3 space-y-1">
             <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-              <span className="font-bold text-primary-600 dark:text-primary-400">คำแนะนำ:</span> อัตราส่วน <span className="font-bold">16:9</span> (เช่น 1200 x 630 px) จะแสดงผลได้สวยงามที่สุด
+              <span className="font-bold text-primary-600 dark:text-primary-400">{t('common.tip')}:</span> {t('adminAnnouncements.imageTip')}
             </p>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">รองรับไฟล์ JPG/PNG/WebP, ขนาดไม่เกิน 20 MB</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('adminAnnouncements.imageInfo')}</p>
           </div>
           <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageChange} />
           {preview ? (
@@ -264,13 +258,13 @@ function AnnouncementForm({ onSaved }) {
                     className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                   >
                     <RefreshCw size={14} />
-                    เปลี่ยนรูป
+                    {t('adminAnnouncements.changeImage')}
                   </button>
                   <button
                     type="button"
                     onClick={clearImage}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
-                    aria-label="ลบรูปภาพ"
+                    aria-label={t('adminAnnouncements.removeImage')}
                   >
                     <X size={16} />
                   </button>
@@ -294,14 +288,16 @@ function AnnouncementForm({ onSaved }) {
               }`}
             >
               <UploadCloud size={32} strokeWidth={1.7} className="text-primary-500 dark:text-primary-300 mb-2" />
-              <span className="text-sm font-bold text-slate-700 dark:text-slate-100">ลากรูปมาวาง หรือคลิกเพื่อเลือกไฟล์</span>
-              <span className="mt-1 text-xs text-slate-400">อัตราส่วนที่แนะนำ 16:9 • ไม่เกิน 20 MB</span>
+              <span className="text-sm font-bold text-slate-700 dark:text-slate-100">{t('adminAnnouncements.dragOrClick')}</span>
+              <span className="mt-1 text-xs text-slate-400">{t('adminAnnouncements.recommended')}</span>
             </button>
           )}
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">ลิงก์ประกอบ <span className="text-slate-400">(ไม่บังคับ)</span></label>
+          <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {t('adminAnnouncements.linkLabel')} <span className="text-slate-400">{t('adminAnnouncements.linkOptional')}</span>
+          </label>
           <input
             type="url"
             value={form.link_url}
@@ -312,13 +308,13 @@ function AnnouncementForm({ onSaved }) {
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-          <p className="text-xs text-slate-400 dark:text-slate-500">ตรวจสอบตัวอย่างก่อนเผยแพร่เพื่อลดการแก้ไขภายหลัง</p>
+          <p className="text-xs text-slate-400 dark:text-slate-500">{t('adminAnnouncements.reviewTip')}</p>
           <button
             type="submit"
             disabled={loading}
             className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 bg-primary-700 hover:bg-primary-800"
           >
-            {loading ? 'กำลังบันทึก...' : 'เผยแพร่ประกาศ'}
+            {loading ? t('adminAnnouncements.publishing') : t('adminAnnouncements.publish')}
           </button>
         </div>
       </form>
@@ -329,8 +325,20 @@ function AnnouncementForm({ onSaved }) {
 }
 
 function AnnouncementCard({ item, onDelete }) {
+  const { t, locale } = useLanguage()
   const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  const formatDate = (value) => {
+    if (!value) return '-'
+    return new Date(value).toLocaleString(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
 
   const handleDelete = async () => {
     if (!confirming) {
@@ -340,10 +348,10 @@ function AnnouncementCard({ item, onDelete }) {
     setLoading(true)
     try {
       await announcementService.remove(item.announcement_id)
-      toast.success('ลบประกาศแล้ว')
+      toast.success(t('adminAnnouncements.deleteSuccess'))
       onDelete(item.announcement_id)
     } catch {
-      toast.error('เกิดข้อผิดพลาด')
+      toast.error(t('common.error'))
     } finally {
       setLoading(false)
       setConfirming(false)
@@ -356,14 +364,13 @@ function AnnouncementCard({ item, onDelete }) {
         <div className="relative bg-slate-100 dark:bg-slate-800/40 flex items-center justify-center border-r border-slate-100 dark:border-slate-800 h-56 md:h-auto overflow-hidden">
           {item.image_url ? (
             <>
-              {/* Subtle background blur for modern feel */}
               <div className="absolute inset-0 opacity-10 blur-2xl scale-150">
                 <img src={item.image_url} alt="" className="w-full h-full object-cover" />
               </div>
-              <img 
-                src={item.image_url} 
-                alt={item.title} 
-                className="relative z-10 w-full h-full object-contain p-2" 
+              <img
+                src={item.image_url}
+                alt={item.title}
+                className="relative z-10 w-full h-full object-contain p-2"
               />
             </>
           ) : (
@@ -376,11 +383,11 @@ function AnnouncementCard({ item, onDelete }) {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300">เผยแพร่แล้ว</span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300">{t('adminAnnouncements.published')}</span>
                 <span className="text-xs text-slate-400 dark:text-slate-500">{formatDate(item.created_at)}</span>
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{item.title}</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">โดย {item.created_by_name || 'ผู้ดูแลระบบ'}</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t('adminAnnouncements.createdBy', { name: item.created_by_name || t('roles.admin') })}</p>
             </div>
             <button
               onClick={handleDelete}
@@ -391,7 +398,7 @@ function AnnouncementCard({ item, onDelete }) {
                   : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-red-600 hover:border-red-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:text-red-300 dark:hover:border-red-900'
               }`}
             >
-              {loading ? '...' : confirming ? 'ยืนยันลบ?' : 'ลบ'}
+              {loading ? '...' : confirming ? t('adminAnnouncements.deleteConfirm') : t('common.delete')}
             </button>
           </div>
 
@@ -410,6 +417,7 @@ function AnnouncementCard({ item, onDelete }) {
 }
 
 export default function AdminAnnouncementsPage() {
+  const { t } = useLanguage()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -420,7 +428,7 @@ export default function AdminAnnouncementsPage() {
       const { data } = await announcementService.getAll()
       setItems(data || [])
     } catch {
-      toast.error('โหลดข้อมูลไม่สำเร็จ')
+      toast.error(t('adminAnnouncements.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -450,17 +458,17 @@ export default function AdminAnnouncementsPage() {
     <div className="space-y-6 max-w-7xl">
       <header className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">Admin</p>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">จัดการประกาศ</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">สร้างประกาศพร้อมรูปภาพ ลิงก์ประกอบ และตรวจสอบรายการที่เผยแพร่แล้ว</p>
+          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">{t('roles.admin')}</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{t('topbar.adminAnnouncements')}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('adminAnnouncements.desc')}</p>
         </div>
         <div className="grid grid-cols-2 gap-3 min-w-full sm:min-w-[320px] lg:min-w-[360px]">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">ประกาศทั้งหมด</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminAnnouncements.totalLabel')}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{items.length}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">มีรูปภาพ</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminAnnouncements.withImageLabel')}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{items.filter(item => item.image_url).length}</p>
           </div>
         </div>
@@ -471,28 +479,28 @@ export default function AdminAnnouncementsPage() {
       <section className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">ประกาศที่เผยแพร่อยู่</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">แสดง {filteredItems.length} จาก {items.length} รายการ</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('adminAnnouncements.listTitle')}</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{t('adminAnnouncements.listCount', { shown: filteredItems.length, total: items.length })}</p>
           </div>
           <div className="relative w-full md:w-80">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="ค้นหาประกาศ..."
+              placeholder={t('adminAnnouncements.searchPlaceholder')}
               className="input-field pl-9"
             />
           </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-16 text-slate-400 text-sm bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">กำลังโหลด...</div>
+          <div className="text-center py-16 text-slate-400 text-sm bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">{t('common.loading')}</div>
         ) : filteredItems.length === 0 ? (
           <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
             <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
               <Megaphone size={32} strokeWidth={1.8} />
             </div>
-            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{query ? 'ไม่พบประกาศที่ค้นหา' : 'ยังไม่มีประกาศ'}</p>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{query ? t('adminAnnouncements.emptySearch') : t('adminAnnouncements.empty')}</p>
           </div>
         ) : (
           <div className="space-y-3">

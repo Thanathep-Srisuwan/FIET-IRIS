@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { documentService, docTypeService, userService } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
+import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
 import useDebouncedValue from '../../hooks/useDebouncedValue'
 import useAcademicOptions from '../../hooks/useAcademicOptions'
-import { ALL_PROGRAMS, PROGRAMS_BY_DEGREE, getDegreeForProgram } from '../../constants/programs'
+import { ALL_PROGRAMS, PROGRAMS_BY_DEGREE, getDegreeForProgram, getProgramDisplayName } from '../../constants/programs'
 import {
   Calendar,
   X,
@@ -25,16 +26,13 @@ import {
   MoreHorizontal
 } from 'lucide-react'
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-const statusLabel = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
+// ─── Constants ────────────────────────────────────────────────────────────────
 const statusColor = {
   active:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
   expiring_soon: 'bg-amber-50 text-amber-700 border border-amber-200',
   expired:       'bg-red-50 text-red-600 border border-red-200',
 }
-const degreeLabel = { bachelor: 'ป.ตรี', master: 'ป.โท', doctoral: 'ป.เอก' }
 const programsByDegree = PROGRAMS_BY_DEGREE
-const roleLabel   = { student: 'นักศึกษา', advisor: 'อาจารย์', admin: 'ผู้ดูแลระบบ', executive: 'ผู้บริหาร', staff: 'เจ้าหน้าที่' }
 const allProgramOptions = ALL_PROGRAMS
 const LIMIT = 15
 
@@ -46,15 +44,15 @@ const computedStatus = (doc) => {
   return 'active'
 }
 
-const groupBadge = (doc) => {
+const groupBadge = (doc, t) => {
   if (!doc.owner_role || doc.owner_role === 'admin') return null
-  if (doc.owner_role === 'advisor') return { text: 'อาจารย์',    bg: '#fef3c7', color: '#92400e' }
-  if (doc.owner_role === 'staff')   return { text: 'เจ้าหน้าที่', bg: '#dcfce7', color: '#166534' }
+  if (doc.owner_role === 'advisor') return { text: t('documents.roleAdvisor'), bg: '#fef3c7', color: '#92400e' }
+  if (doc.owner_role === 'staff')   return { text: t('documents.roleStaff'),   bg: '#dcfce7', color: '#166534' }
   if (doc.owner_role === 'student') {
     switch (doc.owner_degree_level) {
-      case 'master':   return { text: 'ป.โท', bg: '#f3e8ff', color: '#6b21a8' }
-      case 'doctoral': return { text: 'ป.เอก', bg: '#fee2e2', color: '#991b1b' }
-      default:         return { text: 'ป.ตรี', bg: '#e0f4fb', color: '#0d2d3e' }
+      case 'master':   return { text: t('documents.degreeMaster'),   bg: '#f3e8ff', color: '#6b21a8' }
+      case 'doctoral': return { text: t('documents.degreeDoctoral'), bg: '#fee2e2', color: '#991b1b' }
+      default:         return { text: t('documents.degreeBachelor'), bg: '#e0f4fb', color: '#0d2d3e' }
     }
   }
   return null
@@ -67,12 +65,6 @@ const rowBg = (doc) => {
   return 'hover:bg-slate-50'
 }
 
-const fileTypeLabel = {
-  main: 'เอกสารหลัก',
-  certificate: 'บันทึกข้อความรับรอง',
-  attachment: 'ไฟล์แนบ',
-}
-
 const timelineIcon = {
   created: FileText,
   file_version_uploaded: UploadCloud,
@@ -81,33 +73,34 @@ const timelineIcon = {
 }
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
-const getAdminTabs = () => [
-  { key: 'all',      label: 'ทั้งหมด',     summaryKey: 'all',      params: {} },
-  { key: 'bachelor', label: 'นศ. ป.ตรี',   summaryKey: 'bachelor', params: { owner_role: 'student', degree_level: 'bachelor' } },
-  { key: 'master',   label: 'นศ. ป.โท',    summaryKey: 'master',   params: { owner_role: 'student', degree_level: 'master'   } },
-  { key: 'doctoral', label: 'นศ. ป.เอก',   summaryKey: 'doctoral', params: { owner_role: 'student', degree_level: 'doctoral' } },
-  { key: 'advisor',  label: 'อาจารย์',      summaryKey: 'advisor',  params: { owner_role: 'advisor' } },
-  { key: 'staff',    label: 'เจ้าหน้าที่', summaryKey: 'staff',    params: { owner_role: 'staff'   } },
+const getAdminTabs = (t) => [
+  { key: 'all',      label: t('documents.tabAll'),     summaryKey: 'all',      params: {} },
+  { key: 'bachelor', label: t('documents.tabBachelor'), summaryKey: 'bachelor', params: { owner_role: 'student', degree_level: 'bachelor' } },
+  { key: 'master',   label: t('documents.tabMaster'),   summaryKey: 'master',   params: { owner_role: 'student', degree_level: 'master'   } },
+  { key: 'doctoral', label: t('documents.tabDoctoral'), summaryKey: 'doctoral', params: { owner_role: 'student', degree_level: 'doctoral' } },
+  { key: 'advisor',  label: t('documents.tabAdvisor'),  summaryKey: 'advisor',  params: { owner_role: 'advisor' } },
+  { key: 'staff',    label: t('documents.tabStaff'),    summaryKey: 'staff',    params: { owner_role: 'staff'   } },
 ]
 
-const getAdvisorTabs = () => [
-  { key: 'all',      label: 'ทั้งหมด', params: {} },
-  { key: 'bachelor', label: 'ป.ตรี',   params: { degree_level: 'bachelor' } },
-  { key: 'master',   label: 'ป.โท',    params: { degree_level: 'master'   } },
-  { key: 'doctoral', label: 'ป.เอก',   params: { degree_level: 'doctoral' } },
+const getAdvisorTabs = (t) => [
+  { key: 'all',      label: t('documents.tabAll'),         params: {} },
+  { key: 'bachelor', label: t('documents.degreeBachelor'), params: { degree_level: 'bachelor' } },
+  { key: 'master',   label: t('documents.degreeMaster'),   params: { degree_level: 'master'   } },
+  { key: 'doctoral', label: t('documents.degreeDoctoral'), params: { degree_level: 'doctoral' } },
 ]
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SummaryCards({ summary, activeTab }) {
+  const { t } = useLanguage()
   const stats = summary?.[activeTab] ?? summary?.all ?? {}
   const active = Math.max(0, (stats.total || 0) - (stats.expired || 0) - (stats.expiring_soon || 0) - (stats.no_expire_count || 0))
   const cards = [
-    { label: 'ทั้งหมด',      value: stats.total          || 0, colorClass: 'text-slate-700',   bg: 'bg-slate-100' },
-    { label: 'ปกติ',         value: active,                    colorClass: 'text-emerald-700', bg: 'bg-emerald-50' },
-    { label: 'ใกล้หมดอายุ',  value: stats.expiring_soon  || 0, colorClass: 'text-amber-700',   bg: 'bg-amber-50' },
-    { label: 'หมดอายุ',      value: stats.expired        || 0, colorClass: 'text-red-700',     bg: 'bg-red-50' },
-    { label: 'อัปเดตไฟล์แล้ว', value: stats.updated_count || 0, colorClass: 'text-blue-700',   bg: 'bg-blue-50' },
+    { label: t('documents.summaryTotal'),    value: stats.total          || 0, colorClass: 'text-slate-700',   bg: 'bg-slate-100' },
+    { label: t('documents.summaryActive'),   value: active,                    colorClass: 'text-emerald-700', bg: 'bg-emerald-50' },
+    { label: t('documents.summaryExpiring'), value: stats.expiring_soon  || 0, colorClass: 'text-amber-700',   bg: 'bg-amber-50' },
+    { label: t('documents.summaryExpired'),  value: stats.expired        || 0, colorClass: 'text-red-700',     bg: 'bg-red-50' },
+    { label: t('documents.summaryUpdated'),  value: stats.updated_count  || 0, colorClass: 'text-blue-700',    bg: 'bg-blue-50' },
   ]
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -115,7 +108,7 @@ function SummaryCards({ summary, activeTab }) {
         <div key={card.label} className={`${card.bg} rounded-xl px-4 py-3`}>
           <p className="text-xs text-slate-500 mb-1">{card.label}</p>
           <p className={`text-2xl font-bold ${card.colorClass}`}>{card.value.toLocaleString()}</p>
-          <p className="text-xs text-slate-400">รายการ</p>
+          <p className="text-xs text-slate-400">{t('documents.summaryUnit')}</p>
         </div>
       ))}
     </div>
@@ -173,6 +166,7 @@ function SortTh({ children, sortKey, currentSort, onSort, className = '' }) {
 }
 
 function PaginationBar({ page, total, limit, onPageChange }) {
+  const { t } = useLanguage()
   const totalPages = Math.ceil(total / limit)
   if (totalPages <= 1) return null
 
@@ -185,12 +179,16 @@ function PaginationBar({ page, total, limit, onPageChange }) {
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-2">
       <p className="text-xs text-slate-400">
-        แสดง {((page - 1) * limit + 1).toLocaleString()}–{Math.min(page * limit, total).toLocaleString()} จาก {total.toLocaleString()} รายการ
+        {t('documents.pageShowing', {
+          from: ((page - 1) * limit + 1).toLocaleString(),
+          to: Math.min(page * limit, total).toLocaleString(),
+          total: total.toLocaleString(),
+        })}
       </p>
       <div className="flex items-center gap-1">
         <button disabled={page <= 1} onClick={() => onPageChange(page - 1)}
           className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
-          <ChevronLeft size={14} /> ก่อนหน้า
+          <ChevronLeft size={14} /> {t('documents.pagePrev')}
         </button>
         {pages.map(p => (
           <button key={p} onClick={() => onPageChange(p)}
@@ -201,7 +199,7 @@ function PaginationBar({ page, total, limit, onPageChange }) {
         ))}
         <button disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}
           className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
-          ถัดไป <ChevronRight size={14} />
+          {t('documents.pageNext')} <ChevronRight size={14} />
         </button>
       </div>
     </div>
@@ -210,6 +208,7 @@ function PaginationBar({ page, total, limit, onPageChange }) {
 
 // ─── User Search Input ────────────────────────────────────────────────────────
 function UserSearchInput({ value, onChange }) {
+  const { t } = useLanguage()
   const [query, setQuery]       = useState('')
   const [results, setResults]   = useState([])
   const [loading, setLoading]   = useState(false)
@@ -217,6 +216,14 @@ function UserSearchInput({ value, onChange }) {
   const [selected, setSelected] = useState(null)
   const wrapRef  = useRef(null)
   const timerRef = useRef(null)
+
+  const roleLabel = useMemo(() => ({
+    student:   t('documents.roleStudent'),
+    advisor:   t('documents.roleAdvisor'),
+    admin:     t('documents.roleAdmin'),
+    staff:     t('documents.roleStaff'),
+    executive: t('documents.roleExecutive'),
+  }), [t])
 
   useEffect(() => {
     const handleClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
@@ -248,7 +255,7 @@ function UserSearchInput({ value, onChange }) {
     <div className="relative" ref={wrapRef}>
       <div className="relative">
         <input type="text" value={query} onChange={handleInput} onFocus={() => results.length > 0 && setOpen(true)}
-          placeholder="พิมพ์รหัสนักศึกษา, ชื่อ หรืออีเมล..."
+          placeholder={t('documents.userSearchPlaceholder')}
           className="input-field pr-8" />
         {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">...</span>}
         {selected && !loading && (
@@ -275,14 +282,23 @@ function UserSearchInput({ value, onChange }) {
         </div>
       )}
       {open && !loading && results.length === 0 && query.trim() && (
-        <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border border-slate-200 shadow-xl px-4 py-3 text-sm text-slate-400">ไม่พบผู้ใช้</div>
+        <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border border-slate-200 shadow-xl px-4 py-3 text-sm text-slate-400">
+          {t('documents.userSearchNotFound')}
+        </div>
       )}
     </div>
   )
 }
 
 function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPreview }) {
+  const { t } = useLanguage()
+  const fileTypeLabel = {
+    main:        t('documents.fileTypeMain'),
+    certificate: t('documents.fileTypeCertificate'),
+    attachment:  t('documents.fileTypeAttachment'),
+  }
   const Icon = file.mime_type?.includes('image') ? ImageIcon : FileText
+
   const handleDownload = async () => {
     try {
       const { data } = await documentService.download(docId, file.file_id)
@@ -293,7 +309,7 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 10000)
     } catch {
-      toast.error('ไม่สามารถดาวน์โหลดได้')
+      toast.error(t('documents.fileDownloadError'))
     }
   }
 
@@ -304,11 +320,15 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-sm font-medium text-slate-700 truncate">{file.file_name}</p>
-            {isCurrent && <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">ปัจจุบัน</span>}
+            {isCurrent && (
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">
+                {t('documents.fileCurrent')}
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-400">
-            v{file.version_no || 1} · {(file.file_size / 1024).toFixed(1)} KB · {fileTypeLabel[file.file_type] || 'ไฟล์แนบ'}
-            {file.uploaded_by_name ? ` · โดย ${file.uploaded_by_name}` : ''}
+            v{file.version_no || 1} · {(file.file_size / 1024).toFixed(1)} KB · {fileTypeLabel[file.file_type] || t('documents.fileTypeAttachment')}
+            {file.uploaded_by_name ? ` ${t('documents.fileBy', { name: file.uploaded_by_name })}` : ''}
           </p>
         </div>
       </div>
@@ -319,7 +339,7 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
             onClick={() => onPreview(file)}
             disabled={previewLoading[file.file_id]}
             className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50">
-            {previewLoading[file.file_id] ? '...' : 'ดู'}
+            {previewLoading[file.file_id] ? '...' : t('documents.fileView')}
           </button>
         )}
         <button
@@ -327,7 +347,7 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
           onClick={handleDownload}
           className="text-xs px-2.5 py-1 rounded-lg text-white"
           style={{ backgroundColor: '#42b5e1' }}>
-          โหลด
+          {t('documents.fileDownload')}
         </button>
       </div>
     </div>
@@ -336,6 +356,7 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 function DetailModal({ doc, onClose, onDeleted, role }) {
+  const { t, locale } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState({})
   const [currentDoc, setCurrentDoc] = useState(doc)
@@ -343,6 +364,29 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
   const [versionFileType, setVersionFileType] = useState('attachment')
   const [versionNote, setVersionNote] = useState('')
   const [uploadingVersion, setUploadingVersion] = useState(false)
+
+  const statusLabel = {
+    active:        t('documents.statusActive'),
+    expiring_soon: t('documents.statusExpiring'),
+    expired:       t('documents.statusExpired'),
+  }
+  const degreeLabel = {
+    bachelor: t('documents.degreeBachelor'),
+    master:   t('documents.degreeMaster'),
+    doctoral: t('documents.degreeDoctoral'),
+  }
+  const roleLabel = {
+    student:   t('documents.roleStudent'),
+    advisor:   t('documents.roleAdvisor'),
+    admin:     t('documents.roleAdmin'),
+    staff:     t('documents.roleStaff'),
+    executive: t('documents.roleExecutive'),
+  }
+  const fileTypeLabel = {
+    main:        t('documents.fileTypeMain'),
+    certificate: t('documents.fileTypeCertificate'),
+    attachment:  t('documents.fileTypeAttachment'),
+  }
 
   useEffect(() => {
     setCurrentDoc(doc)
@@ -360,18 +404,18 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
       const url = URL.createObjectURL(data)
       window.open(url, '_blank')
       setTimeout(() => URL.revokeObjectURL(url), 60000)
-    } catch { toast.error('ไม่สามารถเปิดไฟล์ได้') }
+    } catch { toast.error(t('documents.filePreviewError')) }
     finally { setPreviewLoading(p => ({ ...p, [f.file_id]: false })) }
   }
 
   const handleTrash = async () => {
-    if (!confirm(`ย้าย "${currentDoc.title}" ไปถังขยะ?`)) return
+    if (!confirm(t('documents.modalTrashConfirm', { title: currentDoc.title }))) return
     setLoading(true)
     try {
       await documentService.delete(currentDoc.doc_id)
-      toast.success('ย้ายเอกสารไปถังขยะสำเร็จ')
+      toast.success(t('documents.modalTrashSuccess'))
       onDeleted(); onClose()
-    } catch (err) { toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด') }
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')) }
     finally { setLoading(false) }
   }
 
@@ -381,7 +425,7 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
 
   const handleUploadVersion = async (e) => {
     e.preventDefault()
-    if (versionFiles.length === 0) return toast.error('กรุณาเลือกไฟล์เวอร์ชันใหม่')
+    if (versionFiles.length === 0) return toast.error(t('documents.modalVersionSelectError'))
     setUploadingVersion(true)
     try {
       const fd = new FormData()
@@ -390,13 +434,13 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
       if (versionNote.trim()) fd.append('note', versionNote.trim())
       versionFiles.forEach(f => fd.append('files', f))
       await documentService.uploadVersion(currentDoc.doc_id, fd)
-      toast.success('เพิ่มเวอร์ชันไฟล์สำเร็จ')
+      toast.success(t('documents.modalVersionSuccess'))
       setVersionFiles([])
       setVersionNote('')
       await refreshDetail()
       onDeleted()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'อัปโหลดเวอร์ชันล้มเหลว')
+      toast.error(err.response?.data?.message || t('documents.modalVersionError'))
     } finally {
       setUploadingVersion(false)
     }
@@ -408,7 +452,7 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
   const noExp = !!currentDoc.no_expire
   const daysLeft = currentDoc.days_remaining
   const daysColor = daysLeft < 0 ? 'text-red-600' : daysLeft <= 30 ? 'text-amber-600' : 'text-emerald-600'
-  const gb = groupBadge(currentDoc)
+  const gb = groupBadge(currentDoc, t)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -435,23 +479,25 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-xs text-slate-400 mb-1">วันที่ออกใบประกาศ</p>
+              <p className="text-xs text-slate-400 mb-1">{t('documents.modalIssueDate')}</p>
               <p className="text-sm font-semibold text-slate-700">
-                {new Date(currentDoc.issue_date).toLocaleDateString('th-TH')}
+                {new Date(currentDoc.issue_date).toLocaleDateString(locale)}
               </p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-xs text-slate-400 mb-1">วันหมดอายุ</p>
+              <p className="text-xs text-slate-400 mb-1">{t('documents.modalExpireDate')}</p>
               {noExp ? (
-                <p className="text-sm font-semibold text-slate-400 italic">ไม่มีวันหมดอายุ</p>
+                <p className="text-sm font-semibold text-slate-400 italic">{t('documents.modalNoExpire')}</p>
               ) : (
                 <>
                   <p className="text-sm font-semibold text-slate-700">
-                    {currentDoc.expire_date ? new Date(currentDoc.expire_date).toLocaleDateString('th-TH') : '—'}
+                    {currentDoc.expire_date ? new Date(currentDoc.expire_date).toLocaleDateString(locale) : '—'}
                   </p>
                   {daysLeft != null && (
                     <p className={`text-xs mt-0.5 font-medium ${daysColor}`}>
-                      {daysLeft < 0 ? `เกินกำหนด ${Math.abs(daysLeft)} วัน` : `อีก ${daysLeft} วัน`}
+                      {daysLeft < 0
+                        ? t('documents.modalDaysOver', { days: Math.abs(daysLeft) })
+                        : t('documents.modalDaysLeft', { days: daysLeft })}
                     </p>
                   )}
                 </>
@@ -461,7 +507,9 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
 
           {role !== 'student' && (
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">เจ้าของเอกสาร</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                {t('documents.modalOwnerSection')}
+              </p>
               <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                   style={{ backgroundColor: '#42b5e1' }}>
@@ -481,7 +529,11 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
                     )}
                   </div>
                   <p className="text-xs text-slate-400 truncate">{currentDoc.owner_email}</p>
-                  {currentDoc.advisor_name && <p className="text-xs text-slate-400 mt-0.5">อาจารย์: {currentDoc.advisor_name}</p>}
+                  {currentDoc.advisor_name && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {t('documents.modalAdvisor', { name: currentDoc.advisor_name })}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -489,8 +541,12 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
 
           <div>
             <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">ไฟล์แนบและเวอร์ชัน</p>
-              <span className="text-[11px] text-slate-400">{files.length} ไฟล์ทั้งหมด</span>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                {t('documents.modalFilesSection')}
+              </p>
+              <span className="text-[11px] text-slate-400">
+                {t('documents.modalFilesTotal', { count: files.length })}
+              </span>
             </div>
             {currentFiles.length > 0 ? (
               <div className="space-y-2">
@@ -506,13 +562,13 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-3">ยังไม่มีไฟล์แนบ</p>
+              <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-3">{t('documents.modalNoFiles')}</p>
             )}
 
             {previousFiles.length > 0 && (
               <details className="mt-3 rounded-xl border border-slate-100 bg-slate-50/60">
                 <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-500">
-                  ดูเวอร์ชันก่อนหน้า ({previousFiles.length})
+                  {t('documents.modalPreviousVersions', { count: previousFiles.length })}
                 </summary>
                 <div className="px-3 pb-3 space-y-2">
                   {previousFiles.map(f => (
@@ -533,25 +589,25 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
             <div className="flex items-center gap-2">
               <UploadCloud size={17} className="text-[#42b5e1]" />
               <div>
-                <p className="text-sm font-semibold text-slate-700">เพิ่มเวอร์ชันไฟล์</p>
-                <p className="text-xs text-slate-400">ไฟล์ประเภทเดียวกันจะถูกตั้งเป็นเวอร์ชันปัจจุบันอัตโนมัติ</p>
+                <p className="text-sm font-semibold text-slate-700">{t('documents.modalVersionTitle')}</p>
+                <p className="text-xs text-slate-400">{t('documents.modalVersionDesc')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <select className="input-field" value={versionFileType} onChange={e => setVersionFileType(e.target.value)}>
-                <option value="main">เอกสารหลัก</option>
-                <option value="certificate">บันทึกข้อความรับรอง</option>
-                <option value="attachment">ไฟล์แนบ</option>
+                <option value="main">{t('documents.fileTypeMain')}</option>
+                <option value="certificate">{t('documents.fileTypeCertificate')}</option>
+                <option value="attachment">{t('documents.fileTypeAttachment')}</option>
               </select>
               <input
                 className="input-field"
                 value={versionNote}
                 onChange={e => setVersionNote(e.target.value)}
-                placeholder="หมายเหตุเวอร์ชัน (ไม่บังคับ)"
+                placeholder={t('documents.modalVersionNotePlaceholder')}
               />
             </div>
             <label className="block cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-sm text-slate-500 hover:bg-slate-50">
-              เลือกไฟล์เวอร์ชันใหม่
+              {t('documents.modalVersionSelectFile')}
               <input type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 onChange={e => handleVersionFiles(e.target.files)} />
             </label>
@@ -569,7 +625,7 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
             <button type="submit" disabled={uploadingVersion || versionFiles.length === 0}
               className="w-full py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
               style={{ backgroundColor: '#42b5e1' }}>
-              {uploadingVersion ? 'กำลังเพิ่มเวอร์ชัน...' : 'บันทึกเวอร์ชันใหม่'}
+              {uploadingVersion ? t('documents.modalVersionUploadingBtn') : t('documents.modalVersionSaveBtn')}
             </button>
           </form>
 
@@ -577,7 +633,9 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <History size={16} className="text-slate-400" />
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Timeline</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  {t('documents.modalTimeline')}
+                </p>
               </div>
               <div className="space-y-3">
                 {currentDoc.timeline.map(item => {
@@ -591,11 +649,15 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-semibold text-slate-700">{item.title}</p>
                           <span className="text-[11px] text-slate-400">
-                            {new Date(item.created_at).toLocaleString('th-TH')}
+                            {new Date(item.created_at).toLocaleString(locale)}
                           </span>
                         </div>
                         {item.detail && <p className="text-xs text-slate-500 mt-1">{item.detail}</p>}
-                        {item.actor_name && <p className="text-[11px] text-slate-400 mt-1">โดย {item.actor_name}</p>}
+                        {item.actor_name && (
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            {t('documents.modalTimelineBy', { name: item.actor_name })}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )
@@ -606,7 +668,9 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
 
           {currentDoc.description && (
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">คำอธิบาย</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                {t('documents.modalDescription')}
+              </p>
               <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{currentDoc.description}</p>
             </div>
           )}
@@ -616,12 +680,12 @@ function DetailModal({ doc, onClose, onDeleted, role }) {
           {role === 'admin' && (
             <button onClick={handleTrash} disabled={loading}
               className="text-sm text-amber-600 hover:text-amber-800 font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5">
-              <span>🗑️</span>{loading ? 'กำลังดำเนินการ...' : 'ย้ายไปถังขยะ'}
+              <span>🗑️</span>{loading ? t('documents.modalTrashingBtn') : t('documents.modalTrashBtn')}
             </button>
           )}
           <button onClick={onClose}
             className="ml-auto px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ backgroundColor: '#42b5e1' }}>ปิด</button>
+            style={{ backgroundColor: '#42b5e1' }}>{t('documents.modalCloseBtn')}</button>
         </div>
       </div>
     </div>
@@ -671,7 +735,7 @@ function DateInput({ display, iso, onChange }) {
         className="input-field pr-9"
         type="text"
         inputMode="numeric"
-        placeholder="วว/ดด/ปปปป"
+        placeholder="DD/MM/YYYY"
         value={display}
         onChange={e => handleText(e.target.value)}
         maxLength={10}
@@ -692,11 +756,39 @@ function DateInput({ display, iso, onChange }) {
 
 // ─── Export Modal ─────────────────────────────────────────────────────────────
 function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '', program = '', ownerRole = '', advisorId = '', programsByDegree: exportProgramsByDegree = programsByDegree, allProgramOptions: exportAllProgramOptions = allProgramOptions }) {
+  const { language, locale, t } = useLanguage()
   const [exportMode, setExportMode] = useState('all')
   const [loading, setLoading]       = useState(false)
   const [filterRole, setFilterRole] = useState(ownerRole)
   const [filterDegree, setFilterDegree] = useState(degreeLevel)
   const [filterProgram, setFilterProgram] = useState(program)
+
+  const roleLabel = useMemo(() => ({
+    student:   t('documents.roleStudent'),
+    advisor:   t('documents.roleAdvisor'),
+    admin:     t('documents.roleAdmin'),
+    staff:     t('documents.roleStaff'),
+    executive: t('documents.roleExecutive'),
+  }), [t])
+
+  const degreeLabel = useMemo(() => ({
+    bachelor: t('documents.degreeBachelor'),
+    master:   t('documents.degreeMaster'),
+    doctoral: t('documents.degreeDoctoral'),
+  }), [t])
+
+  const statusLabel = useMemo(() => ({
+    active:        t('documents.statusActive'),
+    expiring_soon: t('documents.statusExpiring'),
+    expired:       t('documents.statusExpired'),
+  }), [t])
+
+  const modeLabels = useMemo(() => ({
+    all:     t('documents.excelModeAll'),
+    role:    t('documents.excelModeRole'),
+    degree:  t('documents.excelModeDegree'),
+    program: t('documents.excelModeProgram'),
+  }), [t])
 
   const exportProgramOptions = filterDegree ? exportProgramsByDegree[filterDegree] || [] : exportAllProgramOptions
 
@@ -722,15 +814,19 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
   }
 
   const exportFilters = [
-    filterRole ? `กลุ่ม: ${roleLabel[filterRole] || filterRole}` : 'กลุ่ม: ทั้งหมด',
-    filterDegree ? `ระดับ: ${degreeLabel[filterDegree] || filterDegree}` : 'ระดับ: ทั้งหมด',
-    filterProgram ? `หลักสูตร: ${filterProgram}` : 'หลักสูตร: ทั้งหมด',
+    filterRole
+      ? t('documents.exportFilterGroup', { value: roleLabel[filterRole] || filterRole })
+      : t('documents.exportFilterGroupAll'),
+    filterDegree
+      ? t('documents.exportFilterLevel', { value: degreeLabel[filterDegree] || filterDegree })
+      : t('documents.exportFilterLevelAll'),
+    filterProgram
+      ? t('documents.exportFilterProgram', { value: filterProgram })
+      : t('documents.exportFilterProgramAll'),
   ].join(' | ')
 
-  const formatPrintDate = (date) => date.toLocaleDateString('th-TH', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+  const formatPrintDate = (date) => date.toLocaleDateString(locale, {
+    day: '2-digit', month: '2-digit', year: 'numeric',
   })
   const compactDate = (date) => {
     const y = date.getFullYear()
@@ -754,21 +850,22 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       const docs = await fetchAllDocs()
       const now = new Date()
       const dateStr = formatPrintDate(now)
-      const modeLabels = { all: 'รายการเดียว', role: 'จัดกลุ่มตามบทบาท', degree: 'จัดกลุ่มตามระดับปริญญา', program: 'จัดกลุ่มตามหลักสูตร' }
 
       const { default: ExcelJS } = await import('exceljs')
       const wb = new ExcelJS.Workbook()
-      wb.creator = 'ระบบ IRIS'
+      wb.creator = t('documents.excelSystem')
       wb.created = now
 
-      const ws = wb.addWorksheet('เอกสาร', {
+      const ws = wb.addWorksheet(t('documents.excelReport'), {
         pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
       })
       ws.pageSetup.margins = { left: 0.35, right: 0.35, top: 0.55, bottom: 0.55, header: 0.25, footer: 0.25 }
       ws.pageSetup.horizontalCentered = true
       ws.pageSetup.printTitlesRow = '1:8'
       ws.views = [{ showGridLines: false }]
-      ws.headerFooter = { oddFooter: '&Lระบบ IRIS&Cหน้า &P / &N&Rพิมพ์เมื่อ ' + dateStr }
+      ws.headerFooter = {
+        oddFooter: `&L${t('documents.excelSystem')}&C&P / &N&R${t('documents.excelDateLabel', { date: dateStr })}`,
+      }
 
       const N = 10
       ws.columns = [
@@ -794,22 +891,30 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
         return row
       }
 
-      addMergedRow(['ระบบ IRIS', '', 'มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าธนบุรี', '', '', '', '', `วันที่พิมพ์ : ${dateStr}`, '', ''], 21, {
-        left: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'left', vertical: 'middle' } },
+      addMergedRow(
+        [t('documents.excelSystem'), '', t('documents.excelUniversity'), '', '', '', '', t('documents.excelDateLabel', { date: dateStr }), '', ''],
+        21,
+        {
+          left:   { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'left',   vertical: 'middle' } },
+          center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
+          right:  { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right',  vertical: 'middle' } },
+        }
+      )
+      addMergedRow(['', '', t('documents.excelReport'), '', '', '', '', '', '', ''], 21, {
         center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
-        right: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
       })
-      addMergedRow(['', '', 'รายงานเอกสารใบประกาศ', '', '', '', '', '', '', ''], 21, {
+      addMergedRow(['', '', t('documents.excelFaculty'), '', '', '', '', '', '', ''], 21, {
         center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
       })
-      addMergedRow(['', '', 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี', '', '', '', '', '', '', ''], 21, {
-        center: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'center', vertical: 'middle' } },
-      })
-      addMergedRow([`รูปแบบ : ${modeLabels[exportMode]}`, '', '', '', '', '', '', `รวมทั้งหมด : ${docs.length} รายการ`, '', ''], 21, {
-        left: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
-        right: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
-      })
-      const filterRow = ws.addRow([`เงื่อนไข : ${exportFilters}`, ...Array(N - 1).fill('')])
+      addMergedRow(
+        [t('documents.excelMode', { mode: modeLabels[exportMode] }), '', '', '', '', '', '', t('documents.excelTotal', { count: docs.length }), '', ''],
+        21,
+        {
+          left:  { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
+          right: { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle' } },
+        }
+      )
+      const filterRow = ws.addRow([t('documents.excelFilter', { filter: exportFilters }), ...Array(N - 1).fill('')])
       filterRow.height = 28
       ws.mergeCells(filterRow.number, 1, filterRow.number, N)
       filterRow.getCell(1).style = { font: { name: FNT, bold: true, size: 14 }, alignment: { horizontal: 'right', vertical: 'middle', wrapText: true } }
@@ -817,8 +922,18 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       const spacer = ws.addRow(Array(N).fill(''))
       spacer.height = 4
 
-      // ─ Column label row
-      const COL_LABELS = ['ลำดับ', 'ชื่อเอกสาร', 'ประเภท', 'รหัสนักศึกษา', 'เจ้าของเอกสาร', 'ระดับ', 'หลักสูตร', 'วันที่ออก', 'วันหมดอายุ', 'สถานะ']
+      const COL_LABELS = [
+        t('documents.excelColNo'),
+        t('documents.excelColTitle'),
+        t('documents.excelColType'),
+        t('documents.excelColStudentId'),
+        t('documents.excelColOwner'),
+        t('documents.excelColLevel'),
+        t('documents.excelColProgram'),
+        t('documents.excelColIssueDate'),
+        t('documents.excelColExpireDate'),
+        t('documents.excelColStatus'),
+      ]
       const addTableHeader = () => {
         const hr = ws.addRow(COL_LABELS)
         hr.height = 24
@@ -838,10 +953,10 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
         doc.owner_student_id || '',
         doc.owner_name || '',
         degreeLabel[doc.owner_degree_level] || '',
-        doc.owner_program || '',
-        doc.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '',
-        doc.no_expire ? 'ไม่มีวันหมดอายุ' : (doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : ''),
-        doc.no_expire ? 'ไม่มีวันหมดอายุ' : (statusLabel[computedStatus(doc)] || doc.status || ''),
+        getProgramDisplayName(doc.owner_program, language) || '',
+        doc.issue_date ? new Date(doc.issue_date).toLocaleDateString(locale) : '',
+        doc.no_expire ? t('documents.excelNoExpire') : (doc.expire_date ? new Date(doc.expire_date).toLocaleDateString(locale) : ''),
+        doc.no_expire ? t('documents.excelNoExpire') : (statusLabel[computedStatus(doc)] || doc.status || ''),
       ]
 
       const addDataRows = (docList) => {
@@ -864,7 +979,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       }
 
       const addSection = (label, count) => {
-        const sr = ws.addRow([`  ${label}  (${count} รายการ)`, ...Array(N - 1).fill('')])
+        const sr = ws.addRow([t('documents.excelGroupCount', { label, count }), ...Array(N - 1).fill('')])
         sr.height = 22
         ws.mergeCells(sr.number, 1, sr.number, N)
         sr.getCell(1).style = {
@@ -897,13 +1012,13 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       } else if (exportMode === 'degree') {
         buildGrouped(docs,
           d => d.owner_role === 'student' ? (d.owner_degree_level || 'bachelor') : (d.owner_role || 'other'),
-          k => k in degreeLabel ? `นักศึกษา ${degreeLabel[k]}` : (roleLabel[k] || k),
+          k => k in degreeLabel ? t('documents.excelDegreeGroup', { degree: degreeLabel[k] }) : (roleLabel[k] || k),
           ['bachelor', 'master', 'doctoral', 'advisor', 'staff'])
       } else if (exportMode === 'program') {
-        buildGrouped(docs, d => d.owner_program || 'ไม่ระบุหลักสูตร', k => k, Object.values(exportProgramsByDegree).flat())
+        buildGrouped(docs, d => d.owner_program || t('documents.excelUnspecifiedProgram'), k => getProgramDisplayName(k, language), Object.values(exportProgramsByDegree).flat())
       }
 
-      const filenameParts = ['IRIS', 'ใบประกาศ', compactDate(now), ...scopeFileParts(), modeLabels[exportMode]]
+      const filenameParts = ['IRIS', compactDate(now), ...scopeFileParts(), modeLabels[exportMode]]
       const exportFilename = `${filenameParts.map(safeFilePart).filter(Boolean).join('_')}.xlsx`
 
       const buffer = await wb.xlsx.writeBuffer()
@@ -912,17 +1027,17 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       const a = document.createElement('a')
       a.href = url; a.download = exportFilename; a.click()
       setTimeout(() => URL.revokeObjectURL(url), 10000)
-      toast.success(`ส่งออก ${docs.length} รายการสำเร็จ`)
+      toast.success(t('documents.exportSuccess', { count: docs.length }))
       onClose()
-    } catch (err) { console.error(err); toast.error('ส่งออกข้อมูลล้มเหลว') }
+    } catch (err) { console.error(err); toast.error(t('documents.exportError')) }
     finally { setLoading(false) }
   }
 
   const opts = [
-    { key: 'all',    label: 'รายการเดียว ไม่แบ่งกลุ่ม', desc: 'เรียงข้อมูลทั้งหมดตามตัวกรองที่เลือกไว้ในชีตเดียว' },
-    { key: 'role',   label: 'จัดกลุ่มตามบทบาท',         desc: 'แยกหมวดนักศึกษา / อาจารย์ / เจ้าหน้าที่ / กลุ่มอื่น' },
-    { key: 'degree', label: 'จัดกลุ่มตามระดับปริญญา', desc: 'แยกหมวด ป.ตรี / ป.โท / ป.เอก และกลุ่มอื่น' },
-    { key: 'program', label: 'จัดกลุ่มตามหลักสูตร',      desc: 'เหมาะเมื่อส่งออกหลายหลักสูตรในไฟล์เดียว' },
+    { key: 'all',     label: t('documents.exportModeAll'),    desc: t('documents.exportModeAllDesc') },
+    { key: 'role',    label: t('documents.exportModeRole'),   desc: t('documents.exportModeRoleDesc') },
+    { key: 'degree',  label: t('documents.exportModeDegree'), desc: t('documents.exportModeDegreeDesc') },
+    { key: 'program', label: t('documents.exportModeProgram'),desc: t('documents.exportModeProgramDesc') },
   ].filter(opt => !(filterProgram && opt.key === 'program'))
 
   return (
@@ -931,8 +1046,8 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h2 className="text-base font-semibold text-slate-800">ส่งออกข้อมูล Excel</h2>
-            <p className="text-xs text-slate-400 mt-0.5">เลือกข้อมูลก่อน แล้วกำหนดการจัดรูปแบบในไฟล์</p>
+            <h2 className="text-base font-semibold text-slate-800">{t('documents.exportTitle')}</h2>
+            <p className="text-xs text-slate-400 mt-0.5">{t('documents.exportDesc')}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl ml-4">✕</button>
         </div>
@@ -941,27 +1056,27 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
             <div className="flex items-center gap-2 mb-3">
               <Download size={16} className="text-[#42b5e1]" />
               <div>
-                <p className="text-sm font-semibold text-slate-700">เลือกข้อมูล</p>
-                <p className="text-xs text-slate-400">เลือกเฉพาะกลุ่มที่ต้องการได้ เช่น นักศึกษา ป.ตรี หรือหลักสูตรเดียว</p>
+                <p className="text-sm font-semibold text-slate-700">{t('documents.exportSelectTitle')}</p>
+                <p className="text-xs text-slate-400">{t('documents.exportSelectDesc')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <select className="input-field text-sm" value={filterRole} onChange={e => setFilterRole(e.target.value)}>
-                <option value="">ทุกกลุ่มผู้ใช้</option>
-                <option value="student">นักศึกษา</option>
-                <option value="advisor">อาจารย์</option>
-                <option value="staff">เจ้าหน้าที่</option>
-                <option value="admin">ผู้ดูแลระบบ</option>
-                <option value="executive">ผู้บริหาร</option>
+                <option value="">{t('documents.exportAllRole')}</option>
+                <option value="student">{t('documents.roleStudent')}</option>
+                <option value="advisor">{t('documents.roleAdvisor')}</option>
+                <option value="staff">{t('documents.roleStaff')}</option>
+                <option value="admin">{t('documents.roleAdmin')}</option>
+                <option value="executive">{t('documents.roleExecutive')}</option>
               </select>
               <select className="input-field text-sm" value={filterDegree} onChange={e => setFilterDegree(e.target.value)}>
-                <option value="">ทุกระดับปริญญา</option>
-                <option value="bachelor">ป.ตรี</option>
-                <option value="master">ป.โท</option>
-                <option value="doctoral">ป.เอก</option>
+                <option value="">{t('documents.exportAllDegree')}</option>
+                <option value="bachelor">{t('documents.degreeBachelor')}</option>
+                <option value="master">{t('documents.degreeMaster')}</option>
+                <option value="doctoral">{t('documents.degreeDoctoral')}</option>
               </select>
               <select className="input-field text-sm sm:col-span-2" value={filterProgram} onChange={e => setFilterProgram(e.target.value)}>
-                <option value="">ทุกหลักสูตร</option>
+                <option value="">{t('documents.exportAllProgram')}</option>
                 {exportProgramOptions.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
@@ -969,7 +1084,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
           <div className="space-y-2">
             <div className="flex items-center gap-2 px-1">
               <ClipboardList size={16} className="text-[#42b5e1]" />
-              <p className="text-sm font-semibold text-slate-700">จัดรูปแบบในไฟล์ Excel</p>
+              <p className="text-sm font-semibold text-slate-700">{t('documents.exportFormatTitle')}</p>
             </div>
           {opts.map(opt => (
             <label key={opt.key}
@@ -998,19 +1113,21 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
           </div>
         </div>
         <div className="px-5 pb-5 pt-1 border-t border-slate-50 flex gap-3 mt-1">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">
+            {t('documents.exportCancelBtn')}
+          </button>
           <button type="button" onClick={handleExport} disabled={loading}
             className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white transition-all disabled:opacity-60 flex items-center justify-center gap-2"
             style={{ backgroundColor: '#42b5e1' }}>
             {loading ? (
               <>
                 <Loader2 size={16} className="animate-spin" />
-                กำลังส่งออก...
+                {t('documents.exportingBtn')}
               </>
             ) : (
               <>
                 <Download size={16} />
-                ดาวน์โหลด Excel
+                {t('documents.exportDownloadBtn')}
               </>
             )}
           </button>
@@ -1022,6 +1139,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
 function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, user }) {
+  const { t } = useLanguage()
   const firstType = docTypes[0]?.type_code || ''
   const [form, setForm]             = useState({ title: '', doc_type: firstType, description: '', issue_date: '', expire_date: '', project_category: '', target_user_id: '' })
   const [noExpiry, setNoExpiry]     = useState(false)
@@ -1036,7 +1154,6 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
       setForm(p => ({ ...p, doc_type: docTypes[0].type_code }))
   }, [docTypes])
 
-  // Handle doc_type changing to IRB when issue_date is already filled
   useEffect(() => {
     if (form.doc_type === 'IRB' && form.issue_date && !noExpiry) {
       const expIso = addYears(form.issue_date, 3)
@@ -1047,7 +1164,6 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
 
   const handleIssueDateChange = (display, iso) => {
     setDisplayIssueDate(display)
-    // Calculate expire immediately when doc_type is IRB
     const expIso = (form.doc_type === 'IRB' && iso && !noExpiry) ? addYears(iso, 3) : null
     if (expIso) setDisplayExpireDate(formatDMY(expIso))
     setForm(p => ({ ...p, issue_date: iso, ...(expIso ? { expire_date: expIso } : {}) }))
@@ -1062,12 +1178,12 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (files.length === 0) return toast.error('กรุณาแนบไฟล์อย่างน้อย 1 ไฟล์')
-    if (user?.role === 'admin' && !form.target_user_id) return toast.error('กรุณาเลือกเจ้าของเอกสาร')
-    if (!form.issue_date) return toast.error('กรุณาระบุวันที่ออกในรูปแบบ วว/ดด/ปปปป')
-    if (!noExpiry && !form.expire_date) return toast.error('กรุณาระบุวันหมดอายุในรูปแบบ วว/ดด/ปปปป')
+    if (files.length === 0) return toast.error(t('documents.uploadNoFilesError'))
+    if (user?.role === 'admin' && !form.target_user_id) return toast.error(t('documents.uploadNoOwnerError'))
+    if (!form.issue_date) return toast.error(t('documents.uploadNoIssueDateError'))
+    if (!noExpiry && !form.expire_date) return toast.error(t('documents.uploadNoExpireDateError'))
     if ((docTypeCategories[form.doc_type] || []).length > 0 && !form.project_category)
-      return toast.error('กรุณาระบุประเภทโครงการ')
+      return toast.error(t('documents.uploadNoCategoryError'))
     setLoading(true)
     try {
       const fd = new FormData()
@@ -1078,9 +1194,9 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
       if (noExpiry) fd.append('no_expire', '1')
       files.forEach(f => fd.append('files', f))
       await documentService.upload(fd)
-      toast.success('อัปโหลดเอกสารสำเร็จ')
+      toast.success(t('documents.uploadSuccess'))
       onUploaded(); onClose()
-    } catch (err) { toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด') }
+    } catch (err) { toast.error(err.response?.data?.message || t('common.error')) }
     finally { setLoading(false) }
   }
 
@@ -1089,26 +1205,27 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
       style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-slate-800">อัปโหลดเอกสาร</h2>
+          <h2 className="text-base font-semibold text-slate-800">{t('documents.uploadTitle')}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {user?.role === 'admin' && (
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                เจ้าของเอกสาร <span className="text-red-500">*</span>
+                {t('documents.uploadOwnerLabel')} <span className="text-red-500">*</span>
               </label>
               <UserSearchInput value={form.target_user_id} onChange={(uid) => setForm(p => ({ ...p, target_user_id: uid }))} />
-              <p className="text-xs text-slate-400 mt-1">ค้นหาด้วยรหัสนักศึกษา ชื่อ หรืออีเมล</p>
+              <p className="text-xs text-slate-400 mt-1">{t('documents.uploadOwnerHint')}</p>
             </div>
           )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-              ชื่อเอกสาร <span className="text-red-500">*</span>
+              {t('documents.uploadDocNameLabel')} <span className="text-red-500">*</span>
             </label>
             <input className="input-field" value={form.title} required
-              onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="กรอกชื่อเอกสาร" />
+              onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              placeholder={t('documents.uploadDocNamePlaceholder')} />
           </div>
 
           {(() => {
@@ -1117,21 +1234,21 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
               <div className={`grid gap-3 ${currentCategories.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                    ประเภทเอกสาร <span className="text-red-500">*</span>
+                    {t('documents.uploadDocTypeLabel')} <span className="text-red-500">*</span>
                   </label>
                   <select className="input-field" value={form.doc_type}
                     onChange={e => setForm(p => ({ ...p, doc_type: e.target.value, project_category: '' }))}>
-                    {docTypes.map(t => <option key={t.type_id} value={t.type_code}>{t.type_code}</option>)}
+                    {docTypes.map(dt => <option key={dt.type_id} value={dt.type_code}>{dt.type_code}</option>)}
                   </select>
                 </div>
                 {currentCategories.length > 0 && (
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                      ประเภทโครงการ <span className="text-red-500">*</span>
+                      {t('documents.uploadProjectCatLabel')} <span className="text-red-500">*</span>
                     </label>
                     <select className="input-field" value={form.project_category}
                       onChange={e => setForm(p => ({ ...p, project_category: e.target.value }))}>
-                      <option value="">-- โปรดระบุ --</option>
+                      <option value="">{t('documents.uploadProjectCatPlaceholder')}</option>
                       {currentCategories.map(c => (
                         <option key={c.category_id} value={c.category_code}>{c.category_name}</option>
                       ))}
@@ -1145,16 +1262,18 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                วันที่ออก <span className="text-red-500">*</span>
+                {t('documents.uploadIssueDateLabel')} <span className="text-red-500">*</span>
               </label>
               <DateInput display={displayIssueDate} iso={form.issue_date} onChange={handleIssueDateChange} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                วันหมดอายุ {!noExpiry && <span className="text-red-500">*</span>}
+                {t('documents.uploadExpireDateLabel')} {!noExpiry && <span className="text-red-500">*</span>}
               </label>
               {noExpiry ? (
-                <div className="input-field bg-slate-50 text-slate-400 text-sm flex items-center cursor-not-allowed select-none">ไม่มีวันหมดอายุ</div>
+                <div className="input-field bg-slate-50 text-slate-400 text-sm flex items-center cursor-not-allowed select-none">
+                  {t('documents.uploadNoExpireDisplay')}
+                </div>
               ) : (
                 <DateInput display={displayExpireDate} iso={form.expire_date} onChange={handleExpireDateChange} />
               )}
@@ -1168,20 +1287,23 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
                     }
                   }}
                   className="rounded border-slate-300 text-fiet-blue" />
-                <span className="text-xs text-slate-500">ไม่มีวันหมดอายุ</span>
+                <span className="text-xs text-slate-500">{t('documents.uploadNoExpireCheckbox')}</span>
               </label>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">คำอธิบาย (ไม่บังคับ)</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              {t('documents.uploadDescLabel')}
+            </label>
             <textarea className="input-field resize-none" rows={2} value={form.description}
-              onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="รายละเอียดเพิ่มเติม" />
+              onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+              placeholder={t('documents.uploadDescPlaceholder')} />
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-              ไฟล์แนบ (PDF, DOC, รูปภาพ — สูงสุด 5 ไฟล์) <span className="text-red-500">*</span>
+              {t('documents.uploadFilesLabel')} <span className="text-red-500">*</span>
             </label>
             <div
               onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -1191,7 +1313,7 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
               className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all"
               style={{ borderColor: dragOver ? '#42b5e1' : '#e2e8f0', backgroundColor: dragOver ? '#f0f9ff' : '#f8fafc' }}>
               <p className="text-2xl mb-1">📎</p>
-              <p className="text-sm text-slate-500">ลากไฟล์มาวาง หรือคลิกเพื่อเลือก</p>
+              <p className="text-sm text-slate-500">{t('documents.uploadDragDrop')}</p>
               <input id="file-input-modal" type="file" multiple className="hidden"
                 accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 onChange={e => handleFiles(e.target.files)} />
@@ -1210,11 +1332,13 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
           </div>
 
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">ยกเลิก</button>
+            <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">
+              {t('documents.uploadCancelBtn')}
+            </button>
             <button type="submit" disabled={loading}
               className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-60"
               style={{ backgroundColor: '#42b5e1' }}>
-              {loading ? 'กำลังอัปโหลด...' : 'อัปโหลด'}
+              {loading ? t('documents.uploadingBtn') : t('documents.uploadBtn')}
             </button>
           </div>
         </form>
@@ -1225,6 +1349,7 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DocumentsPage() {
+  const { language, locale, t } = useLanguage()
   const academicOptions = useAcademicOptions()
   const activeProgramsByDegree = academicOptions.programsByDegree || programsByDegree
   const activeProgramOptions = academicOptions.programs || allProgramOptions
@@ -1233,7 +1358,7 @@ export default function DocumentsPage() {
   const isAdvisor = user?.role === 'advisor'
   const hasTabs   = isAdmin || isAdvisor
 
-  const tabs = isAdmin ? getAdminTabs() : isAdvisor ? getAdvisorTabs() : []
+  const tabs = isAdmin ? getAdminTabs(t) : isAdvisor ? getAdvisorTabs(t) : []
 
   const [docs, setDocs]                       = useState([])
   const [docTypes, setDocTypes]               = useState([])
@@ -1257,6 +1382,12 @@ export default function DocumentsPage() {
   const [modal, setModal]               = useState(null)
   const [selected, setSelected]         = useState(null)
 
+  const statusLabel = useMemo(() => ({
+    active:        t('documents.statusActive'),
+    expiring_soon: t('documents.statusExpiring'),
+    expired:       t('documents.statusExpired'),
+  }), [t])
+
   // Load reference data
   useEffect(() => {
     docTypeService.getAll().then(r => setDocTypes(r.data || [])).catch(() => {})
@@ -1270,7 +1401,7 @@ export default function DocumentsPage() {
     }
   }, [isAdmin])
 
-  // Reset page when filters change (not when page itself changes)
+  // Reset page when filters change
   useEffect(() => { setPage(1) }, [activeTab, search, docType, status, advisorFilter, degreeFilter, programFilter, sort])
 
   useEffect(() => {
@@ -1301,7 +1432,7 @@ export default function DocumentsPage() {
   const fetchDocs = useCallback(async () => {
     setLoading(true)
     try {
-      const tabParams = tabs.find(t => t.key === activeTab)?.params || {}
+      const tabParams = tabs.find(tab => tab.key === activeTab)?.params || {}
       const params = {
         ...tabParams,
         search: debouncedSearch, doc_type: docType, status,
@@ -1314,7 +1445,7 @@ export default function DocumentsPage() {
       const { data } = await documentService.getAll(params)
       setDocs(data.documents || [])
       setTotal(data.total || 0)
-    } catch { toast.error('โหลดข้อมูลล้มเหลว') }
+    } catch { toast.error(t('documents.loadError')) }
     finally { setLoading(false) }
   }, [activeTab, debouncedSearch, docType, status, sort, page, advisorFilter, degreeFilter, programFilter])
 
@@ -1324,7 +1455,7 @@ export default function DocumentsPage() {
     try {
       const { data } = await documentService.getById(doc.doc_id)
       setSelected(data); setModal('detail')
-    } catch { toast.error('โหลดรายละเอียดล้มเหลว') }
+    } catch { toast.error(t('documents.loadDetailError')) }
   }
 
   const handleSort = (key) => {
@@ -1384,9 +1515,8 @@ export default function DocumentsPage() {
   const degreeTabKey  = ['bachelor', 'master', 'doctoral'].includes(activeTab) ? activeTab : null
   const showDegreeFilter = (isAdmin || isAdvisor) && activeTab === 'all'
   const programFilterDegree = degreeTabKey || degreeFilter
-  const currentTabParams = tabs.find(t => t.key === activeTab)?.params || {}
+  const currentTabParams = tabs.find(tab => tab.key === activeTab)?.params || {}
 
-  // Cascade: narrow options based on selected advisor
   const advisorRelation = advisorFilter ? advisorRelations[advisorFilter] : null
   const availableDegrees = advisorRelation?.degrees?.length > 0
     ? advisorRelation.degrees
@@ -1406,15 +1536,15 @@ export default function DocumentsPage() {
     return degreeOk && programOk
   })
 
-  const pageTitle = isAdmin ? 'ใบประกาศทั้งหมด'
-    : isAdvisor             ? 'ใบประกาศนักศึกษาในที่ปรึกษา'
-    : user?.role === 'staff' ? 'เอกสารของฉัน'
-    : 'ใบประกาศของฉัน'
+  const pageTitle = isAdmin ? t('documents.titleAdmin')
+    : isAdvisor              ? t('documents.titleAdvisor')
+    : user?.role === 'staff' ? t('documents.titleStaff')
+    : t('documents.titleStudent')
 
-  const roleDisplay = isAdmin ? 'ผู้ดูแลระบบ'
-    : isAdvisor              ? 'อาจารย์'
-    : user?.role === 'staff' ? 'เจ้าหน้าที่'
-    : 'นักศึกษา'
+  const roleDisplay = isAdmin ? t('documents.roleDisplayAdmin')
+    : isAdvisor              ? t('documents.roleDisplayAdvisor')
+    : user?.role === 'staff' ? t('documents.roleDisplayStaff')
+    : t('documents.roleDisplayStudent')
 
   return (
     <div className="space-y-5 max-w-full">
@@ -1425,24 +1555,19 @@ export default function DocumentsPage() {
             {roleDisplay}
           </p>
           <h1 className="text-2xl font-bold text-slate-800">{pageTitle}</h1>
-          {/* <p className="text-slate-400 text-sm mt-0.5">
-            {hasTabs
-              ? `กลุ่มนี้ ${total.toLocaleString()} รายการ`
-              : `ทั้งหมด ${total.toLocaleString()} รายการ`}
-          </p> */}
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {isAdmin && (
             <button onClick={() => setModal('export')}
               className="px-4 py-2 rounded-lg text-sm font-medium border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all whitespace-nowrap flex items-center gap-1.5">
-              <span>⬇</span> ส่งออก Excel
+              <span>⬇</span> {t('documents.exportExcelBtn')}
             </button>
           )}
           {(isAdmin || user?.role === 'student' || user?.role === 'staff') && (
             <button onClick={() => setModal('upload')}
               className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-all whitespace-nowrap"
               style={{ backgroundColor: '#42b5e1' }}>
-              + อัปโหลดเอกสาร
+              {t('documents.uploadDocBtn')}
             </button>
           )}
         </div>
@@ -1458,36 +1583,36 @@ export default function DocumentsPage() {
 
           {/* Filter Bar */}
           <div className="flex flex-wrap gap-3 px-4 py-3 border-b border-slate-100 bg-slate-50">
-            <input className="input-field w-full sm:max-w-xs" placeholder="ค้นหาชื่อเอกสาร, เจ้าของ, รหัสนักศึกษา"
+            <input className="input-field w-full sm:max-w-xs" placeholder={t('documents.filterSearchPlaceholder')}
               value={search} onChange={e => setSearch(e.target.value)} />
             <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={docType} onChange={e => setDocType(e.target.value)}>
-              <option value="">ทุกประเภท</option>
-              {docTypes.map(t => <option key={t.type_id} value={t.type_code}>{t.type_code}</option>)}
+              <option value="">{t('documents.filterAllTypes')}</option>
+              {docTypes.map(dt => <option key={dt.type_id} value={dt.type_code}>{dt.type_code}</option>)}
             </select>
             <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="">ทุกสถานะ</option>
-              <option value="active">ปกติ</option>
-              <option value="expiring_soon">ใกล้หมดอายุ</option>
-              <option value="expired">หมดอายุ</option>
+              <option value="">{t('documents.filterAllStatus')}</option>
+              <option value="active">{t('documents.statusActive')}</option>
+              <option value="expiring_soon">{t('documents.statusExpiring')}</option>
+              <option value="expired">{t('documents.statusExpired')}</option>
             </select>
             {showDegreeFilter && (
               <select className="input-field w-full sm:w-auto sm:max-w-[170px]" value={degreeFilter} onChange={e => handleDegreeChange(e.target.value)}>
-                <option value="">ทุกระดับปริญญา</option>
-                {availableDegrees.includes('bachelor') && <option value="bachelor">ป.ตรี</option>}
-                {availableDegrees.includes('master') && <option value="master">ป.โท</option>}
-                {availableDegrees.includes('doctoral') && <option value="doctoral">ป.เอก</option>}
+                <option value="">{t('documents.filterAllDegrees')}</option>
+                {availableDegrees.includes('bachelor') && <option value="bachelor">{t('documents.degreeBachelor')}</option>}
+                {availableDegrees.includes('master') && <option value="master">{t('documents.degreeMaster')}</option>}
+                {availableDegrees.includes('doctoral') && <option value="doctoral">{t('documents.degreeDoctoral')}</option>}
               </select>
             )}
             {showAdvisorFilter && advisors.length > 0 && (
               <select className="input-field w-full sm:w-auto sm:max-w-[180px]" value={advisorFilter} onChange={e => handleAdvisorChange(e.target.value)}>
-                <option value="">ทุกอาจารย์</option>
+                <option value="">{t('documents.filterAllAdvisors')}</option>
                 {filteredAdvisors.map(a => <option key={a.user_id} value={a.user_id}>{a.name}</option>)}
               </select>
             )}
             {showProgramFilter && (
               <select className="input-field w-full sm:w-auto sm:max-w-[220px]" value={programFilter} onChange={e => handleProgramChange(e.target.value)}>
-                <option value="">ทุกหลักสูตร</option>
-                {programOptions.map(b => <option key={b} value={b}>{b}</option>)}
+                <option value="">{t('documents.filterAllPrograms')}</option>
+                {programOptions.map(b => <option key={b} value={b}>{getProgramDisplayName(b, language)}</option>)}
               </select>
             )}
           </div>
@@ -1497,34 +1622,34 @@ export default function DocumentsPage() {
             <table className="w-full text-sm" style={{ minWidth: showOwner ? '780px' : '580px' }}>
               <thead className="border-b border-slate-200">
                 <tr className="bg-slate-50">
-                  <SortTh sortKey="title"        currentSort={sort} onSort={handleSort}>ชื่อเอกสาร</SortTh>
-                  <SortTh sortKey="doc_type"     currentSort={sort} onSort={handleSort}>ประเภท</SortTh>
-                  {showGroup     && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">กลุ่ม</th>}
-                  {showStudentId && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">รหัส</th>}
-                  {showOwner     && <SortTh sortKey="owner_name" currentSort={sort} onSort={handleSort}>เจ้าของ</SortTh>}
-                  <SortTh sortKey="issue_date"   currentSort={sort} onSort={handleSort}>วันออก</SortTh>
-                  <SortTh sortKey="expire_date"  currentSort={sort} onSort={handleSort}>วันหมดอายุ</SortTh>
-                  <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>คงเหลือ</SortTh>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">สถานะ</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">ไฟล์</th>
+                  <SortTh sortKey="title"        currentSort={sort} onSort={handleSort}>{t('documents.colTitle')}</SortTh>
+                  <SortTh sortKey="doc_type"     currentSort={sort} onSort={handleSort}>{t('documents.colType')}</SortTh>
+                  {showGroup     && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colGroup')}</th>}
+                  {showStudentId && <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colStudentId')}</th>}
+                  {showOwner     && <SortTh sortKey="owner_name" currentSort={sort} onSort={handleSort}>{t('documents.colOwner')}</SortTh>}
+                  <SortTh sortKey="issue_date"   currentSort={sort} onSort={handleSort}>{t('documents.colIssueDate')}</SortTh>
+                  <SortTh sortKey="expire_date"  currentSort={sort} onSort={handleSort}>{t('documents.colExpireDate')}</SortTh>
+                  <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>{t('documents.colRemaining')}</SortTh>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colStatus')}</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colFiles')}</th>
                   <th />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
-                  <tr><td colSpan={12} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+                  <tr><td colSpan={12} className="text-center py-16 text-slate-400 text-sm">{t('common.loading')}</td></tr>
                 ) : docs.length === 0 ? (
                   <tr>
                     <td colSpan={12} className="text-center py-16">
                       <p className="text-slate-300 text-4xl mb-3">○</p>
-                      <p className="text-slate-400 text-sm">ไม่พบเอกสาร</p>
+                      <p className="text-slate-400 text-sm">{t('documents.noDocuments')}</p>
                     </td>
                   </tr>
                 ) : docs.map(doc => {
                   const noExp = !!doc.no_expire
                   const days  = doc.days_remaining
                   const daysColor = noExp ? 'text-slate-400' : days < 0 ? 'text-red-600 font-semibold' : days <= 30 ? 'text-amber-600 font-semibold' : 'text-slate-500'
-                  const gb = showGroup ? groupBadge(doc) : null
+                  const gb = showGroup ? groupBadge(doc, t) : null
                   return (
                     <tr key={doc.doc_id}
                       className={`transition-colors cursor-pointer ${rowBg(doc)}`}
@@ -1553,20 +1678,22 @@ export default function DocumentsPage() {
                         </td>
                       )}
                       <td className="px-4 py-3.5 text-slate-500 text-xs tabular-nums whitespace-nowrap">
-                        {doc.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '—'}
+                        {doc.issue_date ? new Date(doc.issue_date).toLocaleDateString(locale) : '—'}
                       </td>
                       <td className="px-4 py-3.5 text-xs tabular-nums whitespace-nowrap">
                         {noExp
-                          ? <span className="text-slate-400 italic">ไม่มีวันหมดอายุ</span>
-                          : <span className="text-slate-500">{doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : '—'}</span>}
+                          ? <span className="text-slate-400 italic">{t('documents.noExpireShort')}</span>
+                          : <span className="text-slate-500">{doc.expire_date ? new Date(doc.expire_date).toLocaleDateString(locale) : '—'}</span>}
                       </td>
                       <td className={`px-4 py-3.5 text-xs tabular-nums whitespace-nowrap ${daysColor}`}>
-                        {noExp ? '—' : days == null ? '—' : days < 0 ? `เกิน ${Math.abs(days)} วัน` : `${days} วัน`}
+                        {noExp ? '—' : days == null ? '—' : days < 0
+                          ? t('documents.daysOver', { days: Math.abs(days) })
+                          : t('documents.daysLeft', { days })}
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full whitespace-nowrap
                           ${noExp ? 'bg-slate-50 text-slate-500 border border-slate-200' : statusColor[computedStatus(doc)] || 'bg-slate-100 text-slate-500'}`}>
-                          {noExp ? 'ไม่มีวันหมดอายุ' : statusLabel[computedStatus(doc)] || doc.status}
+                          {noExp ? t('documents.noExpireShort') : statusLabel[computedStatus(doc)] || doc.status}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-center">
@@ -1579,7 +1706,9 @@ export default function DocumentsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="text-xs font-medium whitespace-nowrap" style={{ color: '#42b5e1' }}>ดูรายละเอียด →</span>
+                        <span className="text-xs font-medium whitespace-nowrap" style={{ color: '#42b5e1' }}>
+                          {t('documents.viewDetail')}
+                        </span>
                       </td>
                     </tr>
                   )
@@ -1602,17 +1731,17 @@ export default function DocumentsPage() {
         <>
           {/* Filter Bar */}
           <div className="flex flex-wrap gap-3">
-            <input className="input-field w-full sm:max-w-xs" placeholder="ค้นหาชื่อเอกสาร..."
+            <input className="input-field w-full sm:max-w-xs" placeholder={t('documents.filterSearchStudentPlaceholder')}
               value={search} onChange={e => setSearch(e.target.value)} />
             <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={docType} onChange={e => setDocType(e.target.value)}>
-              <option value="">ทุกประเภท</option>
-              {docTypes.map(t => <option key={t.type_id} value={t.type_code}>{t.type_code}</option>)}
+              <option value="">{t('documents.filterAllTypes')}</option>
+              {docTypes.map(dt => <option key={dt.type_id} value={dt.type_code}>{dt.type_code}</option>)}
             </select>
             <select className="input-field w-full sm:w-auto sm:max-w-[150px]" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="">ทุกสถานะ</option>
-              <option value="active">ปกติ</option>
-              <option value="expiring_soon">ใกล้หมดอายุ</option>
-              <option value="expired">หมดอายุ</option>
+              <option value="">{t('documents.filterAllStatus')}</option>
+              <option value="active">{t('documents.statusActive')}</option>
+              <option value="expiring_soon">{t('documents.statusExpiring')}</option>
+              <option value="expired">{t('documents.statusExpired')}</option>
             </select>
           </div>
 
@@ -1621,24 +1750,24 @@ export default function DocumentsPage() {
               <table className="w-full text-sm" style={{ minWidth: '560px' }}>
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <SortTh sortKey="title"         currentSort={sort} onSort={handleSort}>ชื่อเอกสาร</SortTh>
-                    <SortTh sortKey="doc_type"      currentSort={sort} onSort={handleSort}>ประเภท</SortTh>
-                    <SortTh sortKey="issue_date"    currentSort={sort} onSort={handleSort}>วันออก</SortTh>
-                    <SortTh sortKey="expire_date"   currentSort={sort} onSort={handleSort}>วันหมดอายุ</SortTh>
-                    <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>คงเหลือ</SortTh>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">สถานะ</th>
-                    <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">ไฟล์</th>
+                    <SortTh sortKey="title"          currentSort={sort} onSort={handleSort}>{t('documents.colTitle')}</SortTh>
+                    <SortTh sortKey="doc_type"       currentSort={sort} onSort={handleSort}>{t('documents.colType')}</SortTh>
+                    <SortTh sortKey="issue_date"     currentSort={sort} onSort={handleSort}>{t('documents.colIssueDate')}</SortTh>
+                    <SortTh sortKey="expire_date"    currentSort={sort} onSort={handleSort}>{t('documents.colExpireDate')}</SortTh>
+                    <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>{t('documents.colRemaining')}</SortTh>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colStatus')}</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{t('documents.colFiles')}</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {loading ? (
-                    <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+                    <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">{t('common.loading')}</td></tr>
                   ) : docs.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="text-center py-16">
                         <p className="text-slate-300 text-4xl mb-3">○</p>
-                        <p className="text-slate-400 text-sm">ไม่พบเอกสาร</p>
+                        <p className="text-slate-400 text-sm">{t('documents.noDocuments')}</p>
                       </td>
                     </tr>
                   ) : docs.map(doc => {
@@ -1655,20 +1784,22 @@ export default function DocumentsPage() {
                             style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{doc.doc_type}</span>
                         </td>
                         <td className="px-4 py-3.5 text-slate-500 text-xs tabular-nums whitespace-nowrap">
-                          {doc.issue_date ? new Date(doc.issue_date).toLocaleDateString('th-TH') : '—'}
+                          {doc.issue_date ? new Date(doc.issue_date).toLocaleDateString(locale) : '—'}
                         </td>
                         <td className="px-4 py-3.5 text-xs tabular-nums whitespace-nowrap">
                           {noExp
-                            ? <span className="text-slate-400 italic">ไม่มีวันหมดอายุ</span>
-                            : <span className="text-slate-500">{doc.expire_date ? new Date(doc.expire_date).toLocaleDateString('th-TH') : '—'}</span>}
+                            ? <span className="text-slate-400 italic">{t('documents.noExpireShort')}</span>
+                            : <span className="text-slate-500">{doc.expire_date ? new Date(doc.expire_date).toLocaleDateString(locale) : '—'}</span>}
                         </td>
                         <td className={`px-4 py-3.5 text-xs tabular-nums whitespace-nowrap ${daysColor}`}>
-                          {noExp ? '—' : days == null ? '—' : days < 0 ? `เกิน ${Math.abs(days)} วัน` : `${days} วัน`}
+                          {noExp ? '—' : days == null ? '—' : days < 0
+                            ? t('documents.daysOver', { days: Math.abs(days) })
+                            : t('documents.daysLeft', { days })}
                         </td>
                         <td className="px-4 py-3.5">
                           <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full whitespace-nowrap
                             ${noExp ? 'bg-slate-50 text-slate-500 border border-slate-200' : statusColor[computedStatus(doc)] || 'bg-slate-100 text-slate-500'}`}>
-                            {noExp ? 'ไม่มีวันหมดอายุ' : statusLabel[computedStatus(doc)] || doc.status}
+                            {noExp ? t('documents.noExpireShort') : statusLabel[computedStatus(doc)] || doc.status}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-center">
@@ -1681,7 +1812,9 @@ export default function DocumentsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="text-xs font-medium whitespace-nowrap" style={{ color: '#42b5e1' }}>ดูรายละเอียด →</span>
+                          <span className="text-xs font-medium whitespace-nowrap" style={{ color: '#42b5e1' }}>
+                            {t('documents.viewDetail')}
+                          </span>
                         </td>
                       </tr>
                     )

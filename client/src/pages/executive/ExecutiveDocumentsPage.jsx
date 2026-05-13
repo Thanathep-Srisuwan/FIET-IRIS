@@ -3,15 +3,15 @@ import { executiveService, documentService } from '../../services/api'
 import toast from 'react-hot-toast'
 import useAcademicOptions from '../../hooks/useAcademicOptions'
 import { FileText, Image as ImageIcon, UploadCloud, History, Trash2, ClipboardList } from 'lucide-react'
+import { useLanguage } from '../../contexts/LanguageContext'
+import { getProgramDisplayName } from '../../constants/programs'
 
 const statusColor = {
   active:        'bg-emerald-50 text-emerald-700 border border-emerald-200',
   expiring_soon: 'bg-amber-50 text-amber-700 border border-amber-200',
   expired:       'bg-red-50 text-red-600 border border-red-200',
 }
-const statusLabel  = { active: 'ปกติ', expiring_soon: 'ใกล้หมดอายุ', expired: 'หมดอายุ' }
-const fileTypeLabel = { main: 'เอกสารหลัก', certificate: 'บันทึกข้อความรับรอง', attachment: 'ไฟล์แนบ' }
-const timelineIcon  = {
+const timelineIcon = {
   created: FileText,
   file_version_uploaded: UploadCloud,
   trashed: Trash2,
@@ -27,6 +27,7 @@ const computedStatus = (doc) => {
 
 // ─── FileVersionRow ───────────────────────────────────────────────────────────
 function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPreview }) {
+  const { t } = useLanguage()
   const Icon = file.mime_type?.includes('image') ? ImageIcon : FileText
   const handleDownload = async () => {
     try {
@@ -35,8 +36,15 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
       const a = document.createElement('a')
       a.href = url; a.download = file.file_name; a.click()
       setTimeout(() => URL.revokeObjectURL(url), 10000)
-    } catch { toast.error('ไม่สามารถดาวน์โหลดได้') }
+    } catch { toast.error(t('documents.fileDownloadError')) }
   }
+
+  const fileTypeLabel = {
+    main: t('documents.fileTypeMain'),
+    certificate: t('documents.fileTypeCertificate'),
+    attachment: t('documents.fileTypeAttachment'),
+  }
+
   return (
     <div className={`flex items-center justify-between p-3 rounded-xl border ${isCurrent ? 'bg-white border-slate-200' : 'bg-white/70 border-slate-100'}`}>
       <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -44,11 +52,11 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-sm font-medium text-slate-700 truncate">{file.file_name}</p>
-            {isCurrent && <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">ปัจจุบัน</span>}
+            {isCurrent && <span className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold">{t('documents.fileCurrent')}</span>}
           </div>
           <p className="text-xs text-slate-400">
-            v{file.version_no || 1} · {(file.file_size / 1024).toFixed(1)} KB · {fileTypeLabel[file.file_type] || 'ไฟล์แนบ'}
-            {file.uploaded_by_name ? ` · โดย ${file.uploaded_by_name}` : ''}
+            v{file.version_no || 1} · {(file.file_size / 1024).toFixed(1)} KB · {fileTypeLabel[file.file_type] || t('documents.fileTypeAttachment')}
+            {file.uploaded_by_name ? ` ${t('documents.fileBy', { name: file.uploaded_by_name })}` : ''}
           </p>
         </div>
       </div>
@@ -56,12 +64,12 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
         {file.mime_type?.includes('pdf') && (
           <button type="button" onClick={() => onPreview(file)} disabled={previewLoading[file.file_id]}
             className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-all disabled:opacity-50">
-            {previewLoading[file.file_id] ? '...' : 'ดู'}
+            {previewLoading[file.file_id] ? '...' : t('documents.fileView')}
           </button>
         )}
         <button type="button" onClick={handleDownload}
           className="text-xs px-2.5 py-1 rounded-lg text-white" style={{ backgroundColor: '#42b5e1' }}>
-          โหลด
+          {t('documents.fileDownload')}
         </button>
       </div>
     </div>
@@ -70,12 +78,19 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
 function ExecDetailModal({ doc, onClose, onRefresh }) {
+  const { t, locale } = useLanguage()
   const [currentDoc, setCurrentDoc]       = useState(doc)
   const [previewLoading, setPreviewLoading] = useState({})
   const [versionFiles, setVersionFiles]   = useState([])
   const [versionFileType, setVersionFileType] = useState('attachment')
   const [versionNote, setVersionNote]     = useState('')
   const [uploadingVersion, setUploadingVersion] = useState(false)
+
+  const statusLabel = {
+    active: t('documents.statusActive'),
+    expiring_soon: t('documents.statusExpiring'),
+    expired: t('documents.statusExpired'),
+  }
 
   useEffect(() => { setCurrentDoc(doc) }, [doc])
 
@@ -91,7 +106,7 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
       const url = URL.createObjectURL(data)
       window.open(url, '_blank')
       setTimeout(() => URL.revokeObjectURL(url), 60000)
-    } catch { toast.error('ไม่สามารถเปิดไฟล์ได้') }
+    } catch { toast.error(t('documents.filePreviewError')) }
     finally { setPreviewLoading(p => ({ ...p, [f.file_id]: false })) }
   }
 
@@ -101,7 +116,7 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
 
   const handleUploadVersion = async (e) => {
     e.preventDefault()
-    if (versionFiles.length === 0) return toast.error('กรุณาเลือกไฟล์เวอร์ชันใหม่')
+    if (versionFiles.length === 0) return toast.error(t('documents.modalVersionSelectError'))
     setUploadingVersion(true)
     try {
       const fd = new FormData()
@@ -110,12 +125,12 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
       if (versionNote.trim()) fd.append('note', versionNote.trim())
       versionFiles.forEach(f => fd.append('files', f))
       await documentService.uploadVersion(currentDoc.doc_id, fd)
-      toast.success('เพิ่มเวอร์ชันไฟล์สำเร็จ')
+      toast.success(t('documents.modalVersionSuccess'))
       setVersionFiles([]); setVersionNote('')
       await refreshDetail()
       if (onRefresh) onRefresh()
     } catch (err) {
-      toast.error(err.response?.data?.message || 'อัปโหลดเวอร์ชันล้มเหลว')
+      toast.error(err.response?.data?.message || t('documents.modalVersionError'))
     } finally { setUploadingVersion(false) }
   }
 
@@ -131,7 +146,6 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ backgroundColor: 'rgba(13,45,62,0.5)' }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100">
           <div>
             <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -149,26 +163,27 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          {/* Dates */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-xs text-slate-400 mb-1">วันที่ออกใบประกาศ</p>
+              <p className="text-xs text-slate-400 mb-1">{t('documents.modalIssueDate')}</p>
               <p className="text-sm font-semibold text-slate-700">
-                {new Date(currentDoc.issue_date).toLocaleDateString('th-TH')}
+                {new Date(currentDoc.issue_date).toLocaleDateString(locale)}
               </p>
             </div>
             <div className="bg-slate-50 rounded-xl p-4">
-              <p className="text-xs text-slate-400 mb-1">วันหมดอายุ</p>
+              <p className="text-xs text-slate-400 mb-1">{t('documents.modalExpireDate')}</p>
               {noExp ? (
-                <p className="text-sm font-semibold text-slate-400 italic">ไม่มีวันหมดอายุ</p>
+                <p className="text-sm font-semibold text-slate-400 italic">{t('documents.modalNoExpire')}</p>
               ) : (
                 <>
                   <p className="text-sm font-semibold text-slate-700">
-                    {currentDoc.expire_date ? new Date(currentDoc.expire_date).toLocaleDateString('th-TH') : '—'}
+                    {currentDoc.expire_date ? new Date(currentDoc.expire_date).toLocaleDateString(locale) : '—'}
                   </p>
                   {daysLeft != null && (
                     <p className={`text-xs mt-0.5 font-medium ${daysColor}`}>
-                      {daysLeft < 0 ? `เกินกำหนด ${Math.abs(daysLeft)} วัน` : `อีก ${daysLeft} วัน`}
+                      {daysLeft < 0
+                        ? t('execDocuments.daysOver', { days: Math.abs(daysLeft) })
+                        : t('execDocuments.daysLeft', { days: daysLeft })}
                     </p>
                   )}
                 </>
@@ -176,9 +191,8 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
             </div>
           </div>
 
-          {/* Owner */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">เจ้าของเอกสาร</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{t('documents.modalOwnerSection')}</p>
             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                 style={{ backgroundColor: '#42b5e1' }}>
@@ -193,16 +207,17 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
                   )}
                 </div>
                 <p className="text-xs text-slate-400 truncate">{currentDoc.owner_email}</p>
-                {currentDoc.advisor_name && <p className="text-xs text-slate-400 mt-0.5">อาจารย์: {currentDoc.advisor_name}</p>}
+                {currentDoc.advisor_name && (
+                  <p className="text-xs text-slate-400 mt-0.5">{t('documents.modalAdvisor', { name: currentDoc.advisor_name })}</p>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Files */}
           <div>
             <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">ไฟล์แนบและเวอร์ชัน</p>
-              <span className="text-[11px] text-slate-400">{files.length} ไฟล์ทั้งหมด</span>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('documents.modalFilesSection')}</p>
+              <span className="text-[11px] text-slate-400">{t('documents.modalFilesTotal', { count: files.length })}</span>
             </div>
             {currentFiles.length > 0 ? (
               <div className="space-y-2">
@@ -212,12 +227,12 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-3">ยังไม่มีไฟล์แนบ</p>
+              <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-3">{t('documents.modalNoFiles')}</p>
             )}
             {previousFiles.length > 0 && (
               <details className="mt-3 rounded-xl border border-slate-100 bg-slate-50/60">
                 <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-slate-500">
-                  ดูเวอร์ชันก่อนหน้า ({previousFiles.length})
+                  {t('documents.modalPreviousVersions', { count: previousFiles.length })}
                 </summary>
                 <div className="px-3 pb-3 space-y-2">
                   {previousFiles.map(f => (
@@ -229,27 +244,26 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
             )}
           </div>
 
-          {/* Upload Version Form */}
           <form onSubmit={handleUploadVersion} className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-3">
             <div className="flex items-center gap-2">
               <UploadCloud size={17} className="text-[#42b5e1]" />
               <div>
-                <p className="text-sm font-semibold text-slate-700">เพิ่มเวอร์ชันไฟล์</p>
-                <p className="text-xs text-slate-400">ไฟล์ประเภทเดียวกันจะถูกตั้งเป็นเวอร์ชันปัจจุบันอัตโนมัติ</p>
+                <p className="text-sm font-semibold text-slate-700">{t('documents.modalVersionTitle')}</p>
+                <p className="text-xs text-slate-400">{t('documents.modalVersionDesc')}</p>
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <select className="input-field" value={versionFileType} onChange={e => setVersionFileType(e.target.value)}>
-                <option value="main">เอกสารหลัก</option>
-                <option value="certificate">บันทึกข้อความรับรอง</option>
-                <option value="attachment">ไฟล์แนบ</option>
+                <option value="main">{t('documents.fileTypeMain')}</option>
+                <option value="certificate">{t('documents.fileTypeCertificate')}</option>
+                <option value="attachment">{t('documents.fileTypeAttachment')}</option>
               </select>
               <input className="input-field" value={versionNote}
                 onChange={e => setVersionNote(e.target.value)}
-                placeholder="หมายเหตุเวอร์ชัน (ไม่บังคับ)" />
+                placeholder={t('documents.modalVersionNotePlaceholder')} />
             </div>
             <label className="block cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-3 text-center text-sm text-slate-500 hover:bg-slate-50">
-              เลือกไฟล์เวอร์ชันใหม่
+              {t('documents.modalVersionSelectFile')}
               <input type="file" multiple className="hidden" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                 onChange={e => handleVersionFiles(e.target.files)} />
             </label>
@@ -267,16 +281,15 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
             <button type="submit" disabled={uploadingVersion || versionFiles.length === 0}
               className="w-full py-2 rounded-lg text-sm font-medium text-white transition-all disabled:opacity-50"
               style={{ backgroundColor: '#42b5e1' }}>
-              {uploadingVersion ? 'กำลังเพิ่มเวอร์ชัน...' : 'บันทึกเวอร์ชันใหม่'}
+              {uploadingVersion ? t('documents.modalVersionUploadingBtn') : t('documents.modalVersionSaveBtn')}
             </button>
           </form>
 
-          {/* Timeline */}
           {currentDoc.timeline?.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <History size={16} className="text-slate-400" />
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Timeline</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{t('documents.modalTimeline')}</p>
               </div>
               <div className="space-y-3">
                 {currentDoc.timeline.map(item => {
@@ -290,11 +303,13 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-semibold text-slate-700">{item.title}</p>
                           <span className="text-[11px] text-slate-400">
-                            {new Date(item.created_at).toLocaleString('th-TH')}
+                            {new Date(item.created_at).toLocaleString(locale)}
                           </span>
                         </div>
                         {item.detail && <p className="text-xs text-slate-500 mt-1">{item.detail}</p>}
-                        {item.actor_name && <p className="text-[11px] text-slate-400 mt-1">โดย {item.actor_name}</p>}
+                        {item.actor_name && (
+                          <p className="text-[11px] text-slate-400 mt-1">{t('documents.modalTimelineBy', { name: item.actor_name })}</p>
+                        )}
                       </div>
                     </div>
                   )
@@ -305,7 +320,7 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
 
           {currentDoc.description && (
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">คำอธิบาย</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t('documents.modalDescription')}</p>
               <p className="text-sm text-slate-600 bg-slate-50 rounded-xl p-3">{currentDoc.description}</p>
             </div>
           )}
@@ -314,7 +329,7 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
         <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
           <button onClick={onClose}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ backgroundColor: '#42b5e1' }}>ปิด</button>
+            style={{ backgroundColor: '#42b5e1' }}>{t('documents.modalCloseBtn')}</button>
         </div>
       </div>
     </div>
@@ -323,6 +338,7 @@ function ExecDetailModal({ doc, onClose, onRefresh }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ExecutiveDocumentsPage() {
+  const { language, locale, t } = useLanguage()
   const academicOptions = useAcademicOptions()
   const [docs, setDocs]         = useState([])
   const [loading, setLoading]   = useState(true)
@@ -333,12 +349,18 @@ export default function ExecutiveDocumentsPage() {
   const [program, setProgram]   = useState('')
   const [selected, setSelected] = useState(null)
 
+  const statusLabel = {
+    active: t('documents.statusActive'),
+    expiring_soon: t('documents.statusExpiring'),
+    expired: t('documents.statusExpired'),
+  }
+
   const fetchDocs = useCallback(async () => {
     setLoading(true)
     try {
       const { data } = await executiveService.getDocuments({ search, doc_type: docType, status, degree_level: degree, program })
       setDocs(data.documents || [])
-    } catch { toast.error('โหลดข้อมูลล้มเหลว') }
+    } catch { toast.error(t('execDocuments.loadError')) }
     finally { setLoading(false) }
   }, [search, docType, status, degree, program])
 
@@ -348,15 +370,25 @@ export default function ExecutiveDocumentsPage() {
     try {
       const { data } = await documentService.getById(doc.doc_id)
       setSelected(data)
-    } catch { toast.error('โหลดรายละเอียดล้มเหลว') }
+    } catch { toast.error(t('execDocuments.loadDetailError')) }
   }
 
   const exportCSV = () => {
-    const header = 'ชื่อเอกสาร,ประเภท,เจ้าของ,หลักสูตร,อาจารย์ที่ปรึกษา,วันออก,วันหมดอายุ,คงเหลือ,สถานะ'
+    const headers = [
+      t('execDocuments.colTitle'),
+      t('execDocuments.colType'),
+      t('execDocuments.colOwner'),
+      t('execDocuments.colProgram'),
+      t('execDocuments.colAdvisor'),
+      t('execDocuments.colIssueDate') || 'Issue date',
+      t('execDocuments.colExpire'),
+      t('execDocuments.colRemaining'),
+      t('execDocuments.colStatus'),
+    ]
     const rows = docs.map(d =>
-      `"${d.title}","${d.doc_type}","${d.owner_name}","${d.program||''}","${d.advisor_name||''}","${new Date(d.issue_date).toLocaleDateString('th-TH')}","${new Date(d.expire_date).toLocaleDateString('th-TH')}","${d.days_remaining}","${statusLabel[d.status]||d.status}"`
+      `"${d.title}","${d.doc_type}","${d.owner_name}","${getProgramDisplayName(d.program, language)||''}","${d.advisor_name||''}","${new Date(d.issue_date).toLocaleDateString(locale)}","${d.expire_date ? new Date(d.expire_date).toLocaleDateString(locale) : ''}","${d.days_remaining}","${statusLabel[d.status]||d.status}"`
     )
-    const csv  = [header, ...rows].join('\n')
+    const csv  = [headers.join(','), ...rows].join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a'); a.href = url
@@ -364,13 +396,27 @@ export default function ExecutiveDocumentsPage() {
     URL.revokeObjectURL(url)
   }
 
+  const tableHeaders = [
+    t('execDocuments.colTitle'),
+    t('execDocuments.colType'),
+    t('execDocuments.colOwner'),
+    t('execDocuments.colProgram'),
+    t('execDocuments.colAdvisor'),
+    t('execDocuments.colExpire'),
+    t('execDocuments.colRemaining'),
+    t('execDocuments.colStatus'),
+    t('execDocuments.colFiles'),
+  ]
+
   return (
     <div className="space-y-5 max-w-7xl">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>ผู้บริหาร</p>
-          <h1 className="text-2xl font-bold text-slate-800">เอกสารทั้งคณะ</h1>
-          <p className="text-slate-400 text-sm mt-0.5">ทั้งหมด {docs.length} รายการ</p>
+          <p className="text-xs font-medium uppercase tracking-widest mb-1" style={{ color: '#42b5e1' }}>
+            {t('executive.eyebrow')}
+          </p>
+          <h1 className="text-2xl font-bold text-slate-800">{t('execDocuments.title')}</h1>
+          <p className="text-slate-400 text-sm mt-0.5">{t('execDocuments.total', { count: docs.length })}</p>
         </div>
         <button onClick={exportCSV}
           className="px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-all">
@@ -380,30 +426,30 @@ export default function ExecutiveDocumentsPage() {
 
       {/* Filter */}
       <div className="flex flex-wrap gap-3">
-        <input className="input-field max-w-xs" placeholder="ค้นหาชื่อเอกสารหรือเจ้าของ..."
+        <input className="input-field max-w-xs" placeholder={t('execDocuments.filterSearch')}
           value={search} onChange={e => setSearch(e.target.value)} />
         <select className="input-field max-w-[140px]" value={docType} onChange={e => setDocType(e.target.value)}>
-          <option value="">ทุกประเภท</option>
+          <option value="">{t('execDocuments.filterAllTypes')}</option>
           <option value="RI">RI</option>
           <option value="IRB">IRB</option>
         </select>
         <select className="input-field max-w-[160px]" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="">ทุกสถานะ</option>
-          <option value="active">ปกติ</option>
-          <option value="expiring_soon">ใกล้หมดอายุ</option>
-          <option value="expired">หมดอายุ</option>
+          <option value="">{t('execDocuments.filterAllStatus')}</option>
+          <option value="active">{t('documents.statusActive')}</option>
+          <option value="expiring_soon">{t('documents.statusExpiring')}</option>
+          <option value="expired">{t('documents.statusExpired')}</option>
         </select>
         <select className="input-field max-w-[140px]" value={degree}
           onChange={e => { setDegree(e.target.value); setProgram('') }}>
-          <option value="">ทุกระดับ</option>
-          <option value="bachelor">ป.ตรี</option>
-          <option value="master">ป.โท</option>
-          <option value="doctoral">ป.เอก</option>
+          <option value="">{t('execDocuments.filterAllDegrees')}</option>
+          <option value="bachelor">{t('execDocuments.degBachelor')}</option>
+          <option value="master">{t('execDocuments.degMaster')}</option>
+          <option value="doctoral">{t('execDocuments.degDoctoral')}</option>
         </select>
         <select className="input-field max-w-[220px]" value={program} onChange={e => setProgram(e.target.value)}>
-          <option value="">ทุกหลักสูตร</option>
+          <option value="">{t('execDocuments.filterAllPrograms')}</option>
           {(degree ? academicOptions.programsByDegree[degree] || [] : academicOptions.programs).map(b => (
-            <option key={b} value={b}>{b}</option>
+            <option key={b} value={b}>{getProgramDisplayName(b, language)}</option>
           ))}
         </select>
       </div>
@@ -411,76 +457,78 @@ export default function ExecutiveDocumentsPage() {
       {/* Table */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ minWidth: '800px' }}>
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              {['ชื่อเอกสาร','ประเภท','เจ้าของ','หลักสูตร','อาจารย์ที่ปรึกษา','วันหมดอายุ','คงเหลือ','สถานะ','ไฟล์'].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {loading ? (
-              <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
-            ) : docs.length === 0 ? (
-              <tr><td colSpan={9} className="text-center py-16">
-                <p className="text-slate-300 text-4xl mb-3">○</p>
-                <p className="text-slate-400 text-sm">ไม่พบเอกสาร</p>
-              </td></tr>
-            ) : docs.map(d => {
-              const days = d.days_remaining
-              const daysColor = d.no_expire ? 'text-slate-400' : days < 0 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-slate-500'
-              const status = computedStatus(d)
-              return (
-                <tr key={d.doc_id}
-                  className="hover:bg-slate-50 transition-colors cursor-pointer"
-                  onClick={() => openDetail(d)}>
-                  <td className="px-4 py-3.5 font-medium text-slate-800 max-w-[180px] truncate">{d.title}</td>
-                  <td className="px-4 py-3.5">
-                    <span className="px-2 py-0.5 text-xs font-semibold rounded"
-                      style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{d.doc_type}</span>
-                  </td>
-                  <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{d.owner_name}</td>
-                  <td className="px-4 py-3.5 text-slate-500 text-xs max-w-[140px] truncate">{d.program || '—'}</td>
-                  <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{d.advisor_name || '—'}</td>
-                  <td className="px-4 py-3.5 text-xs tabular-nums whitespace-nowrap">
-                    {d.no_expire
-                      ? <span className="italic text-slate-400">ไม่มีวันหมดอายุ</span>
-                      : <span className="text-slate-500">{d.expire_date ? new Date(d.expire_date).toLocaleDateString('th-TH') : '—'}</span>
-                    }
-                  </td>
-                  <td className={`px-4 py-3.5 text-xs font-semibold tabular-nums ${daysColor}`}>
-                    {d.no_expire ? '—' : days == null ? '—' : days < 0 ? `เกิน ${Math.abs(days)} วัน` : `${days} วัน`}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    {status ? (
-                      <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColor[status] || 'bg-slate-100 text-slate-500'}`}>
-                        {statusLabel[status] || d.status}
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-slate-50 text-slate-500 border border-slate-200">
-                        ไม่มีวันหมดอายุ
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5">
-                    {d.file_count > 0 ? (
-                      <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                        {d.file_count}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-300">—</span>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+          <table className="w-full text-sm" style={{ minWidth: '800px' }}>
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                {tableHeaders.map(h => (
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {loading ? (
+                <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">{t('common.loading')}</td></tr>
+              ) : docs.length === 0 ? (
+                <tr><td colSpan={9} className="text-center py-16">
+                  <p className="text-slate-300 text-4xl mb-3">○</p>
+                  <p className="text-slate-400 text-sm">{t('execDocuments.noDocuments')}</p>
+                </td></tr>
+              ) : docs.map(d => {
+                const days = d.days_remaining
+                const daysColor = d.no_expire ? 'text-slate-400' : days < 0 ? 'text-red-600' : days <= 30 ? 'text-amber-600' : 'text-slate-500'
+                const docStatus = computedStatus(d)
+                return (
+                  <tr key={d.doc_id}
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    onClick={() => openDetail(d)}>
+                    <td className="px-4 py-3.5 font-medium text-slate-800 max-w-[180px] truncate">{d.title}</td>
+                    <td className="px-4 py-3.5">
+                      <span className="px-2 py-0.5 text-xs font-semibold rounded"
+                        style={{ backgroundColor: '#e0f4fb', color: '#0d2d3e' }}>{d.doc_type}</span>
+                    </td>
+                    <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{d.owner_name}</td>
+                    <td className="px-4 py-3.5 text-slate-500 text-xs max-w-[140px] truncate">{getProgramDisplayName(d.program, language) || '—'}</td>
+                    <td className="px-4 py-3.5 text-slate-500 text-xs whitespace-nowrap">{d.advisor_name || '—'}</td>
+                    <td className="px-4 py-3.5 text-xs tabular-nums whitespace-nowrap">
+                      {d.no_expire
+                        ? <span className="italic text-slate-400">{t('execDocuments.noExpire')}</span>
+                        : <span className="text-slate-500">{d.expire_date ? new Date(d.expire_date).toLocaleDateString(locale) : '—'}</span>
+                      }
+                    </td>
+                    <td className={`px-4 py-3.5 text-xs font-semibold tabular-nums ${daysColor}`}>
+                      {d.no_expire ? '—'
+                        : days == null ? '—'
+                        : days < 0 ? t('execDocuments.daysOver', { days: Math.abs(days) })
+                        : t('execDocuments.daysLeft', { days })}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {docStatus ? (
+                        <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColor[docStatus] || 'bg-slate-100 text-slate-500'}`}>
+                          {statusLabel[docStatus] || d.status}
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-slate-50 text-slate-500 border border-slate-200">
+                          {t('execDocuments.noExpire')}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      {d.file_count > 0 ? (
+                        <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                          {d.file_count}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Detail Modal */}
       {selected && (
         <ExecDetailModal
           doc={selected}

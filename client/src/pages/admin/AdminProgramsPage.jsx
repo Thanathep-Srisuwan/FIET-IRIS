@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { programService } from '../../services/api'
+import { useLanguage } from '../../contexts/LanguageContext'
+import { getProgramDisplayName } from '../../constants/programs'
 import toast from 'react-hot-toast'
 import { GraduationCap, Building2, Search, Pencil, Check, X, Plus } from 'lucide-react'
-
-const DEGREE_LABELS = {
-  bachelor: 'ปริญญาตรี',
-  master: 'ปริญญาโท',
-  doctoral: 'ปริญญาเอก',
-}
 
 const DEGREE_COLORS = {
   bachelor: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/30 dark:text-sky-300 dark:border-sky-800',
@@ -16,9 +12,15 @@ const DEGREE_COLORS = {
 }
 
 function DegreeBadge({ level }) {
+  const { t } = useLanguage()
+  const labels = {
+    bachelor: t('adminPrograms.degBachelor'),
+    master: t('adminPrograms.degMaster'),
+    doctoral: t('adminPrograms.degDoctoral'),
+  }
   return (
     <span className={`inline-flex items-center rounded-lg border px-2.5 py-1 text-xs font-bold whitespace-nowrap ${DEGREE_COLORS[level] || 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-      {DEGREE_LABELS[level] || level}
+      {labels[level] || level}
     </span>
   )
 }
@@ -29,7 +31,8 @@ function StatusDot({ active }) {
   )
 }
 
-function DeleteButton({ label, onDelete }) {
+function DeleteButton({ onDelete }) {
+  const { t } = useLanguage()
   const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -49,7 +52,7 @@ function DeleteButton({ label, onDelete }) {
           : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-red-600 hover:border-red-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:text-red-300'
       }`}
     >
-      {loading ? '...' : confirming ? 'ยืนยันลบ?' : 'ลบ'}
+      {loading ? '...' : confirming ? t('common.deleteConfirm') : t('common.delete')}
     </button>
   )
 }
@@ -84,9 +87,8 @@ function InlineEdit({ value, onSave, onCancel }) {
   )
 }
 
-// ===== Programs Tab =====
-
 function ProgramsTab() {
+  const { language, t } = useLanguage()
   const [programs, setPrograms] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -101,7 +103,7 @@ function ProgramsTab() {
       const { data } = await programService.getPrograms()
       setPrograms(data || [])
     } catch {
-      toast.error('โหลดข้อมูลไม่สำเร็จ')
+      toast.error(t('adminPrograms.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -113,7 +115,7 @@ function ProgramsTab() {
     let list = programs
     if (degreeFilter !== 'all') list = list.filter(p => p.degree_level === degreeFilter)
     const q = query.trim().toLowerCase()
-    if (q) list = list.filter(p => p.program_name.toLowerCase().includes(q))
+    if (q) list = list.filter(p => `${p.program_name} ${getProgramDisplayName(p.program_name, 'en')}`.toLowerCase().includes(q))
     return list
   }, [programs, degreeFilter, query])
 
@@ -124,15 +126,15 @@ function ProgramsTab() {
 
   const handleAdd = async (e) => {
     e.preventDefault()
-    if (!form.program_name.trim()) { toast.error('กรุณากรอกชื่อหลักสูตร'); return }
+    if (!form.program_name.trim()) { toast.error(t('adminPrograms.validateName')); return }
     setSaving(true)
     try {
       const { data } = await programService.createProgram({ degree_level: form.degree_level, program_name: form.program_name.trim() })
       setPrograms(prev => [...prev, data])
       setForm(prev => ({ ...prev, program_name: '' }))
-      toast.success('เพิ่มหลักสูตรสำเร็จ')
+      toast.success(t('adminPrograms.addSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     } finally {
       setSaving(false)
     }
@@ -144,9 +146,9 @@ function ProgramsTab() {
       const { data } = await programService.updateProgram(id, { program_name: newName, degree_level: prog.degree_level, sort_order: prog.sort_order, is_active: prog.is_active })
       setPrograms(prev => prev.map(p => p.program_id === id ? data : p))
       setEditingId(null)
-      toast.success('แก้ไขชื่อหลักสูตรสำเร็จ')
+      toast.success(t('adminPrograms.renameSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     }
   }
 
@@ -159,9 +161,9 @@ function ProgramsTab() {
         is_active: !prog.is_active,
       })
       setPrograms(prev => prev.map(p => p.program_id === prog.program_id ? data : p))
-      toast.success(data.is_active ? 'เปิดใช้งานหลักสูตรแล้ว' : 'ปิดใช้งานหลักสูตรแล้ว')
+      toast.success(data.is_active ? t('adminPrograms.activateSuccess') : t('adminPrograms.deactivateSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     }
   }
 
@@ -169,23 +171,22 @@ function ProgramsTab() {
     try {
       await programService.deleteProgram(id)
       setPrograms(prev => prev.filter(p => p.program_id !== id))
-      toast.success('ลบหลักสูตรสำเร็จ')
+      toast.success(t('adminPrograms.deleteSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     }
   }
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-5">
-      {/* Left: stats + add form */}
       <aside className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">ทั้งหมด</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminPrograms.totalLabel')}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{stats.total}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">เปิดใช้งาน</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminPrograms.activeLabel')}</p>
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{stats.active}</p>
           </div>
         </div>
@@ -193,29 +194,29 @@ function ProgramsTab() {
         <form onSubmit={handleAdd} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Plus size={16} strokeWidth={2.5} className="text-primary-600" />
-            เพิ่มหลักสูตรใหม่
+            {t('adminPrograms.addProgramTitle')}
           </h2>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">ระดับการศึกษา</label>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminPrograms.degreeLevelLabel')}</label>
             <select
               value={form.degree_level}
               onChange={e => setForm(prev => ({ ...prev, degree_level: e.target.value }))}
               className="input-field mt-1.5"
             >
-              <option value="bachelor">ปริญญาตรี</option>
-              <option value="master">ปริญญาโท</option>
-              <option value="doctoral">ปริญญาเอก</option>
+              <option value="bachelor">{t('adminPrograms.degBachelor')}</option>
+              <option value="master">{t('adminPrograms.degMaster')}</option>
+              <option value="doctoral">{t('adminPrograms.degDoctoral')}</option>
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">ชื่อหลักสูตร</label>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminPrograms.programNameLabel')}</label>
             <input
               type="text"
               value={form.program_name}
               onChange={e => setForm(prev => ({ ...prev, program_name: e.target.value }))}
-              placeholder="เช่น วท.บ. เทคโนโลยีบรรจุภัณฑ์"
+              placeholder={t('adminPrograms.programNamePlaceholder')}
               maxLength={200}
               className="input-field mt-1.5"
             />
@@ -226,23 +227,22 @@ function ProgramsTab() {
             disabled={saving}
             className="w-full px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-primary-700 hover:bg-primary-800 transition-colors disabled:opacity-50"
           >
-            {saving ? 'กำลังบันทึก...' : 'เพิ่มหลักสูตร'}
+            {saving ? t('common.saving') : t('adminPrograms.addProgramBtn')}
           </button>
         </form>
 
         <section className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-4">
-          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">ข้อควรระวัง</p>
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{t('adminPrograms.warningTitle')}</p>
           <p className="text-xs text-amber-800 dark:text-amber-300 mt-2 leading-relaxed">
-            ไม่สามารถลบหลักสูตรที่มีผู้ใช้อยู่ได้ ให้ปิดการใช้งาน (toggle) แทน เพื่อซ่อนจากตัวเลือกโดยไม่สูญเสียข้อมูล
+            {t('adminPrograms.programWarning')}
           </p>
         </section>
       </aside>
 
-      {/* Right: table */}
       <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-            หลักสูตรในระบบ
+            {t('adminPrograms.programListTitle')}
             <span className="ml-2 text-sm font-normal text-slate-400">({filtered.length}/{programs.length})</span>
           </h2>
           <div className="flex flex-col sm:flex-row gap-2">
@@ -251,17 +251,17 @@ function ProgramsTab() {
               onChange={e => setDegreeFilter(e.target.value)}
               className="input-field text-sm py-2 w-full sm:w-36"
             >
-              <option value="all">ทุกระดับ</option>
-              <option value="bachelor">ปริญญาตรี</option>
-              <option value="master">ปริญญาโท</option>
-              <option value="doctoral">ปริญญาเอก</option>
+              <option value="all">{t('adminPrograms.allDegrees')}</option>
+              <option value="bachelor">{t('adminPrograms.degBachelor')}</option>
+              <option value="master">{t('adminPrograms.degMaster')}</option>
+              <option value="doctoral">{t('adminPrograms.degDoctoral')}</option>
             </select>
             <div className="relative flex-1 sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
               <input
                 value={query}
                 onChange={e => setQuery(e.target.value)}
-                placeholder="ค้นหาชื่อหลักสูตร..."
+                placeholder={t('adminPrograms.searchProgramPlaceholder')}
                 className="input-field pl-9 text-sm py-2"
               />
             </div>
@@ -269,19 +269,19 @@ function ProgramsTab() {
         </div>
 
         {loading ? (
-          <div className="py-16 text-center text-sm text-slate-400">กำลังโหลด...</div>
+          <div className="py-16 text-center text-sm text-slate-400">{t('common.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <GraduationCap size={32} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">ไม่พบหลักสูตร</p>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{t('adminPrograms.notFound')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 580 }}>
               <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800">
                 <tr>
-                  {['ระดับ', 'ชื่อหลักสูตร', 'สถานะ', ''].map(h => (
-                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{h}</th>
+                  {[t('adminPrograms.colDegree'), t('adminPrograms.colName'), t('adminPrograms.colStatus'), ''].map((h, i) => (
+                    <th key={i} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -300,7 +300,7 @@ function ProgramsTab() {
                         />
                       ) : (
                         <span className={`font-medium ${prog.is_active ? 'text-slate-800 dark:text-slate-100' : 'text-slate-400 dark:text-slate-500 line-through'}`}>
-                          {prog.program_name}
+                          {getProgramDisplayName(prog.program_name, language)}
                         </span>
                       )}
                     </td>
@@ -308,11 +308,10 @@ function ProgramsTab() {
                       <button
                         onClick={() => handleToggle(prog)}
                         className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
-                        title={prog.is_active ? 'คลิกเพื่อปิดใช้งาน' : 'คลิกเพื่อเปิดใช้งาน'}
                       >
                         <StatusDot active={prog.is_active} />
                         <span className={prog.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}>
-                          {prog.is_active ? 'เปิด' : 'ปิด'}
+                          {prog.is_active ? t('adminPrograms.statusOpen') : t('adminPrograms.statusClosed')}
                         </span>
                       </button>
                     </td>
@@ -322,12 +321,11 @@ function ProgramsTab() {
                           <button
                             onClick={() => setEditingId(prog.program_id)}
                             className="p-1.5 rounded-lg bg-slate-50 text-slate-400 hover:bg-primary-50 hover:text-primary-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-primary-400 transition-colors"
-                            title="แก้ไขชื่อ"
                           >
                             <Pencil size={13} strokeWidth={2.5} />
                           </button>
                         )}
-                        <DeleteButton label={prog.program_name} onDelete={() => handleDelete(prog.program_id)} />
+                        <DeleteButton onDelete={() => handleDelete(prog.program_id)} />
                       </div>
                     </td>
                   </tr>
@@ -341,9 +339,8 @@ function ProgramsTab() {
   )
 }
 
-// ===== Affiliations Tab =====
-
 function AffiliationsTab() {
+  const { t } = useLanguage()
   const [affiliations, setAffiliations] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -357,7 +354,7 @@ function AffiliationsTab() {
       const { data } = await programService.getAffiliations()
       setAffiliations(data || [])
     } catch {
-      toast.error('โหลดข้อมูลไม่สำเร็จ')
+      toast.error(t('adminPrograms.loadFailed'))
     } finally {
       setLoading(false)
     }
@@ -378,15 +375,15 @@ function AffiliationsTab() {
 
   const handleAdd = async (e) => {
     e.preventDefault()
-    if (!formName.trim()) { toast.error('กรุณากรอกชื่อสังกัด'); return }
+    if (!formName.trim()) { toast.error(t('adminPrograms.validateAffName')); return }
     setSaving(true)
     try {
       const { data } = await programService.createAffiliation({ affiliation_name: formName.trim() })
       setAffiliations(prev => [...prev, data])
       setFormName('')
-      toast.success('เพิ่มสังกัดสำเร็จ')
+      toast.success(t('adminPrograms.addAffSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     } finally {
       setSaving(false)
     }
@@ -398,9 +395,9 @@ function AffiliationsTab() {
       const { data } = await programService.updateAffiliation(id, { affiliation_name: newName, sort_order: aff.sort_order, is_active: aff.is_active })
       setAffiliations(prev => prev.map(a => a.affiliation_id === id ? data : a))
       setEditingId(null)
-      toast.success('แก้ไขชื่อสังกัดสำเร็จ')
+      toast.success(t('adminPrograms.renameAffSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     }
   }
 
@@ -412,9 +409,9 @@ function AffiliationsTab() {
         is_active: !aff.is_active,
       })
       setAffiliations(prev => prev.map(a => a.affiliation_id === aff.affiliation_id ? data : a))
-      toast.success(data.is_active ? 'เปิดใช้งานสังกัดแล้ว' : 'ปิดใช้งานสังกัดแล้ว')
+      toast.success(data.is_active ? t('adminPrograms.activateAffSuccess') : t('adminPrograms.deactivateAffSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     }
   }
 
@@ -422,9 +419,9 @@ function AffiliationsTab() {
     try {
       await programService.deleteAffiliation(id)
       setAffiliations(prev => prev.filter(a => a.affiliation_id !== id))
-      toast.success('ลบสังกัดสำเร็จ')
+      toast.success(t('adminPrograms.deleteAffSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด')
+      toast.error(err.response?.data?.message || t('common.error'))
     }
   }
 
@@ -433,11 +430,11 @@ function AffiliationsTab() {
       <aside className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">ทั้งหมด</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminPrograms.totalLabel')}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{stats.total}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">เปิดใช้งาน</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminPrograms.activeLabel')}</p>
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{stats.active}</p>
           </div>
         </div>
@@ -445,15 +442,15 @@ function AffiliationsTab() {
         <form onSubmit={handleAdd} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Plus size={16} strokeWidth={2.5} className="text-primary-600" />
-            เพิ่มสังกัดใหม่
+            {t('adminPrograms.addAffTitle')}
           </h2>
           <div>
-            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">ชื่อสังกัด</label>
+            <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminPrograms.affNameLabel')}</label>
             <input
               type="text"
               value={formName}
               onChange={e => setFormName(e.target.value)}
-              placeholder="เช่น ครุศาสตร์เครื่องกล"
+              placeholder={t('adminPrograms.affNamePlaceholder')}
               maxLength={200}
               className="input-field mt-1.5"
             />
@@ -463,14 +460,14 @@ function AffiliationsTab() {
             disabled={saving}
             className="w-full px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-primary-700 hover:bg-primary-800 transition-colors disabled:opacity-50"
           >
-            {saving ? 'กำลังบันทึก...' : 'เพิ่มสังกัด'}
+            {saving ? t('common.saving') : t('adminPrograms.addAffBtn')}
           </button>
         </form>
 
         <section className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/20 p-4">
-          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">ข้อควรระวัง</p>
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">{t('adminPrograms.warningTitle')}</p>
           <p className="text-xs text-amber-800 dark:text-amber-300 mt-2 leading-relaxed">
-            ไม่สามารถลบสังกัดที่มีผู้ใช้อยู่ได้ ให้ปิดการใช้งานแทน
+            {t('adminPrograms.affWarning')}
           </p>
         </section>
       </aside>
@@ -478,7 +475,7 @@ function AffiliationsTab() {
       <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-            สังกัดในระบบ
+            {t('adminPrograms.affListTitle')}
             <span className="ml-2 text-sm font-normal text-slate-400">({filtered.length}/{affiliations.length})</span>
           </h2>
           <div className="relative w-full md:w-72">
@@ -486,26 +483,26 @@ function AffiliationsTab() {
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="ค้นหาชื่อสังกัด..."
+              placeholder={t('adminPrograms.searchAffPlaceholder')}
               className="input-field pl-9 text-sm py-2"
             />
           </div>
         </div>
 
         {loading ? (
-          <div className="py-16 text-center text-sm text-slate-400">กำลังโหลด...</div>
+          <div className="py-16 text-center text-sm text-slate-400">{t('common.loading')}</div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Building2 size={32} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">ไม่พบสังกัด</p>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{t('adminPrograms.affNotFound')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 480 }}>
               <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800">
                 <tr>
-                  {['ชื่อสังกัด', 'สถานะ', ''].map(h => (
-                    <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{h}</th>
+                  {[t('adminPrograms.colAffName'), t('adminPrograms.colStatus'), ''].map((h, i) => (
+                    <th key={i} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -529,11 +526,10 @@ function AffiliationsTab() {
                       <button
                         onClick={() => handleToggle(aff)}
                         className="flex items-center gap-1.5 text-xs font-semibold transition-colors"
-                        title={aff.is_active ? 'คลิกเพื่อปิดใช้งาน' : 'คลิกเพื่อเปิดใช้งาน'}
                       >
                         <StatusDot active={aff.is_active} />
                         <span className={aff.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}>
-                          {aff.is_active ? 'เปิด' : 'ปิด'}
+                          {aff.is_active ? t('adminPrograms.statusOpen') : t('adminPrograms.statusClosed')}
                         </span>
                       </button>
                     </td>
@@ -543,12 +539,11 @@ function AffiliationsTab() {
                           <button
                             onClick={() => setEditingId(aff.affiliation_id)}
                             className="p-1.5 rounded-lg bg-slate-50 text-slate-400 hover:bg-primary-50 hover:text-primary-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:text-primary-400 transition-colors"
-                            title="แก้ไขชื่อ"
                           >
                             <Pencil size={13} strokeWidth={2.5} />
                           </button>
                         )}
-                        <DeleteButton label={aff.affiliation_name} onDelete={() => handleDelete(aff.affiliation_id)} />
+                        <DeleteButton onDelete={() => handleDelete(aff.affiliation_id)} />
                       </div>
                     </td>
                   </tr>
@@ -562,22 +557,18 @@ function AffiliationsTab() {
   )
 }
 
-// ===== Main Page =====
-
 export default function AdminProgramsPage() {
+  const { t } = useLanguage()
   const [tab, setTab] = useState('programs')
 
   return (
     <div className="max-w-7xl space-y-6">
       <header>
-        <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">Admin</p>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">จัดการหลักสูตรและสังกัด</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          แก้ไขชื่อหลักสูตรและสังกัดที่แสดงระบบ
-        </p>
+        <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">{t('roles.admin')}</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{t('adminPrograms.title')}</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('adminPrograms.desc')}</p>
       </header>
 
-      {/* Tabs */}
       <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit">
         <button
           onClick={() => setTab('programs')}
@@ -588,7 +579,7 @@ export default function AdminProgramsPage() {
           }`}
         >
           <GraduationCap size={16} strokeWidth={2} />
-          หลักสูตร
+          {t('adminPrograms.tabPrograms')}
         </button>
         <button
           onClick={() => setTab('affiliations')}
@@ -599,7 +590,7 @@ export default function AdminProgramsPage() {
           }`}
         >
           <Building2 size={16} strokeWidth={2} />
-          สังกัด
+          {t('adminPrograms.tabAffiliations')}
         </button>
       </div>
 

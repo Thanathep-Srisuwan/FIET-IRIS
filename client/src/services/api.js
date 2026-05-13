@@ -47,6 +47,8 @@ export const authService = {
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
   logout:         ()     => api.post('/auth/logout'),
   changePassword: (data) => api.put('/auth/change-password', data),
+  updateProfilePicture: (data) => api.put('/auth/profile-picture', data),
+  removeProfilePicture: () => api.delete('/auth/profile-picture'),
   refresh:        (data) => api.post('/auth/refresh', data),
 }
 
@@ -88,10 +90,13 @@ export const userService = {
   create:        (data)           => api.post('/users', data),
   update:        (id, data)       => api.put(`/users/${id}`, data),
   toggle:        (id)             => api.patch(`/users/${id}/toggle`),
+  updateRole:    (id, role)       => api.patch(`/users/${id}/role`, { role }),
+  updateStatus:  (id, status)     => api.patch(`/users/${id}/status`, { account_status: status }),
   resetPassword: (id)             => api.post(`/users/${id}/reset-password`),
   importExcel:   (data)           => api.post('/users/import', data),
   bulkDelete:    (ids)            => api.delete('/users/bulk', { data: { ids } }),
   bulkToggle:    (ids, is_active) => api.patch('/users/bulk/toggle', { ids, is_active }),
+  bulkStatus:    (ids, status)    => api.patch('/users/bulk/status', { ids, account_status: status }),
 }
 
 // Document Types
@@ -127,6 +132,7 @@ export const executiveService = {
 // Admin
 export const adminService = {
   getStats: () => api.get('/admin/stats'),
+  sendUserEmail: (data) => api.post('/admin/email/user', data),
 }
 
 // Settings (admin only)

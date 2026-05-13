@@ -2,58 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactQuill from 'react-quill'
 import toast from 'react-hot-toast'
 import { settingsService } from '../../services/api'
+import { useLanguage } from '../../contexts/LanguageContext'
 import 'react-quill/dist/quill.snow.css'
 import { Trash2, AlertTriangle, Mail } from 'lucide-react'
-
-const TEMPLATE_META = {
-  expiry_warning: {
-    label: 'แจ้งเตือนใกล้หมดอายุ',
-    shortLabel: 'ใกล้หมดอายุ',
-    description: 'ใช้ร่วมกับค่า expiry warning days ในหน้า Settings',
-    tone: 'amber',
-  },
-  permanent_delete: {
-    label: 'แจ้งเตือนลบถาวร',
-    shortLabel: 'ลบถาวร',
-    description: 'ใช้ร่วมกับค่า trash retention days ในหน้า Settings',
-    tone: 'red',
-  },
-}
-
-const EXAMPLE_VARS = {
-  expiry_warning: {
-    name: 'สมชาย ใจดี',
-    docTitle: 'ใบรับรอง RI ปี 2567',
-    docType: 'RI',
-    expireDate: '15 มิถุนายน 2568',
-    daysRemaining: '45',
-    system_name: 'FIET-IRIS',
-    org_name: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.',
-    clientUrl: 'https://iris.fiet.kmutt.ac.th',
-  },
-  permanent_delete: {
-    name: 'สมหญิง รักดี',
-    docTitle: 'ใบรับรอง IRB โครงการวิจัย',
-    docType: 'IRB',
-    reason: 'อยู่ในถังขยะนานเกิน 30 วัน',
-    deletedBy: 'ระบบอัตโนมัติ',
-    system_name: 'FIET-IRIS',
-    org_name: 'คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี มจธ.',
-  },
-}
-
-const VAR_DESCRIPTIONS = {
-  name: 'ชื่อผู้รับอีเมล',
-  docTitle: 'ชื่อเอกสารหรือใบรับรอง',
-  docType: 'ประเภทเอกสาร เช่น RI หรือ IRB',
-  expireDate: 'วันที่เอกสารหมดอายุ',
-  daysRemaining: 'จำนวนวันที่เหลือก่อนหมดอายุ',
-  reason: 'เหตุผลของการดำเนินการ',
-  deletedBy: 'ผู้ดำเนินการลบเอกสาร',
-  system_name: 'ชื่อระบบ',
-  org_name: 'ชื่อหน่วยงานหรือคณะ',
-  clientUrl: 'ลิงก์สำหรับเข้าสู่ระบบ',
-}
 
 const modules = {
   toolbar: [
@@ -80,17 +31,6 @@ function parseVariables(value) {
   }
 }
 
-function formatUpdatedAt(value) {
-  if (!value) return 'ยังไม่มีข้อมูล'
-  return new Date(value).toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function TemplateIcon({ tone }) {
   const color = tone === 'red'
     ? 'text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/30'
@@ -108,18 +48,20 @@ function TemplateIcon({ tone }) {
 }
 
 function EmptyState() {
+  const { t } = useLanguage()
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-10 text-center">
       <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 mx-auto mb-4 flex items-center justify-center text-slate-400">
         <Mail size={32} />
       </div>
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">ยังไม่มี Email Template</p>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">โปรดตรวจสอบ migration หรือข้อมูลในตาราง EMAIL_TEMPLATES</p>
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('adminEmailTemplates.emptyTitle')}</p>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('adminEmailTemplates.emptyDesc')}</p>
     </div>
   )
 }
 
 export default function AdminEmailTemplatesPage() {
+  const { t, locale } = useLanguage()
   const [templates, setTemplates] = useState([])
   const [selected, setSelected] = useState(null)
   const [draft, setDraft] = useState({ subject: '', body_html: '' })
@@ -128,6 +70,34 @@ export default function AdminEmailTemplatesPage() {
   const [saving, setSaving] = useState(false)
   const [view, setView] = useState('editor')
   const quillRef = useRef(null)
+
+  const TEMPLATE_META = useMemo(() => ({
+    expiry_warning: {
+      label: t('adminEmailTemplates.expiryWarningLabel'),
+      shortLabel: t('adminEmailTemplates.expiryWarningShort'),
+      description: t('adminEmailTemplates.expiryWarningDesc'),
+      tone: 'amber',
+    },
+    permanent_delete: {
+      label: t('adminEmailTemplates.permanentDeleteLabel'),
+      shortLabel: t('adminEmailTemplates.permanentDeleteShort'),
+      description: t('adminEmailTemplates.permanentDeleteDesc'),
+      tone: 'red',
+    },
+  }), [t])
+
+  const VAR_DESCRIPTIONS = useMemo(() => ({
+    name: t('adminEmailTemplates.varName'),
+    docTitle: t('adminEmailTemplates.varDocTitle'),
+    docType: t('adminEmailTemplates.varDocType'),
+    expireDate: t('adminEmailTemplates.varExpireDate'),
+    daysRemaining: t('adminEmailTemplates.varDaysRemaining'),
+    reason: t('adminEmailTemplates.varReason'),
+    deletedBy: t('adminEmailTemplates.varDeletedBy'),
+    system_name: t('adminEmailTemplates.varSystemName'),
+    org_name: t('adminEmailTemplates.varOrgName'),
+    clientUrl: t('adminEmailTemplates.varClientUrl'),
+  }), [t])
 
   const selectedTemplate = useMemo(
     () => templates.find(template => template.template_key === selected),
@@ -142,7 +112,27 @@ export default function AdminEmailTemplatesPage() {
   }
 
   const variables = useMemo(() => parseVariables(selectedTemplate?.variables), [selectedTemplate])
-  const exampleVars = EXAMPLE_VARS[selected] || {}
+  const exampleVars = useMemo(() => ({
+    expiry_warning: {
+      name: t('adminEmailTemplates.exampleExpiryName'),
+      docTitle: t('adminEmailTemplates.exampleExpiryDocTitle'),
+      docType: 'RI',
+      expireDate: t('adminEmailTemplates.exampleExpiryDate'),
+      daysRemaining: '45',
+      system_name: 'FIET-IRIS',
+      org_name: t('adminEmailTemplates.exampleOrgName'),
+      clientUrl: 'https://iris.fiet.kmutt.ac.th',
+    },
+    permanent_delete: {
+      name: t('adminEmailTemplates.exampleDeleteName'),
+      docTitle: t('adminEmailTemplates.exampleDeleteDocTitle'),
+      docType: 'IRB',
+      reason: t('adminEmailTemplates.exampleDeleteReason'),
+      deletedBy: t('adminEmailTemplates.exampleDeletedBy'),
+      system_name: 'FIET-IRIS',
+      org_name: t('adminEmailTemplates.exampleOrgName'),
+    },
+  }), [t])[selected] || {}
   const previewHtml = renderPreview(draft.body_html, exampleVars)
   const previewSubject = renderPreview(draft.subject, exampleVars)
   const isDirty = draft.subject !== original.subject || draft.body_html !== original.body_html
@@ -154,7 +144,7 @@ export default function AdminEmailTemplatesPage() {
         setTemplates(data)
         if (data.length) selectTemplate(data[0])
       })
-      .catch(() => toast.error('โหลด Email Templates ไม่สำเร็จ'))
+      .catch(() => toast.error(t('adminEmailTemplates.loadFailed')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -164,25 +154,25 @@ export default function AdminEmailTemplatesPage() {
       const toolbar = document.querySelector('.email-template-editor .ql-toolbar')
       if (!toolbar) return
       const titles = {
-        '.ql-bold': 'ตัวหนา',
-        '.ql-italic': 'ตัวเอียง',
-        '.ql-underline': 'ขีดเส้นใต้',
-        '.ql-strike': 'ขีดทับ',
-        '.ql-link': 'แทรกลิงก์',
-        '.ql-clean': 'ล้างรูปแบบ',
-        '.ql-color .ql-picker-label': 'สีตัวอักษร',
-        '.ql-background .ql-picker-label': 'สีพื้นหลัง',
-        '.ql-list[value="ordered"]': 'รายการตัวเลข',
-        '.ql-list[value="bullet"]': 'รายการหัวข้อ',
-        '.ql-align .ql-picker-label': 'จัดแนว',
-        '.ql-header .ql-picker-label': 'หัวข้อ',
+        '.ql-bold': t('adminEmailTemplates.toolBold'),
+        '.ql-italic': t('adminEmailTemplates.toolItalic'),
+        '.ql-underline': t('adminEmailTemplates.toolUnderline'),
+        '.ql-strike': t('adminEmailTemplates.toolStrike'),
+        '.ql-link': t('adminEmailTemplates.toolLink'),
+        '.ql-clean': t('adminEmailTemplates.toolClean'),
+        '.ql-color .ql-picker-label': t('adminEmailTemplates.toolColor'),
+        '.ql-background .ql-picker-label': t('adminEmailTemplates.toolBackground'),
+        '.ql-list[value="ordered"]': t('adminEmailTemplates.toolOrderedList'),
+        '.ql-list[value="bullet"]': t('adminEmailTemplates.toolBulletList'),
+        '.ql-align .ql-picker-label': t('adminEmailTemplates.toolAlign'),
+        '.ql-header .ql-picker-label': t('adminEmailTemplates.toolHeader'),
       }
       Object.entries(titles).forEach(([selector, title]) => {
         toolbar.querySelectorAll(selector).forEach(element => element.setAttribute('title', title))
       })
     }, 150)
     return () => clearTimeout(timer)
-  }, [view, selected])
+  }, [view, selected, t])
 
   const selectTemplate = (template) => {
     setSelected(template.template_key)
@@ -206,7 +196,7 @@ export default function AdminEmailTemplatesPage() {
   const handleSave = async () => {
     if (!selected) return
     if (!draft.subject.trim() || !draft.body_html.trim()) {
-      toast.error('กรุณากรอก Subject และเนื้อหาอีเมล')
+      toast.error(t('adminEmailTemplates.validateError'))
       return
     }
     setSaving(true)
@@ -223,9 +213,9 @@ export default function AdminEmailTemplatesPage() {
           ? { ...template, ...payload, updated_at: new Date().toISOString() }
           : template
       ))
-      toast.success('บันทึก Email Template แล้ว')
+      toast.success(t('adminEmailTemplates.saveSuccess'))
     } catch {
-      toast.error('บันทึกไม่สำเร็จ')
+      toast.error(t('adminEmailTemplates.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -233,10 +223,21 @@ export default function AdminEmailTemplatesPage() {
 
   const handleReset = () => setDraft({ ...original })
 
+  const formatUpdatedAt = (value) => {
+    if (!value) return t('adminEmailTemplates.neverEdited')
+    return new Date(value).toLocaleString(locale, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-slate-400 text-sm">กำลังโหลด...</p>
+        <p className="text-slate-400 text-sm">{t('common.loading')}</p>
       </div>
     )
   }
@@ -253,19 +254,17 @@ export default function AdminEmailTemplatesPage() {
     <div className="max-w-7xl space-y-6">
       <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">Admin Settings</p>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">จัดการ Email Templates</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            เทมเพลตเหล่านี้ทำงานร่วมกับค่าการแจ้งเตือนในหน้า Settings เช่น expiry warning days และ trash retention days
-          </p>
+          <p className="text-xs font-semibold text-primary-600 dark:text-primary-400 mb-1">{t('adminEmailTemplates.eyebrow')}</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{t('adminEmailTemplates.title')}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('adminEmailTemplates.desc')}</p>
         </div>
         <div className="grid grid-cols-2 gap-3 min-w-full sm:min-w-[360px] xl:min-w-[420px]">
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">Templates</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminEmailTemplates.statTemplates')}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{templates.length}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-            <p className="text-xs font-semibold text-slate-400">ตัวแปรที่ใช้ได้</p>
+            <p className="text-xs font-semibold text-slate-400">{t('adminEmailTemplates.statVariables')}</p>
             <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">{variables.length}</p>
           </div>
         </div>
@@ -275,8 +274,8 @@ export default function AdminEmailTemplatesPage() {
         <aside className="space-y-4">
           <section className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 shadow-sm">
             <div className="px-2 py-2">
-              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">เลือก Template</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">แต่ละรายการผูกกับ automation ของระบบ</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('adminEmailTemplates.sidebarTitle')}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('adminEmailTemplates.sidebarDesc')}</p>
             </div>
             <div className="space-y-2 mt-2">
               {templates.map(template => {
@@ -303,7 +302,9 @@ export default function AdminEmailTemplatesPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate">{itemMeta.label}</p>
                         <p className="text-xs opacity-75 mt-1 leading-relaxed">{itemMeta.description}</p>
-                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">แก้ไขล่าสุด: {formatUpdatedAt(template.updated_at)}</p>
+                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2">
+                          {t('adminEmailTemplates.lastEdited', { date: formatUpdatedAt(template.updated_at) })}
+                        </p>
                       </div>
                     </div>
                   </button>
@@ -327,8 +328,8 @@ export default function AdminEmailTemplatesPage() {
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
                   {[
-                    { value: 'editor', label: 'แก้ไข' },
-                    { value: 'preview', label: 'Preview' },
+                    { value: 'editor', label: t('adminEmailTemplates.tabEdit') },
+                    { value: 'preview', label: t('adminEmailTemplates.tabPreview') },
                   ].map(item => (
                     <button
                       key={item.value}
@@ -346,14 +347,14 @@ export default function AdminEmailTemplatesPage() {
                 {isDirty && (
                   <div className="flex gap-2">
                     <button onClick={handleReset} className="btn-secondary text-sm">
-                      ยกเลิก
+                      {t('adminEmailTemplates.cancelBtn')}
                     </button>
                     <button
                       onClick={handleSave}
                       disabled={saving}
                       className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-primary-700 hover:bg-primary-800 transition-colors disabled:opacity-60"
                     >
-                      {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+                      {saving ? t('adminEmailTemplates.savingBtn') : t('adminEmailTemplates.saveBtn')}
                     </button>
                   </div>
                 )}
@@ -365,21 +366,21 @@ export default function AdminEmailTemplatesPage() {
                 <div className="min-w-0 space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">Subject</label>
-                      <span className="text-[11px] text-slate-400">{draft.subject.length} ตัวอักษร</span>
+                      <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminEmailTemplates.subjectLabel')}</label>
+                      <span className="text-[11px] text-slate-400">{t('adminEmailTemplates.subjectChars', { count: draft.subject.length })}</span>
                     </div>
                     <input
                       type="text"
                       value={draft.subject}
                       onChange={event => setDraft(prev => ({ ...prev, subject: event.target.value }))}
                       className="input-field"
-                      placeholder="หัวเรื่องอีเมล"
+                      placeholder={t('adminEmailTemplates.subjectPlaceholder')}
                     />
                   </div>
 
                   <div className="email-template-editor rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden bg-white dark:bg-slate-950">
                     <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">เนื้อหาอีเมล</p>
+                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t('adminEmailTemplates.bodyLabel')}</p>
                     </div>
                     <ReactQuill
                       ref={quillRef}
@@ -395,8 +396,8 @@ export default function AdminEmailTemplatesPage() {
 
                 <aside className="space-y-4">
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 p-4">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">ตัวแปร</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">คลิกเพื่อแทรกลงในตำแหน่ง cursor</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('adminEmailTemplates.variablesTitle')}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{t('adminEmailTemplates.variablesDesc')}</p>
                     <div className="flex flex-wrap gap-2 mt-4">
                       {variables.map(variable => (
                         <button
@@ -412,7 +413,7 @@ export default function AdminEmailTemplatesPage() {
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">ข้อมูลตัวอย่าง</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('adminEmailTemplates.exampleTitle')}</p>
                     <div className="mt-3 space-y-2 max-h-72 overflow-y-auto custom-scrollbar">
                       {variables.map(variable => (
                         <div key={variable} className="text-xs">
@@ -427,7 +428,7 @@ export default function AdminEmailTemplatesPage() {
             ) : (
               <div className="p-5 space-y-4">
                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 p-4">
-                  <p className="text-xs font-semibold text-slate-400 mb-2">Subject ที่ผู้รับจะเห็น</p>
+                  <p className="text-xs font-semibold text-slate-400 mb-2">{t('adminEmailTemplates.previewSubjectLabel')}</p>
                   <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{previewSubject}</p>
                 </div>
 

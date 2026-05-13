@@ -2,8 +2,9 @@ import { Languages } from 'lucide-react'
 import { useLanguage } from '../../contexts/LanguageContext'
 
 export default function LanguageToggle({ className = '' }) {
-  const { language, toggleLanguage } = useLanguage()
-  const nextLanguage = language === 'th' ? 'English' : 'ไทย'
+  const { language, languages, toggleLanguage } = useLanguage()
+  const nextLanguageCode = language === 'th' ? 'en' : 'th'
+  const nextLanguage = languages[nextLanguageCode].label
 
   return (
     <button
@@ -18,3 +19,4 @@ export default function LanguageToggle({ className = '' }) {
     </button>
   )
 }
+
