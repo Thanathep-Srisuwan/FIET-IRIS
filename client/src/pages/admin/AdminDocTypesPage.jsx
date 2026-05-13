@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { docTypeService } from '../../services/api'
 import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
-import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus } from 'lucide-react'
+import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X } from 'lucide-react'
 
 function DocTypeBadge({ code }) {
   return (
@@ -52,20 +52,64 @@ function DeleteButton({ onDelete }) {
   )
 }
 
-function CategoryPanel({ type }) {
+function InlineEditRow({ value, sortOrder, onSave, onCancel }) {
+  const { t } = useLanguage()
+  const [name, setName] = useState(value)
+  const [order, setOrder] = useState(String(sortOrder))
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!name.trim()) return
+    setSaving(true)
+    try { await onSave(name.trim(), parseInt(order) || 0) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <input
+        autoFocus
+        type="text"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onCancel() }}
+        className="input-field text-sm flex-1 py-1.5"
+      />
+      <input
+        type="number"
+        value={order}
+        onChange={e => setOrder(e.target.value)}
+        className="input-field text-sm w-20 py-1.5 tabular-nums"
+        title={t('adminDocTypes.orderLabel')}
+      />
+      <button
+        onClick={handleSave}
+        disabled={saving || !name.trim()}
+        className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-50 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-900"
+      >
+        <Check size={14} />
+      </button>
+      <button
+        onClick={onCancel}
+        className="p-1.5 rounded-lg bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
+
+function CategoryPanel({ type, onRefreshParent }) {
   const { t, locale } = useLanguage()
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ category_code: '', category_name: '', sort_order: '' })
+  const [editingCatId, setEditingCatId] = useState(null)
 
   const formatDate = (value) => {
     if (!value) return '-'
-    return new Date(value).toLocaleDateString(locale, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return new Date(value).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   const fetchCategories = async () => {
@@ -111,6 +155,20 @@ function CategoryPanel({ type }) {
     }
   }
 
+  const handleEditCategory = async (cat, newName, newOrder) => {
+    try {
+      await docTypeService.updateCategory(type.type_id, cat.category_id, {
+        category_name: newName,
+        sort_order: newOrder,
+      })
+      toast.success(t('adminDocTypes.catEditSuccess'))
+      setEditingCatId(null)
+      fetchCategories()
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'))
+    }
+  }
+
   const handleDelete = async (cat) => {
     try {
       await docTypeService.removeCategory(type.type_id, cat.category_id)
@@ -142,7 +200,7 @@ function CategoryPanel({ type }) {
                   type="text"
                   value={form.category_code}
                   onChange={e => setForm(p => ({ ...p, category_code: e.target.value.toUpperCase() }))}
-                  placeholder="01, A, B"
+                  placeholder={t('adminDocTypes.catCodePlaceholder')}
                   maxLength={20}
                   className="input-field mt-1 font-mono uppercase text-sm"
                 />
@@ -190,12 +248,30 @@ function CategoryPanel({ type }) {
                 <div className="space-y-2">
                   {categories.map(cat => (
                     <div key={cat.category_id} className="flex items-center gap-3 bg-white dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-100 dark:border-slate-800">
-                      <span className="inline-flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 font-mono min-w-[52px] text-center">
+                      <span className="inline-flex items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 font-mono min-w-[52px] text-center shrink-0">
                         {cat.category_code}
                       </span>
-                      <span className="text-sm text-slate-700 dark:text-slate-200 flex-1">{cat.category_name}</span>
-                      <span className="text-xs text-slate-400 tabular-nums">#{cat.sort_order}</span>
-                      <DeleteButton onDelete={() => handleDelete(cat)} />
+                      {editingCatId === cat.category_id ? (
+                        <InlineEditRow
+                          value={cat.category_name}
+                          sortOrder={cat.sort_order}
+                          onSave={(name, order) => handleEditCategory(cat, name, order)}
+                          onCancel={() => setEditingCatId(null)}
+                        />
+                      ) : (
+                        <>
+                          <span className="text-sm text-slate-700 dark:text-slate-200 flex-1">{cat.category_name}</span>
+                          <span className="text-xs text-slate-400 tabular-nums">#{cat.sort_order}</span>
+                          <button
+                            onClick={() => setEditingCatId(cat.category_id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/30 dark:hover:text-primary-300 transition-colors"
+                            title={t('adminDocTypes.catEditBtn')}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <DeleteButton onDelete={() => handleDelete(cat)} />
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -216,14 +292,11 @@ export default function AdminDocTypesPage() {
   const [query, setQuery] = useState('')
   const [form, setForm] = useState({ type_code: '', type_name: '', sort_order: '' })
   const [expandedId, setExpandedId] = useState(null)
+  const [editingTypeId, setEditingTypeId] = useState(null)
 
   const formatDate = (value) => {
     if (!value) return '-'
-    return new Date(value).toLocaleDateString(locale, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
+    return new Date(value).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   const fetchAll = async () => {
@@ -280,6 +353,19 @@ export default function AdminDocTypesPage() {
     }
   }
 
+  const handleEditType = async (type, newName, newOrder) => {
+    try {
+      await docTypeService.update(type.type_id, { type_name: newName, sort_order: newOrder })
+      toast.success(t('adminDocTypes.editSuccess'))
+      setEditingTypeId(null)
+      setTypes(prev => prev.map(item =>
+        item.type_id === type.type_id ? { ...item, type_name: newName, sort_order: newOrder } : item
+      ))
+    } catch (err) {
+      toast.error(err.response?.data?.message || t('common.error'))
+    }
+  }
+
   const handleDelete = async (type) => {
     try {
       await docTypeService.remove(type.type_id)
@@ -330,7 +416,7 @@ export default function AdminDocTypesPage() {
                 type="text"
                 value={form.type_code}
                 onChange={event => updateForm('type_code', event.target.value.toUpperCase())}
-                placeholder="RI, IRB, EC"
+                placeholder={t('adminDocTypes.codePlaceholder')}
                 maxLength={20}
                 className="input-field font-mono uppercase"
               />
@@ -432,10 +518,21 @@ export default function AdminDocTypesPage() {
                         <td className="px-5 py-4">
                           <DocTypeBadge code={type.type_code} />
                         </td>
-                        <td className="px-5 py-4">
-                          <p className="font-semibold text-slate-800 dark:text-slate-100">{type.type_name}</p>
+                        <td className="px-5 py-4" colSpan={editingTypeId === type.type_id ? 2 : 1}>
+                          {editingTypeId === type.type_id ? (
+                            <InlineEditRow
+                              value={type.type_name}
+                              sortOrder={type.sort_order}
+                              onSave={(name, order) => handleEditType(type, name, order)}
+                              onCancel={() => setEditingTypeId(null)}
+                            />
+                          ) : (
+                            <p className="font-semibold text-slate-800 dark:text-slate-100">{type.type_name}</p>
+                          )}
                         </td>
-                        <td className="px-5 py-4 text-slate-500 dark:text-slate-400 tabular-nums">{type.sort_order}</td>
+                        {editingTypeId !== type.type_id && (
+                          <td className="px-5 py-4 text-slate-500 dark:text-slate-400 tabular-nums">{type.sort_order}</td>
+                        )}
                         <td className="px-5 py-4 text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{formatDate(type.created_at)}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center justify-end gap-2">
@@ -449,6 +546,17 @@ export default function AdminDocTypesPage() {
                             >
                               {expandedId === type.type_id ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                               {t('adminDocTypes.subTypeBtn')}
+                            </button>
+                            <button
+                              onClick={() => setEditingTypeId(prev => prev === type.type_id ? null : type.type_id)}
+                              className={`p-1.5 rounded-lg border transition-colors ${
+                                editingTypeId === type.type_id
+                                  ? 'bg-primary-50 text-primary-600 border-primary-200 dark:bg-primary-950/30 dark:text-primary-300 dark:border-primary-900'
+                                  : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-primary-600 hover:border-primary-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                              }`}
+                              title={t('adminDocTypes.editBtn')}
+                            >
+                              <Pencil size={13} />
                             </button>
                             <DeleteButton onDelete={() => handleDelete(type)} />
                           </div>

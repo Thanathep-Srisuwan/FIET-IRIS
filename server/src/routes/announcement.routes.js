@@ -4,7 +4,7 @@ const multer  = require('multer')
 const path    = require('path')
 const fs      = require('fs')
 const { authenticate, authorize } = require('../middlewares/auth')
-const { getAll, getPublic, create, markRead, markAllRead, remove } = require('../controllers/announcement.controller')
+const { getAll, getPublic, create, update, markRead, markAllRead, remove } = require('../controllers/announcement.controller')
 
 const announcementsDir = path.join(__dirname, '../../uploads/announcements')
 if (!fs.existsSync(announcementsDir)) fs.mkdirSync(announcementsDir, { recursive: true })
@@ -34,6 +34,7 @@ router.get('/',           authenticate,                      getAll)
 router.post('/',          authenticate, authorize('admin'),  upload.single('image'), create)
 router.put('/read-all',   authenticate,                      markAllRead)
 router.put('/:id/read',   authenticate,                      markRead)
+router.put('/:id',        authenticate, authorize('admin'),  upload.single('image'), update)
 router.delete('/:id',     authenticate, authorize('admin'),  remove)
 
 module.exports = router

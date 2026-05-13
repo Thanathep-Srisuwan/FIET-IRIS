@@ -1,4 +1,5 @@
 const { getPool, sql } = require('../config/db')
+const { logAdminAction } = require('../utils/adminLogger')
 
 // ============================================================
 //  System Settings
@@ -37,6 +38,13 @@ const bulkUpdateSettings = async (req, res) => {
           WHERE setting_key = @key
         `)
     }
+    await logAdminAction(pool, sql, {
+      adminId: req.user?.user_id || req.user?.id,
+      adminName: req.user?.name,
+      action: 'update',
+      entityType: 'setting',
+      entityLabel: settings.map(s => s.key).join(', '),
+    })
     res.json({ message: 'updated' })
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -86,6 +94,14 @@ const updateTemplate = async (req, res) => {
             updated_at = GETDATE(), updated_by = @updated_by
         WHERE template_key = @key
       `)
+    await logAdminAction(pool, sql, {
+      adminId: req.user?.user_id || req.user?.id,
+      adminName: req.user?.name,
+      action: 'update',
+      entityType: 'email_template',
+      entityId: key,
+      entityLabel: key,
+    })
     res.json({ message: 'updated' })
   } catch (err) {
     res.status(500).json({ message: err.message })

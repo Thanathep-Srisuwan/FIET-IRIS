@@ -22,6 +22,7 @@ const pageMeta = [
   { match: /^\/admin\/logs/, titleKey: 'topbar.adminLogs', eyebrowKey: 'roles.admin' },
   { match: /^\/admin\/settings/, titleKey: 'topbar.adminSettings', eyebrowKey: 'roles.admin' },
   { match: /^\/admin\/email-templates/, titleKey: 'topbar.adminEmailTemplates', eyebrowKey: 'roles.admin' },
+  { match: /^\/admin\/activity/,        titleKey: 'topbar.adminActivity',       eyebrowKey: 'roles.admin' },
   { match: /^\/executive\/overview/, titleKey: 'topbar.executiveOverview', eyebrowKey: 'roles.executive' },
   { match: /^\/executive\/(programs|branches)/, titleKey: 'topbar.executivePrograms', eyebrowKey: 'roles.executive' },
   { match: /^\/executive\/documents/, titleKey: 'topbar.executiveDocuments', eyebrowKey: 'roles.executive' },
@@ -187,4 +188,3 @@ export default function Topbar({ onMenuClick }) {
     </header>
   )
 }
-

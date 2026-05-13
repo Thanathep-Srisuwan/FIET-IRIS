@@ -16,6 +16,7 @@ import AdminProgramsPage      from './pages/admin/AdminProgramsPage'
 import AdminTrashPage          from './pages/admin/AdminTrashPage'
 import AdminSettingsPage       from './pages/admin/AdminSettingsPage'
 import AdminEmailTemplatesPage from './pages/admin/AdminEmailTemplatesPage'
+import AdminActivityPage      from './pages/admin/AdminActivityPage'
 import ExecutiveDashboard  from './pages/executive/ExecutiveDashboard'
 import ProgramSummaryPage  from './pages/executive/ProgramSummaryPage'
 import ExecutiveDocumentsPage from './pages/executive/ExecutiveDocumentsPage'
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="admin/trash"            element={<PrivateRoute roles={['admin']}><AdminTrashPage /></PrivateRoute>} />
         <Route path="admin/settings"         element={<PrivateRoute roles={['admin']}><AdminSettingsPage /></PrivateRoute>} />
         <Route path="admin/email-templates"  element={<PrivateRoute roles={['admin']}><AdminEmailTemplatesPage /></PrivateRoute>} />
+        <Route path="admin/activity"          element={<PrivateRoute roles={['admin']}><AdminActivityPage /></PrivateRoute>} />
 
         {/* Executive */}
         <Route path="executive/overview"   element={<PrivateRoute roles={['admin','executive']}><ExecutiveDashboard /></PrivateRoute>} />

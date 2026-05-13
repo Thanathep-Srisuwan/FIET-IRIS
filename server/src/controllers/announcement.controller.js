@@ -1,5 +1,8 @@
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
+const { logAdminAction } = require('../utils/adminLogger')
+const fs = require('fs')
+const path = require('path')
 
 const ensureTable = async (pool) => {
   await pool.request().query(`
@@ -116,6 +119,10 @@ const create = async (req, res) => {
         JOIN dbo.USERS u ON a.created_by = u.user_id
         WHERE a.announcement_id = (SELECT TOP 1 announcement_id FROM @inserted)
       `)
+    await logAdminAction(pool, sql, {
+      adminId: user_id, adminName: req.user?.name,
+      action: 'create', entityType: 'announcement', entityLabel: title.trim(),
+    })
     res.status(201).json({
       message: 'สร้างประกาศสำเร็จ',
       announcement: result.recordset[0],
@@ -181,14 +188,91 @@ const markAllRead = async (req, res) => {
   }
 }
 
+// PUT /api/announcements/:id (admin only)
+const update = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { title, content, link_url } = req.body
+    if (!title?.trim() || !content?.trim()) {
+      if (req.file) fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(400).json({ message: 'กรุณากรอกหัวข้อและเนื้อหา' })
+    }
+
+    const pool = await getPool()
+    await ensureTable(pool)
+
+    // หาข้อมูลเดิมเพื่อตรวจสอบรูปเดิม
+    const existing = await pool.request()
+      .input('id', sql.Int, id)
+      .query(`SELECT announcement_id, image_url FROM dbo.ANNOUNCEMENTS WHERE announcement_id = @id AND is_active = 1`)
+    if (existing.recordset.length === 0) {
+      if (req.file) fs.promises.unlink(req.file.path).catch(() => {})
+      return res.status(404).json({ message: 'ไม่พบประกาศนี้' })
+    }
+
+    const oldImageUrl = existing.recordset[0].image_url
+    let newImageUrl = oldImageUrl
+
+    if (req.file) {
+      newImageUrl = `/uploads/announcements/${req.file.filename}`
+      // ลบรูปเดิมออก
+      if (oldImageUrl) {
+        const oldPath = path.join(__dirname, '../../', oldImageUrl)
+        fs.promises.unlink(oldPath).catch(() => {})
+      }
+    } else if (req.body.remove_image === 'true' && oldImageUrl) {
+      newImageUrl = null
+      const oldPath = path.join(__dirname, '../../', oldImageUrl)
+      fs.promises.unlink(oldPath).catch(() => {})
+    }
+
+    await pool.request()
+      .input('id',        sql.Int,               id)
+      .input('title',     sql.NVarChar(255),      title.trim())
+      .input('content',   sql.NVarChar(sql.MAX),  content.trim())
+      .input('link_url',  sql.NVarChar(500),      link_url?.trim() || null)
+      .input('image_url', sql.NVarChar(500),      newImageUrl)
+      .query(`
+        UPDATE dbo.ANNOUNCEMENTS
+        SET title = @title, content = @content, link_url = @link_url, image_url = @image_url
+        WHERE announcement_id = @id AND is_active = 1
+      `)
+
+    const updated = await pool.request()
+      .input('id', sql.Int, id)
+      .query(`
+        SELECT a.announcement_id, a.title, a.content, a.link_url, a.image_url, a.created_at,
+               u.name AS created_by_name
+        FROM dbo.ANNOUNCEMENTS a JOIN dbo.USERS u ON a.created_by = u.user_id
+        WHERE a.announcement_id = @id
+      `)
+    await logAdminAction(pool, sql, {
+      adminId: req.user?.user_id, adminName: req.user?.name,
+      action: 'update', entityType: 'announcement', entityId: id, entityLabel: title.trim(),
+    })
+    res.json({ message: 'แก้ไขประกาศสำเร็จ', announcement: updated.recordset[0] })
+  } catch (err) {
+    if (req.file) fs.promises.unlink(req.file.path).catch(() => {})
+    logger.error(`updateAnnouncement: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
 // DELETE /api/announcements/:id (admin only)
 const remove = async (req, res) => {
   try {
     const { id } = req.params
     const pool = await getPool()
+    const existing = await pool.request().input('id', sql.Int, id)
+      .query('SELECT title FROM dbo.ANNOUNCEMENTS WHERE announcement_id = @id')
     await pool.request()
       .input('id', sql.Int, id)
       .query(`UPDATE dbo.ANNOUNCEMENTS SET is_active = 0 WHERE announcement_id = @id`)
+    await logAdminAction(pool, sql, {
+      adminId: req.user?.user_id, adminName: req.user?.name,
+      action: 'delete', entityType: 'announcement', entityId: id,
+      entityLabel: existing.recordset[0]?.title || String(id),
+    })
     res.json({ message: 'ลบประกาศสำเร็จ' })
   } catch (err) {
     logger.error(`deleteAnnouncement: ${err.message}`)
@@ -196,4 +280,4 @@ const remove = async (req, res) => {
   }
 }
 
-module.exports = { getAll, getPublic, create, markRead, markAllRead, remove }
+module.exports = { getAll, getPublic, create, update, markRead, markAllRead, remove }

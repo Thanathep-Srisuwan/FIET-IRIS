@@ -1,6 +1,7 @@
 const { getPool, sql } = require('../config/db')
 const logger = require('../utils/logger')
 const { sendMail, loadSettings } = require('../utils/mailer')
+const { logAdminAction, ensureActivityLogsTable } = require('../utils/adminLogger')
 const fs = require('fs')
 const path = require('path')
 
@@ -90,9 +91,9 @@ const renderManualEmailHtml = ({ recipientName, body, senderName, systemName, or
         <div style="background:#0d4f8c;padding:20px 26px;color:#ffffff">
           <table role="presentation" style="border-collapse:collapse;width:100%">
             <tr>
-              ${logoCid ? `<td style="width:56px;padding:0 14px 0 0;vertical-align:middle"><img src="cid:${logoCid}" alt="FIET IRIS" style="display:block;width:46px;height:auto;border:0"></td>` : ''}
+              ${logoCid ? `<td style="width:56px;padding:0 14px 0 0;vertical-align:middle"><img src="cid:${logoCid}" alt="${escapeHtml(systemName)}" style="display:block;width:46px;height:auto;border:0"></td>` : ''}
               <td style="vertical-align:middle">
-                <h2 style="margin:0;font-size:20px;letter-spacing:0">FIET IRIS</h2>
+                <h2 style="margin:0;font-size:20px;letter-spacing:0">${escapeHtml(systemName)}</h2>
                 <p style="margin:6px 0 0;color:#dbeafe;font-size:13px">${escapeHtml(orgName)}</p>
               </td>
             </tr>
@@ -451,6 +452,15 @@ const sendManualEmail = async (req, res) => {
       return res.status(502).json({ message: mailResult.error || 'email delivery failed' })
     }
 
+    await logAdminAction(pool, sql, {
+      adminId: req.user.user_id,
+      adminName: senderName,
+      action: 'send_email',
+      entityType: 'user',
+      entityId: recipient.user_id,
+      entityLabel: `${recipient.name} <${recipient.email}>`,
+      details: { subject: cleanSubject },
+    })
     logger.info(`Manual email sent by admin ${req.user.user_id} to user ${recipient.user_id}`)
     res.json({ message: 'Email sent successfully' })
   } catch (err) {
@@ -462,4 +472,53 @@ const sendManualEmail = async (req, res) => {
   }
 }
 
-module.exports = { getAdminStats, sendManualEmail }
+// GET /api/admin/activity-logs
+const getActivityLogs = async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page)  || 1)
+    const limit  = Math.min(100, parseInt(req.query.limit) || 50)
+    const offset = (page - 1) * limit
+    const action      = req.query.action      || ''
+    const entityType  = req.query.entity_type || ''
+    const search      = req.query.search      || ''
+
+    const pool = await getPool()
+    await ensureActivityLogsTable(pool)
+
+    const countResult = await pool.request()
+      .input('action',      sql.NVarChar(50),  action      || null)
+      .input('entity_type', sql.NVarChar(50),  entityType  || null)
+      .input('search',      sql.NVarChar(255), search      || null)
+      .query(`
+        SELECT COUNT(*) AS total FROM dbo.ADMIN_ACTIVITY_LOGS
+        WHERE (@action      IS NULL OR action      = @action)
+          AND (@entity_type IS NULL OR entity_type = @entity_type)
+          AND (@search      IS NULL OR admin_name LIKE '%' + @search + '%'
+               OR entity_label LIKE '%' + @search + '%')
+      `)
+
+    const rows = await pool.request()
+      .input('action',      sql.NVarChar(50),  action      || null)
+      .input('entity_type', sql.NVarChar(50),  entityType  || null)
+      .input('search',      sql.NVarChar(255), search      || null)
+      .input('limit',       sql.Int,           limit)
+      .input('offset',      sql.Int,           offset)
+      .query(`
+        SELECT log_id, admin_id, admin_name, action, entity_type, entity_id, entity_label, details, created_at
+        FROM dbo.ADMIN_ACTIVITY_LOGS
+        WHERE (@action      IS NULL OR action      = @action)
+          AND (@entity_type IS NULL OR entity_type = @entity_type)
+          AND (@search      IS NULL OR admin_name LIKE '%' + @search + '%'
+               OR entity_label LIKE '%' + @search + '%')
+        ORDER BY created_at DESC
+        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+      `)
+
+    res.json({ logs: rows.recordset, total: countResult.recordset[0].total, page, limit })
+  } catch (err) {
+    logger.error(`getActivityLogs: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+module.exports = { getAdminStats, sendManualEmail, getActivityLogs }

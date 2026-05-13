@@ -9,7 +9,8 @@ import {
   FileImage,
   CheckCircle2,
   RefreshCw,
-  Info
+  Info,
+  Pencil
 } from 'lucide-react'
 import { announcementService } from '../../services/api'
 import { useLanguage } from '../../contexts/LanguageContext'
@@ -81,11 +82,13 @@ function AnnouncementPreview({ form, preview }) {
   )
 }
 
-function AnnouncementForm({ onSaved }) {
+function AnnouncementForm({ onSaved, editItem, onCancelEdit }) {
   const { t } = useLanguage()
-  const [form, setForm] = useState({ title: '', content: '', link_url: '' })
+  const isEditing = Boolean(editItem)
+  const [form, setForm] = useState({ title: editItem?.title || '', content: editItem?.content || '', link_url: editItem?.link_url || '' })
   const [image, setImage] = useState(null)
-  const [preview, setPreview] = useState(null)
+  const [preview, setPreview] = useState(editItem?.image_url || null)
+  const [removeExistingImage, setRemoveExistingImage] = useState(false)
   const [imageDimensions, setImageDimensions] = useState(null)
   const [loading, setLoading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -93,9 +96,9 @@ function AnnouncementForm({ onSaved }) {
 
   useEffect(() => {
     return () => {
-      if (preview) URL.revokeObjectURL(preview)
+      if (image && preview) URL.revokeObjectURL(preview)
     }
-  }, [preview])
+  }, [])
 
   const updateField = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
 
@@ -108,51 +111,31 @@ function AnnouncementForm({ onSaved }) {
 
   const setSelectedImage = (file) => {
     if (!file) return
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      toast.error(t('adminAnnouncements.imageTypeError'))
-      return
-    }
-    if (file.size > MAX_IMAGE_SIZE) {
-      toast.error(t('adminAnnouncements.imageSizeError'))
-      return
-    }
-    if (preview) URL.revokeObjectURL(preview)
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) { toast.error(t('adminAnnouncements.imageTypeError')); return }
+    if (file.size > MAX_IMAGE_SIZE) { toast.error(t('adminAnnouncements.imageSizeError')); return }
+    if (image && preview) URL.revokeObjectURL(preview)
     const nextPreview = URL.createObjectURL(file)
     setImage(file)
     setImageDimensions(null)
     setPreview(nextPreview)
-
+    setRemoveExistingImage(false)
     const probe = new Image()
     probe.onload = () => setImageDimensions({ width: probe.naturalWidth, height: probe.naturalHeight })
     probe.src = nextPreview
   }
 
-  const handleImageChange = (e) => {
-    setSelectedImage(e.target.files[0])
-  }
-
-  const handleImageDrop = (e) => {
-    e.preventDefault()
-    setIsDragging(false)
-    setSelectedImage(e.dataTransfer.files[0])
-  }
-
-  const openImagePicker = () => fileInputRef.current?.click()
-
   const clearImage = () => {
-    if (preview) URL.revokeObjectURL(preview)
+    if (image && preview) URL.revokeObjectURL(preview)
     setImage(null)
     setImageDimensions(null)
     setPreview(null)
+    setRemoveExistingImage(true)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.title.trim() || !form.content.trim()) {
-      toast.error(t('adminAnnouncements.validateError'))
-      return
-    }
+    if (!form.title.trim() || !form.content.trim()) { toast.error(t('adminAnnouncements.validateError')); return }
     setLoading(true)
     try {
       const fd = new FormData()
@@ -160,11 +143,20 @@ function AnnouncementForm({ onSaved }) {
       fd.append('content', form.content.trim())
       fd.append('link_url', form.link_url.trim())
       if (image) fd.append('image', image)
-      const { data } = await announcementService.create(fd)
-      toast.success(t('adminAnnouncements.publishSuccess'))
-      setForm({ title: '', content: '', link_url: '' })
-      clearImage()
-      onSaved(data?.announcement)
+      if (removeExistingImage) fd.append('remove_image', 'true')
+
+      if (isEditing) {
+        const { data } = await announcementService.update(editItem.announcement_id, fd)
+        toast.success(t('adminAnnouncements.editSuccess'))
+        onSaved(data?.announcement, true)
+      } else {
+        const { data } = await announcementService.create(fd)
+        toast.success(t('adminAnnouncements.publishSuccess'))
+        setForm({ title: '', content: '', link_url: '' })
+        setImage(null); setPreview(null); setRemoveExistingImage(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        onSaved(data?.announcement, false)
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || t('common.error'))
     } finally {
@@ -172,14 +164,26 @@ function AnnouncementForm({ onSaved }) {
     }
   }
 
+  const isExistingImage = preview && !image
+
   return (
     <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-5">
       <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 md:p-6 shadow-sm space-y-5">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">{t('adminAnnouncements.createTitle')}</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{t('adminAnnouncements.createDesc')}</p>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              {isEditing ? t('adminAnnouncements.editTitle') : t('adminAnnouncements.createTitle')}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              {isEditing ? t('adminAnnouncements.editDesc') : t('adminAnnouncements.createDesc')}
+            </p>
           </div>
+          {isEditing && (
+            <button type="button" onClick={onCancelEdit}
+              className="shrink-0 p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         <div>
@@ -221,7 +225,7 @@ function AnnouncementForm({ onSaved }) {
             </p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500">{t('adminAnnouncements.imageInfo')}</p>
           </div>
-          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleImageChange} />
+          <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={e => setSelectedImage(e.target.files[0])} />
           {preview ? (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="relative flex min-h-56 max-h-[520px] items-center justify-center bg-slate-100 dark:bg-slate-800">
@@ -229,10 +233,17 @@ function AnnouncementForm({ onSaved }) {
                   <img src={preview} alt="" className="h-full w-full object-cover" />
                 </div>
                 <img src={preview} alt="preview" className="relative z-10 max-h-[520px] w-full object-contain" />
-                <div className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
-                  <CheckCircle2 size={14} />
-                  {getImageRatio(imageDimensions?.width, imageDimensions?.height) || 'Ready'}
-                </div>
+                {!isExistingImage && (
+                  <div className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                    <CheckCircle2 size={14} />
+                    {getImageRatio(imageDimensions?.width, imageDimensions?.height) || 'Ready'}
+                  </div>
+                )}
+                {isExistingImage && (
+                  <div className="absolute left-3 top-3 z-20 inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-sm">
+                    {t('adminAnnouncements.existingImage')}
+                  </div>
+                )}
               </div>
               <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                 <div className="flex min-w-0 items-center gap-3">
@@ -240,32 +251,34 @@ function AnnouncementForm({ onSaved }) {
                     <FileImage size={20} />
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{image?.name}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {formatFileSize(image?.size)} • {image?.type?.replace('image/', '').toUpperCase()}
-                      {imageDimensions && ` • ${imageDimensions.width} x ${imageDimensions.height}px`}
-                    </p>
+                    {image ? (
+                      <>
+                        <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{image.name}</p>
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {formatFileSize(image.size)} • {image.type?.replace('image/', '').toUpperCase()}
+                          {imageDimensions && ` • ${imageDimensions.width} x ${imageDimensions.height}px`}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('adminAnnouncements.currentImage')}</p>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400 lg:col-span-2">
-                  <Info size={15} className="mt-0.5 shrink-0 text-primary-500" />
-                  <span>{getImageFitMessage(imageDimensions)}</span>
-                </div>
+                {image && imageDimensions && (
+                  <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400 lg:col-span-2">
+                    <Info size={15} className="mt-0.5 shrink-0 text-primary-500" />
+                    <span>{getImageFitMessage(imageDimensions)}</span>
+                  </div>
+                )}
                 <div className="flex shrink-0 items-center gap-2 lg:justify-end">
-                  <button
-                    type="button"
-                    onClick={openImagePicker}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                  >
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition-colors hover:border-primary-300 hover:text-primary-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                     <RefreshCw size={14} />
                     {t('adminAnnouncements.changeImage')}
                   </button>
-                  <button
-                    type="button"
-                    onClick={clearImage}
+                  <button type="button" onClick={clearImage}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 bg-red-50 text-red-600 transition-colors hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
-                    aria-label={t('adminAnnouncements.removeImage')}
-                  >
+                    aria-label={t('adminAnnouncements.removeImage')}>
                     <X size={16} />
                   </button>
                 </div>
@@ -274,13 +287,10 @@ function AnnouncementForm({ onSaved }) {
           ) : (
             <button
               type="button"
-              onClick={openImagePicker}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setIsDragging(true)
-              }}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
-              onDrop={handleImageDrop}
+              onDrop={e => { e.preventDefault(); setIsDragging(false); setSelectedImage(e.dataTransfer.files[0]) }}
               className={`group flex min-h-48 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 text-center transition-all ${
                 isDragging
                   ? 'border-primary-500 bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-900/20 dark:text-primary-300'
@@ -309,13 +319,24 @@ function AnnouncementForm({ onSaved }) {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
           <p className="text-xs text-slate-400 dark:text-slate-500">{t('adminAnnouncements.reviewTip')}</p>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 bg-primary-700 hover:bg-primary-800"
-          >
-            {loading ? t('adminAnnouncements.publishing') : t('adminAnnouncements.publish')}
-          </button>
+          <div className="flex items-center gap-2">
+            {isEditing && (
+              <button type="button" onClick={onCancelEdit}
+                className="px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                {t('common.cancel')}
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-colors disabled:opacity-50 bg-primary-700 hover:bg-primary-800"
+            >
+              {loading
+                ? (isEditing ? t('adminAnnouncements.updating') : t('adminAnnouncements.publishing'))
+                : (isEditing ? t('adminAnnouncements.updateBtn') : t('adminAnnouncements.publish'))
+              }
+            </button>
+          </div>
         </div>
       </form>
 
@@ -324,7 +345,7 @@ function AnnouncementForm({ onSaved }) {
   )
 }
 
-function AnnouncementCard({ item, onDelete }) {
+function AnnouncementCard({ item, onDelete, onEdit }) {
   const { t, locale } = useLanguage()
   const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -332,19 +353,12 @@ function AnnouncementCard({ item, onDelete }) {
   const formatDate = (value) => {
     if (!value) return '-'
     return new Date(value).toLocaleString(locale, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
     })
   }
 
   const handleDelete = async () => {
-    if (!confirming) {
-      setConfirming(true)
-      return
-    }
+    if (!confirming) { setConfirming(true); return }
     setLoading(true)
     try {
       await announcementService.remove(item.announcement_id)
@@ -367,11 +381,7 @@ function AnnouncementCard({ item, onDelete }) {
               <div className="absolute inset-0 opacity-10 blur-2xl scale-150">
                 <img src={item.image_url} alt="" className="w-full h-full object-cover" />
               </div>
-              <img
-                src={item.image_url}
-                alt={item.title}
-                className="relative z-10 w-full h-full object-contain p-2"
-              />
+              <img src={item.image_url} alt={item.title} className="relative z-10 w-full h-full object-contain p-2" />
             </>
           ) : (
             <div className="relative z-10 h-full flex items-center justify-center text-slate-300 dark:text-slate-600">
@@ -389,17 +399,26 @@ function AnnouncementCard({ item, onDelete }) {
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">{item.title}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{t('adminAnnouncements.createdBy', { name: item.created_by_name || t('roles.admin') })}</p>
             </div>
-            <button
-              onClick={handleDelete}
-              disabled={loading}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 ${
-                confirming
-                  ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900'
-                  : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-red-600 hover:border-red-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:text-red-300 dark:hover:border-red-900'
-              }`}
-            >
-              {loading ? '...' : confirming ? t('adminAnnouncements.deleteConfirm') : t('common.delete')}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => onEdit(item)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border bg-slate-50 text-slate-500 border-slate-200 hover:text-primary-600 hover:border-primary-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:text-primary-300 dark:hover:border-primary-900 transition-colors"
+              >
+                <Pencil size={13} className="inline -mt-0.5 mr-1" />
+                {t('adminAnnouncements.editBtn')}
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={loading}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 ${
+                  confirming
+                    ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/30 dark:text-red-300 dark:border-red-900'
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:text-red-600 hover:border-red-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:text-red-300 dark:hover:border-red-900'
+                }`}
+              >
+                {loading ? '...' : confirming ? t('adminAnnouncements.deleteConfirm') : t('common.delete')}
+              </button>
+            </div>
           </div>
 
           <p className="text-sm text-slate-600 dark:text-slate-300 mt-4 whitespace-pre-wrap leading-relaxed line-clamp-3">{item.content}</p>
@@ -421,6 +440,7 @@ export default function AdminAnnouncementsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const [editingItem, setEditingItem] = useState(null)
 
   const fetchAll = async () => {
     setLoading(true)
@@ -436,12 +456,14 @@ export default function AdminAnnouncementsPage() {
 
   useEffect(() => { fetchAll() }, [])
 
-  const handleSaved = (announcement) => {
-    if (!announcement?.announcement_id) {
-      fetchAll()
-      return
+  const handleSaved = (announcement, isEdit) => {
+    if (!announcement?.announcement_id) { fetchAll(); return }
+    if (isEdit) {
+      setItems(prev => prev.map(a => a.announcement_id === announcement.announcement_id ? { ...a, ...announcement } : a))
+      setEditingItem(null)
+    } else {
+      setItems(prev => [announcement, ...prev])
     }
-    setItems(prev => [announcement, ...prev])
   }
 
   const filteredItems = useMemo(() => {
@@ -453,6 +475,8 @@ export default function AdminAnnouncementsPage() {
   }, [items, query])
 
   const handleDelete = (id) => setItems(prev => prev.filter(a => a.announcement_id !== id))
+  const handleEdit = (item) => { setEditingItem(item); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  const handleCancelEdit = () => setEditingItem(null)
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -474,7 +498,12 @@ export default function AdminAnnouncementsPage() {
         </div>
       </header>
 
-      <AnnouncementForm onSaved={handleSaved} />
+      <AnnouncementForm
+        key={editingItem?.announcement_id ?? 'new'}
+        onSaved={handleSaved}
+        editItem={editingItem}
+        onCancelEdit={handleCancelEdit}
+      />
 
       <section className="space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -505,7 +534,7 @@ export default function AdminAnnouncementsPage() {
         ) : (
           <div className="space-y-3">
             {filteredItems.map(item => (
-              <AnnouncementCard key={item.announcement_id} item={item} onDelete={handleDelete} />
+              <AnnouncementCard key={item.announcement_id} item={item} onDelete={handleDelete} onEdit={handleEdit} />
             ))}
           </div>
         )}

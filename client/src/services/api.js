@@ -101,23 +101,26 @@ export const userService = {
 
 // Document Types
 export const docTypeService = {
-  getAll:           ()           => api.get('/doc-types'),
-  create:           (data)       => api.post('/doc-types', data),
-  remove:           (id)         => api.delete(`/doc-types/${id}`),
-  getAllCategories:  ()           => api.get('/doc-types/all-categories'),
-  getCategories:    (id)         => api.get(`/doc-types/${id}/categories`),
-  createCategory:   (id, data)   => api.post(`/doc-types/${id}/categories`, data),
-  removeCategory:   (id, catId)  => api.delete(`/doc-types/${id}/categories/${catId}`),
+  getAll:           ()                  => api.get('/doc-types'),
+  create:           (data)              => api.post('/doc-types', data),
+  update:           (id, data)          => api.put(`/doc-types/${id}`, data),
+  remove:           (id)                => api.delete(`/doc-types/${id}`),
+  getAllCategories:  ()                  => api.get('/doc-types/all-categories'),
+  getCategories:    (id)                => api.get(`/doc-types/${id}/categories`),
+  createCategory:   (id, data)          => api.post(`/doc-types/${id}/categories`, data),
+  updateCategory:   (id, catId, data)   => api.put(`/doc-types/${id}/categories/${catId}`, data),
+  removeCategory:   (id, catId)         => api.delete(`/doc-types/${id}/categories/${catId}`),
 }
 
 // Announcements
 export const announcementService = {
-  getAll:     ()   => api.get('/announcements'),
-  getPublic:  ()   => api.get('/announcements/public'),
-  create:     (data) => api.post('/announcements', data),
-  markRead:   (id) => api.put(`/announcements/${id}/read`),
-  markAllRead: ()  => api.put('/announcements/read-all'),
-  remove:     (id) => api.delete(`/announcements/${id}`),
+  getAll:     ()          => api.get('/announcements'),
+  getPublic:  ()          => api.get('/announcements/public'),
+  create:     (data)      => api.post('/announcements', data),
+  update:     (id, data)  => api.put(`/announcements/${id}`, data),
+  markRead:   (id)        => api.put(`/announcements/${id}/read`),
+  markAllRead: ()         => api.put('/announcements/read-all'),
+  remove:     (id)        => api.delete(`/announcements/${id}`),
 }
 
 export default api
@@ -131,8 +134,9 @@ export const executiveService = {
 
 // Admin
 export const adminService = {
-  getStats: () => api.get('/admin/stats'),
-  sendUserEmail: (data) => api.post('/admin/email/user', data),
+  getStats:        ()       => api.get('/admin/stats'),
+  sendUserEmail:   (data)   => api.post('/admin/email/user', data),
+  getActivityLogs: (params) => api.get('/admin/activity-logs', { params }),
 }
 
 // Settings (admin only)

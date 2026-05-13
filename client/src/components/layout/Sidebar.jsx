@@ -12,6 +12,7 @@ import {
   Mail,
   BarChart3,
   GraduationCap,
+  Activity,
   LogOut,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -44,6 +45,7 @@ const navByRole = {
     { to: '/admin/programs', labelKey: 'nav.programs' },
     { to: '/admin/trash', labelKey: 'nav.trash' },
     { to: '/admin/logs', labelKey: 'nav.logs' },
+    { to: '/admin/activity', labelKey: 'nav.activityLog' },
     { to: '/admin/settings', labelKey: 'nav.settings' },
     { to: '/admin/email-templates', labelKey: 'nav.emailTemplates' },
   ],
@@ -153,6 +155,7 @@ function getIcon(to, isActive) {
   if (to.includes('admin/doc-types')) return <Tags {...iconProps} />
   if (to.includes('admin/trash')) return <Trash2 {...iconProps} />
   if (to.includes('admin/logs')) return <History {...iconProps} />
+  if (to.includes('admin/activity')) return <Activity {...iconProps} />
   if (to.includes('admin/settings')) return <Settings {...iconProps} />
   if (to.includes('admin/email-templates')) return <Mail {...iconProps} />
   if (to.includes('admin/programs')) return <GraduationCap {...iconProps} />

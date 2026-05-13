@@ -65,7 +65,7 @@ export default function AdminLogsPage() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = 'FIET-IRIS_deletion_logs.csv'
+    anchor.download = 'deletion_logs.csv'
     anchor.click()
     URL.revokeObjectURL(url)
   }
