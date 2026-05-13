@@ -989,24 +989,29 @@ const getDocumentSummary = async (req, res) => {
         COUNT(*) AS total,
         SUM(CASE WHEN d.no_expire = 1 THEN 1 ELSE 0 END) AS no_expire_count,
         SUM(CASE WHEN d.no_expire = 0 AND DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) < 0 THEN 1 ELSE 0 END) AS expired,
-        SUM(CASE WHEN d.no_expire = 0 AND DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) BETWEEN 0 AND 90 THEN 1 ELSE 0 END) AS expiring_soon
+        SUM(CASE WHEN d.no_expire = 0 AND DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) BETWEEN 0 AND 90 THEN 1 ELSE 0 END) AS expiring_soon,
+        SUM(CASE WHEN ver.doc_id IS NOT NULL THEN 1 ELSE 0 END) AS updated_count
       FROM dbo.DOCUMENTS d
       JOIN dbo.USERS u ON d.user_id = u.user_id
+      LEFT JOIN (
+        SELECT DISTINCT doc_id FROM dbo.DOCUMENT_FILES WHERE version_no > 1
+      ) ver ON ver.doc_id = d.doc_id
       WHERE d.status NOT IN ('deleted','trashed')
       GROUP BY u.role, u.degree_level
     `)
 
-    const init = () => ({ total: 0, expired: 0, expiring_soon: 0, no_expire_count: 0 })
+    const init = () => ({ total: 0, expired: 0, expiring_soon: 0, no_expire_count: 0, updated_count: 0 })
     const groups = {
       all: init(), bachelor: init(), master: init(),
       doctoral: init(), advisor: init(), staff: init(),
     }
 
     const addTo = (key, row) => {
-      groups[key].total          += parseInt(row.total)          || 0
-      groups[key].expired        += parseInt(row.expired)        || 0
-      groups[key].expiring_soon  += parseInt(row.expiring_soon)  || 0
+      groups[key].total           += parseInt(row.total)           || 0
+      groups[key].expired         += parseInt(row.expired)         || 0
+      groups[key].expiring_soon   += parseInt(row.expiring_soon)   || 0
       groups[key].no_expire_count += parseInt(row.no_expire_count) || 0
+      groups[key].updated_count   += parseInt(row.updated_count)   || 0
     }
 
     for (const row of result.recordset) {

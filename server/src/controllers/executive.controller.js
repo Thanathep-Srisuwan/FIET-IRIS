@@ -135,10 +135,14 @@ const getAllDocuments = async (req, res) => {
     const result = await r.query(`
       SELECT
         d.doc_id, d.title, d.doc_type, d.status,
-        d.issue_date, d.expire_date,
-        DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date) AS days_remaining,
-        u.name AS owner_name, u.email AS owner_email, u.program,
-        a.name AS advisor_name
+        d.issue_date, d.expire_date, d.no_expire,
+        CASE WHEN d.no_expire = 1 THEN NULL
+             ELSE DATEDIFF(DAY, CAST(GETDATE() AS DATE), d.expire_date)
+        END AS days_remaining,
+        u.name AS owner_name, u.email AS owner_email,
+        u.student_id AS owner_student_id, u.program,
+        a.name AS advisor_name,
+        (SELECT COUNT(*) FROM dbo.DOCUMENT_FILES f WHERE f.doc_id = d.doc_id) AS file_count
       FROM dbo.DOCUMENTS d
       JOIN dbo.USERS u  ON d.user_id    = u.user_id
       LEFT JOIN dbo.USERS a ON u.advisor_id = a.user_id

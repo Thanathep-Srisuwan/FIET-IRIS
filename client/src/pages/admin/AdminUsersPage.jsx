@@ -802,7 +802,7 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{u.name}</td>
                   <td className="px-4 py-3 text-slate-500 text-xs">{u.email}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${roleColor[u.role] || 'bg-slate-100 text-slate-500'}`}>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap ${roleColor[u.role] || 'bg-slate-100 text-slate-500'}`}>
                       {roleLabel[u.role] || u.role}
                     </span>
                   </td>

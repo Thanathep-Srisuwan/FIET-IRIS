@@ -25,7 +25,7 @@ const pageMeta = [
 ]
 
 function getPageMeta(pathname) {
-  return pageMeta.find(item => item.match.test(pathname)) || { titleKey: 'programs', eyebrow: 'Programs' }
+  return pageMeta.find(item => item.match.test(pathname)) || { titleKey: 'หลักสูตรและสังกัด', eyebrow: 'Programs' }
 }
 
 export default function Topbar({ onMenuClick }) {

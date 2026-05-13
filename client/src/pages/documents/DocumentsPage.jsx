@@ -103,13 +103,14 @@ function SummaryCards({ summary, activeTab }) {
   const stats = summary?.[activeTab] ?? summary?.all ?? {}
   const active = Math.max(0, (stats.total || 0) - (stats.expired || 0) - (stats.expiring_soon || 0) - (stats.no_expire_count || 0))
   const cards = [
-    { label: 'ทั้งหมด',     value: stats.total         || 0, colorClass: 'text-slate-700',   bg: 'bg-slate-100' },
-    { label: 'ปกติ',        value: active,                   colorClass: 'text-emerald-700', bg: 'bg-emerald-50' },
-    { label: 'ใกล้หมดอายุ', value: stats.expiring_soon || 0, colorClass: 'text-amber-700',   bg: 'bg-amber-50' },
-    { label: 'หมดอายุ',     value: stats.expired       || 0, colorClass: 'text-red-700',     bg: 'bg-red-50' },
+    { label: 'ทั้งหมด',      value: stats.total          || 0, colorClass: 'text-slate-700',   bg: 'bg-slate-100' },
+    { label: 'ปกติ',         value: active,                    colorClass: 'text-emerald-700', bg: 'bg-emerald-50' },
+    { label: 'ใกล้หมดอายุ',  value: stats.expiring_soon  || 0, colorClass: 'text-amber-700',   bg: 'bg-amber-50' },
+    { label: 'หมดอายุ',      value: stats.expired        || 0, colorClass: 'text-red-700',     bg: 'bg-red-50' },
+    { label: 'อัปเดตไฟล์แล้ว', value: stats.updated_count || 0, colorClass: 'text-blue-700',   bg: 'bg-blue-50' },
   ]
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
       {cards.map(card => (
         <div key={card.label} className={`${card.bg} rounded-xl px-4 py-3`}>
           <p className="text-xs text-slate-500 mb-1">{card.label}</p>
@@ -1020,7 +1021,7 @@ function ExportModal({ onClose, search, docType, status, sort, degreeLevel = '',
 }
 
 // ─── Upload Modal ─────────────────────────────────────────────────────────────
-function UploadModal({ onClose, onUploaded, docTypes, user }) {
+function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, user }) {
   const firstType = docTypes[0]?.type_code || ''
   const [form, setForm]             = useState({ title: '', doc_type: firstType, description: '', issue_date: '', expire_date: '', project_category: '', target_user_id: '' })
   const [noExpiry, setNoExpiry]     = useState(false)
@@ -1065,6 +1066,8 @@ function UploadModal({ onClose, onUploaded, docTypes, user }) {
     if (user?.role === 'admin' && !form.target_user_id) return toast.error('กรุณาเลือกเจ้าของเอกสาร')
     if (!form.issue_date) return toast.error('กรุณาระบุวันที่ออกในรูปแบบ วว/ดด/ปปปป')
     if (!noExpiry && !form.expire_date) return toast.error('กรุณาระบุวันหมดอายุในรูปแบบ วว/ดด/ปปปป')
+    if ((docTypeCategories[form.doc_type] || []).length > 0 && !form.project_category)
+      return toast.error('กรุณาระบุประเภทโครงการ')
     setLoading(true)
     try {
       const fd = new FormData()
@@ -1108,28 +1111,36 @@ function UploadModal({ onClose, onUploaded, docTypes, user }) {
               onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="กรอกชื่อเอกสาร" />
           </div>
 
-          <div className={`grid gap-3 ${form.doc_type === 'RI' ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                ประเภทเอกสาร <span className="text-red-500">*</span>
-              </label>
-              <select className="input-field" value={form.doc_type}
-                onChange={e => setForm(p => ({ ...p, doc_type: e.target.value, project_category: '' }))}>
-                {docTypes.map(t => <option key={t.type_id} value={t.type_code}>{t.type_code}</option>)}
-              </select>
-            </div>
-            {form.doc_type === 'RI' && (
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">ประเภทโครงการ <span className="text-red-500">*</span></label>
-                <select className="input-field" value={form.project_category}
-                  onChange={e => setForm(p => ({ ...p, project_category: e.target.value }))}>
-                  <option value="">-- โปรดระบุ --</option>
-                  <option value="urgent">ทฤษฎี</option>
-                  <option value="exempt">ปฏิบัติ</option>
-                </select>
+          {(() => {
+            const currentCategories = docTypeCategories[form.doc_type] || []
+            return (
+              <div className={`grid gap-3 ${currentCategories.length > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                    ประเภทเอกสาร <span className="text-red-500">*</span>
+                  </label>
+                  <select className="input-field" value={form.doc_type}
+                    onChange={e => setForm(p => ({ ...p, doc_type: e.target.value, project_category: '' }))}>
+                    {docTypes.map(t => <option key={t.type_id} value={t.type_code}>{t.type_code}</option>)}
+                  </select>
+                </div>
+                {currentCategories.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                      ประเภทโครงการ <span className="text-red-500">*</span>
+                    </label>
+                    <select className="input-field" value={form.project_category}
+                      onChange={e => setForm(p => ({ ...p, project_category: e.target.value }))}>
+                      <option value="">-- โปรดระบุ --</option>
+                      {currentCategories.map(c => (
+                        <option key={c.category_id} value={c.category_code}>{c.category_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            )
+          })()}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1224,8 +1235,9 @@ export default function DocumentsPage() {
 
   const tabs = isAdmin ? getAdminTabs() : isAdvisor ? getAdvisorTabs() : []
 
-  const [docs, setDocs]         = useState([])
-  const [docTypes, setDocTypes] = useState([])
+  const [docs, setDocs]                       = useState([])
+  const [docTypes, setDocTypes]               = useState([])
+  const [docTypeCategories, setDocTypeCategories] = useState({})
   const [advisors, setAdvisors] = useState([])
   const [advisorRelations, setAdvisorRelations] = useState({})
   const [summary, setSummary]   = useState(null)
@@ -1248,6 +1260,7 @@ export default function DocumentsPage() {
   // Load reference data
   useEffect(() => {
     docTypeService.getAll().then(r => setDocTypes(r.data || [])).catch(() => {})
+    docTypeService.getAllCategories().then(r => setDocTypeCategories(r.data || {})).catch(() => {})
     if (isAdmin) {
       userService.getAdvisors({ include_relations: 1 }).then(r => {
         setAdvisors(r.data?.advisors || [])
@@ -1493,6 +1506,7 @@ export default function DocumentsPage() {
                   <SortTh sortKey="expire_date"  currentSort={sort} onSort={handleSort}>วันหมดอายุ</SortTh>
                   <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>คงเหลือ</SortTh>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">สถานะ</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">ไฟล์</th>
                   <th />
                 </tr>
               </thead>
@@ -1555,6 +1569,15 @@ export default function DocumentsPage() {
                           {noExp ? 'ไม่มีวันหมดอายุ' : statusLabel[computedStatus(doc)] || doc.status}
                         </span>
                       </td>
+                      <td className="px-4 py-3.5 text-center">
+                        {doc.file_count > 0 ? (
+                          <span className="inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {doc.file_count}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-300">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3.5">
                         <span className="text-xs font-medium whitespace-nowrap" style={{ color: '#42b5e1' }}>ดูรายละเอียด →</span>
                       </td>
@@ -1604,15 +1627,16 @@ export default function DocumentsPage() {
                     <SortTh sortKey="expire_date"   currentSort={sort} onSort={handleSort}>วันหมดอายุ</SortTh>
                     <SortTh sortKey="days_remaining" currentSort={sort} onSort={handleSort}>คงเหลือ</SortTh>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">สถานะ</th>
+                    <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">ไฟล์</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {loading ? (
-                    <tr><td colSpan={8} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
+                    <tr><td colSpan={9} className="text-center py-16 text-slate-400 text-sm">กำลังโหลด...</td></tr>
                   ) : docs.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-16">
+                      <td colSpan={9} className="text-center py-16">
                         <p className="text-slate-300 text-4xl mb-3">○</p>
                         <p className="text-slate-400 text-sm">ไม่พบเอกสาร</p>
                       </td>
@@ -1647,6 +1671,15 @@ export default function DocumentsPage() {
                             {noExp ? 'ไม่มีวันหมดอายุ' : statusLabel[computedStatus(doc)] || doc.status}
                           </span>
                         </td>
+                        <td className="px-4 py-3.5 text-center">
+                          {doc.file_count > 0 ? (
+                            <span className="inline-flex items-center gap-0.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              {doc.file_count}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3.5">
                           <span className="text-xs font-medium whitespace-nowrap" style={{ color: '#42b5e1' }}>ดูรายละเอียด →</span>
                         </td>
@@ -1679,7 +1712,7 @@ export default function DocumentsPage() {
       )}
       {modal === 'upload' && (
         <UploadModal onClose={() => setModal(null)} onUploaded={refreshAll}
-          docTypes={docTypes} user={user} />
+          docTypes={docTypes} docTypeCategories={docTypeCategories} user={user} />
       )}
       {modal === 'detail' && selected && (
         <DetailModal doc={selected} role={user?.role}

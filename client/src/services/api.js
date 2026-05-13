@@ -96,9 +96,13 @@ export const userService = {
 
 // Document Types
 export const docTypeService = {
-  getAll:  ()    => api.get('/doc-types'),
-  create:  (data) => api.post('/doc-types', data),
-  remove:  (id)  => api.delete(`/doc-types/${id}`),
+  getAll:           ()           => api.get('/doc-types'),
+  create:           (data)       => api.post('/doc-types', data),
+  remove:           (id)         => api.delete(`/doc-types/${id}`),
+  getAllCategories:  ()           => api.get('/doc-types/all-categories'),
+  getCategories:    (id)         => api.get(`/doc-types/${id}/categories`),
+  createCategory:   (id, data)   => api.post(`/doc-types/${id}/categories`, data),
+  removeCategory:   (id, catId)  => api.delete(`/doc-types/${id}/categories/${catId}`),
 }
 
 // Announcements
