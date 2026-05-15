@@ -71,7 +71,7 @@ export default function LoginPage() {
           </div>
           <div className="h-8 w-px bg-[#dde5ee] dark:bg-slate-800" />
           <div>
-            <p className="text-[15px] font-bold leading-none tracking-wide text-[#1a2d45] dark:text-slate-200">FIET-IRIS</p>
+            <p className="text-[15px] font-bold leading-none tracking-wide text-[#1a2d45] dark:text-slate-200">FIET IRIS</p>
             <p className="mt-1.5 text-[11px] font-medium leading-none text-[#7a96b0] dark:text-slate-500">Faculty of Industrial Education and Technology</p>
           </div>
         </div>
@@ -175,7 +175,7 @@ export default function LoginPage() {
 
       <footer className="flex h-12 items-center justify-center border-t border-[#e8edf2] bg-white px-10 transition-colors duration-300 dark:border-slate-800 dark:bg-slate-900">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-[#a8bdd0] dark:text-slate-600">
-          © {new Date().getFullYear()} FIET, KMUTT · Integrity Research Information System
+          © {new Date().getFullYear()} Faculty of Industrial Education and Technology, KMUTT. ALL RIGHTS RESERVED.
         </span>
       </footer>
 

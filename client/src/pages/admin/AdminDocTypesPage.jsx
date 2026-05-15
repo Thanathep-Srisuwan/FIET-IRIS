@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { docTypeService } from '../../services/api'
+import { docTypeService, userService } from '../../services/api'
 import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
-import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X } from 'lucide-react'
+import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X, ShieldCheck, UserCheck } from 'lucide-react'
 
 function DocTypeBadge({ code }) {
   return (
@@ -52,28 +52,30 @@ function DeleteButton({ onDelete }) {
   )
 }
 
-function InlineEditRow({ value, sortOrder, onSave, onCancel }) {
+function InlineEditRow({ value, sortOrder, requiresApproval: initReqApproval, approverUserId: initApproverId, approverUsers, onSave, onCancel }) {
   const { t } = useLanguage()
-  const [name, setName] = useState(value)
-  const [order, setOrder] = useState(String(sortOrder))
-  const [saving, setSaving] = useState(false)
+  const [name, setName]                       = useState(value)
+  const [order, setOrder]                     = useState(String(sortOrder))
+  const [requiresApproval, setRequiresApproval] = useState(!!initReqApproval)
+  const [approverUserId, setApproverUserId]   = useState(initApproverId ? String(initApproverId) : '')
+  const [saving, setSaving]                   = useState(false)
 
   const handleSave = async () => {
     if (!name.trim()) return
     setSaving(true)
-    try { await onSave(name.trim(), parseInt(order) || 0) }
+    try { await onSave(name.trim(), parseInt(order) || 0, requiresApproval, approverUserId ? parseInt(approverUserId) : null) }
     finally { setSaving(false) }
   }
 
   return (
-    <div className="flex items-center gap-2 flex-1">
+    <div className="flex items-center gap-2 flex-1 flex-wrap">
       <input
         autoFocus
         type="text"
         value={name}
         onChange={e => setName(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onCancel() }}
-        className="input-field text-sm flex-1 py-1.5"
+        className="input-field text-sm flex-1 py-1.5 min-w-[120px]"
       />
       <input
         type="number"
@@ -82,6 +84,32 @@ function InlineEditRow({ value, sortOrder, onSave, onCancel }) {
         className="input-field text-sm w-20 py-1.5 tabular-nums"
         title={t('adminDocTypes.orderLabel')}
       />
+      <button
+        type="button"
+        onClick={() => setRequiresApproval(v => !v)}
+        title={t('adminDocTypes.requiresApprovalLabel')}
+        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+          requiresApproval
+            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900'
+            : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700'
+        }`}
+      >
+        <ShieldCheck size={13} />
+        {t('adminDocTypes.requiresApprovalShort')}
+      </button>
+      {requiresApproval && (
+        <select
+          value={approverUserId}
+          onChange={e => setApproverUserId(e.target.value)}
+          className="input-field text-sm py-1.5 min-w-[140px]"
+          title={t('adminDocTypes.approverLabel')}
+        >
+          <option value="">{t('adminDocTypes.approverAdmin')}</option>
+          {approverUsers.map(u => (
+            <option key={u.user_id} value={u.user_id}>{u.name} ({u.role})</option>
+          ))}
+        </select>
+      )}
       <button
         onClick={handleSave}
         disabled={saving || !name.trim()}
@@ -290,9 +318,10 @@ export default function AdminDocTypesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
-  const [form, setForm] = useState({ type_code: '', type_name: '', sort_order: '' })
+  const [form, setForm] = useState({ type_code: '', type_name: '', sort_order: '', requires_approval: false })
   const [expandedId, setExpandedId] = useState(null)
   const [editingTypeId, setEditingTypeId] = useState(null)
+  const [approverUsers, setApproverUsers] = useState([])
 
   const formatDate = (value) => {
     if (!value) return '-'
@@ -311,7 +340,12 @@ export default function AdminDocTypesPage() {
     }
   }
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+    userService.getAll({ limit: 200 })
+      .then(r => setApproverUsers((r.data?.users || r.data || []).filter(u => ['admin', 'staff'].includes(u.role))))
+      .catch(() => {})
+  }, [])
 
   const nextSortOrder = useMemo(() => {
     const max = types.reduce((highest, item) => Math.max(highest, Number(item.sort_order) || 0), 0)
@@ -342,9 +376,10 @@ export default function AdminDocTypesPage() {
         type_code: code,
         type_name: name,
         sort_order: Number.parseInt(form.sort_order, 10) || nextSortOrder,
+        requires_approval: form.requires_approval,
       })
       toast.success(t('adminDocTypes.addSuccess'))
-      setForm({ type_code: '', type_name: '', sort_order: '' })
+      setForm({ type_code: '', type_name: '', sort_order: '', requires_approval: false })
       fetchAll()
     } catch (err) {
       toast.error(err.response?.data?.message || t('common.error'))
@@ -353,13 +388,19 @@ export default function AdminDocTypesPage() {
     }
   }
 
-  const handleEditType = async (type, newName, newOrder) => {
+  const handleEditType = async (type, newName, newOrder, newRequiresApproval, newApproverUserId) => {
     try {
-      await docTypeService.update(type.type_id, { type_name: newName, sort_order: newOrder })
+      await docTypeService.update(type.type_id, {
+        type_name: newName, sort_order: newOrder,
+        requires_approval: newRequiresApproval,
+        approver_user_id: newApproverUserId || null,
+      })
       toast.success(t('adminDocTypes.editSuccess'))
       setEditingTypeId(null)
       setTypes(prev => prev.map(item =>
-        item.type_id === type.type_id ? { ...item, type_name: newName, sort_order: newOrder } : item
+        item.type_id === type.type_id
+          ? { ...item, type_name: newName, sort_order: newOrder, requires_approval: newRequiresApproval, approver_user_id: newApproverUserId || null }
+          : item
       ))
     } catch (err) {
       toast.error(err.response?.data?.message || t('common.error'))
@@ -447,6 +488,28 @@ export default function AdminDocTypesPage() {
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{t('adminDocTypes.orderHint')}</p>
             </div>
 
+            <div>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-2">{t('adminDocTypes.requiresApprovalLabel')}</label>
+              <button
+                type="button"
+                onClick={() => updateForm('requires_approval', !form.requires_approval)}
+                className={`flex items-center gap-2 w-full px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${
+                  form.requires_approval
+                    ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-300'
+                    : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
+                }`}
+              >
+                <ShieldCheck size={16} className={form.requires_approval ? 'text-amber-600' : 'text-slate-400'} />
+                <span className="flex-1 text-left">
+                  {form.requires_approval ? t('adminDocTypes.requiresApprovalOn') : t('adminDocTypes.requiresApprovalOff')}
+                </span>
+                <div className={`w-9 h-5 rounded-full transition-colors relative ${form.requires_approval ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.requires_approval ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </div>
+              </button>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{t('adminDocTypes.requiresApprovalHint')}</p>
+            </div>
+
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
               <p className="text-xs font-semibold text-slate-400 mb-2">{t('adminDocTypes.previewLabel')}</p>
               <div className="flex items-center gap-3">
@@ -504,7 +567,7 @@ export default function AdminDocTypesPage() {
               <table className="w-full text-sm" style={{ minWidth: '680px' }}>
                 <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800">
                   <tr>
-                    {[t('adminDocTypes.colCode'), t('adminDocTypes.colName'), t('adminDocTypes.colOrder'), t('adminDocTypes.colCreated'), ''].map((header, i) => (
+                    {[t('adminDocTypes.colCode'), t('adminDocTypes.colName'), t('adminDocTypes.colOrder'), t('adminDocTypes.requiresApprovalLabel'), t('adminDocTypes.colCreated'), ''].map((header, i) => (
                       <th key={i} className="text-left px-5 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {header}
                       </th>
@@ -518,12 +581,15 @@ export default function AdminDocTypesPage() {
                         <td className="px-5 py-4">
                           <DocTypeBadge code={type.type_code} />
                         </td>
-                        <td className="px-5 py-4" colSpan={editingTypeId === type.type_id ? 2 : 1}>
+                        <td className="px-5 py-4" colSpan={editingTypeId === type.type_id ? 3 : 1}>
                           {editingTypeId === type.type_id ? (
                             <InlineEditRow
                               value={type.type_name}
                               sortOrder={type.sort_order}
-                              onSave={(name, order) => handleEditType(type, name, order)}
+                              requiresApproval={type.requires_approval}
+                              approverUserId={type.approver_user_id}
+                              approverUsers={approverUsers}
+                              onSave={(name, order, req, approverId) => handleEditType(type, name, order, req, approverId)}
                               onCancel={() => setEditingTypeId(null)}
                             />
                           ) : (
@@ -532,6 +598,28 @@ export default function AdminDocTypesPage() {
                         </td>
                         {editingTypeId !== type.type_id && (
                           <td className="px-5 py-4 text-slate-500 dark:text-slate-400 tabular-nums">{type.sort_order}</td>
+                        )}
+                        {editingTypeId !== type.type_id && (
+                          <td className="px-5 py-4">
+                            {type.requires_approval ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900 w-fit">
+                                  <ShieldCheck size={11} />
+                                  {t('adminDocTypes.requiresApprovalShort')}
+                                </span>
+                                {type.approver_user_id ? (
+                                  <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <UserCheck size={11} className="text-primary-500" />
+                                    {approverUsers.find(u => u.user_id === type.approver_user_id)?.name || `#${type.approver_user_id}`}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-400 dark:text-slate-500">{t('adminDocTypes.approverAdmin')}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 dark:text-slate-500">{t('adminDocTypes.noApprovalShort')}</span>
+                            )}
+                          </td>
                         )}
                         <td className="px-5 py-4 text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">{formatDate(type.created_at)}</td>
                         <td className="px-5 py-4">

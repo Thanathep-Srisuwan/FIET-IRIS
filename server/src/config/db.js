@@ -5,9 +5,19 @@ const toBool = (value, fallback = false) => {
   return String(value).toLowerCase() === 'true'
 }
 
+const parseDbServer = (value = '') => {
+  const [server, instanceName] = value.split('\\')
+  return {
+    server: server || 'localhost',
+    instanceName,
+  }
+}
+
+const { server, instanceName } = parseDbServer(process.env.DB_SERVER)
+const port = parseInt(process.env.DB_PORT, 10)
+
 const config = {
-  server: process.env.DB_SERVER,
-  port: parseInt(process.env.DB_PORT) || 1433,
+  server,
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
@@ -24,6 +34,7 @@ const config = {
     useUTC: false,
     connectTimeout: 30000,
     requestTimeout: 30000,
+    ...(instanceName ? { instanceName } : {}),
   },
   pool: {
     max: 10,
@@ -31,6 +42,10 @@ const config = {
     idleTimeoutMillis: 30000,
     acquireTimeoutMillis: 30000,
   },
+}
+
+if (!instanceName) {
+  config.port = Number.isNaN(port) ? 1433 : port
 }
 
 const pool = new sql.ConnectionPool(config)

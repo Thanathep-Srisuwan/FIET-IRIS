@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AlertTriangle, Bell, CheckCircle2, Clock, FileText, GraduationCap, Users } from 'lucide-react'
 import { documentService, notificationService, userService } from '../../services/api'
 import { useAuthStore } from '../../stores/authStore'
@@ -9,6 +9,13 @@ const statusBadge = {
   active:        'bg-emerald-50 text-emerald-700 border-emerald-200',
   expiring_soon: 'bg-amber-50 text-amber-700 border-amber-200',
   expired:       'bg-red-50 text-red-700 border-red-200',
+}
+
+const ADVISEE_STATUS_ROUTES = {
+  all:      '/advisor/advisees',
+  expired:  '/advisor/advisees?status=expired',
+  expiring: '/advisor/advisees?status=expiring',
+  pending:  '/advisor/advisees?status=pending',
 }
 
 const getDocStatus = (doc) => {
@@ -30,6 +37,7 @@ const formatDate = (value, locale) => value ? new Date(value).toLocaleDateString
 export default function AdvisorDashboard() {
   const { user } = useAuthStore()
   const { locale, t } = useLanguage()
+  const navigate = useNavigate()
   const [docs, setDocs] = useState([])
   const [adviseeSummary, setAdviseeSummary] = useState(null)
   const [notifs, setNotifs] = useState([])
@@ -40,14 +48,23 @@ export default function AdvisorDashboard() {
       documentService.getAll({ limit: 10, sort_by: 'expire_date', sort_dir: 'asc' }),
       userService.getMyAdvisees(),
       notificationService.getUnread(),
-    ]).then(([d, advisees, n]) => {
+    ]).then(([d, adv, n]) => {
       setDocs(d.data?.documents || [])
-      setAdviseeSummary(advisees.data?.summary || null)
+      setAdviseeSummary(adv.data?.summary || null)
       setNotifs(n.data || [])
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   const hasUrgent = (adviseeSummary?.with_expired ?? 0) > 0 || (adviseeSummary?.with_expiring ?? 0) > 0
+
+  const getBannerDesc = () => {
+    if (!hasUrgent) return t('advisorDashboard.noProblemDesc')
+    const expired = adviseeSummary?.with_expired ?? 0
+    const expiring = adviseeSummary?.with_expiring ?? 0
+    if (expired > 0 && expiring > 0) return t('advisorDashboard.hasProblemDesc', { expired, expiring })
+    if (expired > 0) return t('advisorDashboard.hasProblemExpiredOnly', { expired })
+    return t('advisorDashboard.hasProblemExpiringOnly', { expiring })
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -84,12 +101,7 @@ export default function AdvisorDashboard() {
               {hasUrgent ? t('advisorDashboard.hasProblemTitle') : t('advisorDashboard.noProblemTitle')}
             </p>
             <p className="mt-0.5 text-xs leading-5 text-slate-600 dark:text-slate-300">
-              {hasUrgent
-                ? t('advisorDashboard.hasProblemDesc', {
-                    expired: adviseeSummary?.with_expired ?? 0,
-                    expiring: adviseeSummary?.with_expiring ?? 0,
-                  })
-                : t('advisorDashboard.noProblemDesc')}
+              {getBannerDesc()}
             </p>
           </div>
         </div>
@@ -97,37 +109,57 @@ export default function AdvisorDashboard() {
 
       {/* Stats grid */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-950">
+        <button
+          type="button"
+          onClick={() => navigate(ADVISEE_STATUS_ROUTES.all)}
+          className="rounded-xl border border-slate-200 bg-white p-4 text-left transition-all hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700 dark:hover:bg-slate-900"
+        >
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">{t('dashboard.adviseeCount')}</p>
             <Users size={15} className="shrink-0 text-slate-300 dark:text-slate-600" />
           </div>
           <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">{adviseeSummary?.total ?? 0}</p>
-        </div>
+          <p className="mt-1 text-[10px] text-slate-400">{t('advisorDashboard.viewAdvisees')}</p>
+        </button>
 
-        <div className="rounded-xl border border-red-200 bg-white p-4 dark:border-red-900/50 dark:bg-slate-950">
+        <button
+          type="button"
+          onClick={() => navigate(ADVISEE_STATUS_ROUTES.expired)}
+          className="rounded-xl border border-red-200 bg-white p-4 text-left transition-all hover:bg-red-50 hover:shadow-sm dark:border-red-900/50 dark:bg-slate-950 dark:hover:bg-red-950/20"
+        >
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-red-600 dark:text-red-400">{t('dashboard.adviseeExpired')}</p>
             <AlertTriangle size={15} className="shrink-0 text-red-300 dark:text-red-700" />
           </div>
           <p className="mt-1 text-2xl font-bold text-red-700 dark:text-red-400">{adviseeSummary?.with_expired ?? 0}</p>
-        </div>
+          <p className="mt-1 text-[10px] text-red-400">{t('advisorDashboard.viewAdvisees')}</p>
+        </button>
 
-        <div className="rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-900/50 dark:bg-slate-950">
+        <button
+          type="button"
+          onClick={() => navigate(ADVISEE_STATUS_ROUTES.expiring)}
+          className="rounded-xl border border-amber-200 bg-white p-4 text-left transition-all hover:bg-amber-50 hover:shadow-sm dark:border-amber-900/50 dark:bg-slate-950 dark:hover:bg-amber-950/20"
+        >
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">{t('dashboard.adviseeExpiring')}</p>
             <Clock size={15} className="shrink-0 text-amber-300 dark:text-amber-700" />
           </div>
           <p className="mt-1 text-2xl font-bold text-amber-700 dark:text-amber-400">{adviseeSummary?.with_expiring ?? 0}</p>
-        </div>
+          <p className="mt-1 text-[10px] text-amber-400">{t('advisorDashboard.viewAdvisees')}</p>
+        </button>
 
-        <div className="rounded-xl border border-primary-200 bg-white p-4 dark:border-primary-900/50 dark:bg-slate-950">
+        <button
+          type="button"
+          onClick={() => navigate(ADVISEE_STATUS_ROUTES.pending)}
+          className="rounded-xl border border-primary-200 bg-white p-4 text-left transition-all hover:bg-primary-50 hover:shadow-sm dark:border-primary-900/50 dark:bg-slate-950 dark:hover:bg-primary-950/20"
+        >
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold text-primary-600 dark:text-primary-400">{t('advisorAdvisees.pendingDocs')}</p>
             <FileText size={15} className="shrink-0 text-primary-300 dark:text-primary-700" />
           </div>
           <p className="mt-1 text-2xl font-bold text-primary-700 dark:text-primary-400">{adviseeSummary?.pending_documents ?? 0}</p>
-        </div>
+          <p className="mt-1 text-[10px] text-primary-400">{t('advisorAdvisees.pendingDocsHint')}</p>
+        </button>
       </section>
 
       {/* Main two-column */}
@@ -141,7 +173,7 @@ export default function AdvisorDashboard() {
               <p className="mt-0.5 text-xs text-slate-400">{t('advisorDashboard.docsTableDesc')}</p>
             </div>
             <Link
-              to="/documents"
+              to="/documents?panel=advisees"
               className="text-xs font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
             >
               {t('common.viewAll')} →
@@ -220,7 +252,7 @@ export default function AdvisorDashboard() {
               {notifs.slice(0, 5).map(item => (
                 <Link
                   key={item.notif_id}
-                  to="/documents"
+                  to="/documents?panel=advisees"
                   className="block rounded-xl bg-amber-50 p-3 transition-colors hover:bg-amber-100 dark:bg-amber-950/20 dark:hover:bg-amber-950/30"
                 >
                   <p className="truncate text-xs font-semibold text-amber-900 dark:text-amber-200">{item.doc_title}</p>
@@ -230,35 +262,6 @@ export default function AdvisorDashboard() {
             </div>
           )}
         </div>
-      </section>
-
-      {/* Quick links */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Link
-          to="/advisor/advisees"
-          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all hover:border-primary-300 hover:bg-primary-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-primary-800 dark:hover:bg-primary-950/20"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
-            <GraduationCap size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('advisorDashboard.quickLinkAdvisees')}</p>
-            <p className="mt-0.5 text-xs text-slate-400">{t('advisorDashboard.quickLinkAdviseesDesc')}</p>
-          </div>
-        </Link>
-
-        <Link
-          to="/documents"
-          className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-all hover:border-emerald-300 hover:bg-emerald-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/20"
-        >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-            <FileText size={20} />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('advisorDashboard.quickLinkDocuments')}</p>
-            <p className="mt-0.5 text-xs text-slate-400">{t('advisorDashboard.quickLinkDocumentsDesc')}</p>
-          </div>
-        </Link>
       </section>
 
     </div>

@@ -56,9 +56,16 @@ const pageMeta = [
   { match: /^\/help/, titleKey: 'topbar.help', eyebrowKey: 'topbar.sectionSupport' },
 ]
 
-function getPageMeta(pathname, role) {
+function getPageMeta(pathname, search, role) {
   const matched = pageMeta.find(item => item.match.test(pathname))
     || { titleKey: 'topbar.workspace', eyebrowKey: 'topbar.workspace' }
+  if (/^\/documents/.test(pathname) && role === 'advisor') {
+    const panel = new URLSearchParams(search).get('panel')
+    return {
+      titleKey: panel === 'mine' ? 'topbar.documentsAdvisorMine' : 'topbar.documentsAdvisor',
+      eyebrowKey: 'topbar.sectionDocuments',
+    }
+  }
   return {
     titleKey: matched.titleByRole?.[role] || matched.titleKey || matched.titleByRole?.user || 'topbar.workspace',
     eyebrowKey: matched.eyebrowByRole?.[role] || matched.eyebrowKey || matched.eyebrowByRole?.user || 'topbar.workspace',
@@ -73,7 +80,7 @@ export default function Topbar({ onMenuClick }) {
   const [, setUnreadCount] = useState(0)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
-  const meta = getPageMeta(location.pathname, user?.role)
+  const meta = getPageMeta(location.pathname, location.search, user?.role)
 
   const today = new Date().toLocaleDateString(locale, {
     weekday: 'short',

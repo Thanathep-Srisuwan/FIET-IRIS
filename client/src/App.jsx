@@ -48,7 +48,7 @@ export default function App() {
         <Route path="documents"  element={<DocumentsPage />} />
         <Route path="student/tasks"    element={<PrivateRoute roles={['student']}><Navigate to="/dashboard" replace /></PrivateRoute>} />
         <Route path="student/activity" element={<PrivateRoute roles={['student']}><Navigate to="/dashboard" replace /></PrivateRoute>} />
-        <Route path="student/trash"    element={<PrivateRoute roles={['student','staff']}><StudentTrashPage /></PrivateRoute>} />
+        <Route path="student/trash"    element={<PrivateRoute roles={['student','staff','advisor']}><StudentTrashPage /></PrivateRoute>} />
         <Route path="advisor/advisees" element={<PrivateRoute roles={['advisor']}><AdvisorAdviseesPage /></PrivateRoute>} />
         <Route path="help"             element={<HelpPage />} />
 

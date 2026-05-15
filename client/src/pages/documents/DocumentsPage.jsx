@@ -372,7 +372,7 @@ function FileVersionRow({ file, docId, isCurrent = false, previewLoading, onPrev
 }
 
 // ─── Detail Modal ─────────────────────────────────────────────────────────────
-function DetailModal({ doc, onClose, onDeleted, role, approvalPanel = false }) {
+function DetailModal({ doc, onClose, onDeleted, role, approvalPanel = false, requiresApproval = true }) {
   const { t, locale } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState({})
@@ -545,7 +545,7 @@ function DetailModal({ doc, onClose, onDeleted, role, approvalPanel = false }) {
                 <span className="px-2 py-0.5 text-xs font-semibold rounded"
                   style={{ backgroundColor: gb.bg, color: gb.color }}>{gb.text}</span>
               )}
-              {(!currentDoc.approval_status || currentDoc.approval_status === 'approved') ? (
+              {(!requiresApproval || !currentDoc.approval_status || currentDoc.approval_status === 'approved') ? (
                 computedStatus(currentDoc) && (
                   <span className={`px-2 py-0.5 text-xs font-medium rounded-md ${statusColor[computedStatus(currentDoc)] || ''}`}>
                     {statusLabel[computedStatus(currentDoc)] || currentDoc.status}
@@ -788,8 +788,8 @@ function DetailModal({ doc, onClose, onDeleted, role, approvalPanel = false }) {
             </div>
           )}
 
-          {/* Approval section — admin only */}
-          {role === 'admin' && approvalPanel && currentDoc.approval_status !== undefined && (
+          {/* Approval section — admin or staff approver, only for doc types that require approval */}
+          {(role === 'admin' || role === 'staff') && approvalPanel && requiresApproval && currentDoc.approval_status !== undefined && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex items-start gap-3">
@@ -1640,24 +1640,39 @@ function UploadModal({ onClose, onUploaded, docTypes, docTypeCategories = {}, us
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function DocumentsPage() {
   const { language, locale, t } = useLanguage()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const academicOptions = useAcademicOptions()
   const activeProgramsByDegree = academicOptions.programsByDegree || programsByDegree
   const activeProgramOptions = academicOptions.programs || allProgramOptions
   const { user } = useAuthStore()
   const isAdmin   = user?.role === 'admin'
   const isAdvisor = user?.role === 'advisor'
+  const isStaff   = user?.role === 'staff'
 
   const [docs, setDocs]                       = useState([])
   const [docTypes, setDocTypes]               = useState([])
   const [docTypeCategories, setDocTypeCategories] = useState({})
   const [advisors, setAdvisors] = useState([])
+
+  // lookup: type_code → requires_approval
+  const docTypeApprovalMap = useMemo(() => {
+    const map = {}
+    docTypes.forEach(dt => { map[dt.type_code] = !!dt.requires_approval })
+    return map
+  }, [docTypes])
+
+  // doc types ที่ staff คนนี้เป็น approver
+  const staffApproverTypes = useMemo(() => {
+    if (!isStaff || !user) return []
+    return docTypes.filter(dt => dt.approver_user_id === user.user_id && dt.requires_approval)
+  }, [isStaff, user, docTypes])
   const [advisorRelations, setAdvisorRelations] = useState({})
   const [summary, setSummary]   = useState(null)
   const [total, setTotal]       = useState(0)
   const [loading, setLoading]   = useState(true)
 
-  const [panel, setPanel]                 = useState(isAdvisor ? 'advisees' : 'library')
+  const initialAdvisorPanel = isAdvisor && searchParams.get('panel') === 'mine' ? 'mine' : 'advisees'
+  const [panel, setPanel]                 = useState(isAdvisor ? initialAdvisorPanel : 'library')
   const [activeTab, setActiveTab]       = useState('all')
   const [search, setSearch]             = useState(searchParams.get('search') || '')
   const debouncedSearch = useDebouncedValue(search, 350)
@@ -1680,6 +1695,14 @@ export default function DocumentsPage() {
     expiring_soon: t('documents.statusExpiring'),
     expired:       t('documents.statusExpired'),
   }), [t])
+
+  useEffect(() => {
+    if (!isAdvisor) return
+    const nextPanel = searchParams.get('panel') === 'mine' ? 'mine' : 'advisees'
+    const nextSearch = searchParams.get('search') || ''
+    if (panel !== nextPanel) setPanel(nextPanel)
+    if (search !== nextSearch) setSearch(nextSearch)
+  }, [isAdvisor, searchParams])
 
   // Load reference data
   useEffect(() => {
@@ -1736,6 +1759,7 @@ export default function DocumentsPage() {
         ...(advisorOwnPanel ? { owner_role: 'advisor' } : tabParams),
         search: debouncedSearch, doc_type: docType, status,
         ...(isAdmin && panel === 'approval' && { approval_status: 'pending' }),
+        ...(isStaff && panel === 'approver' && { scope: 'approver' }),
         sort_by: sort.by, sort_dir: sort.dir,
         page, limit: LIMIT,
         ...(advisorFilter && { advisor_id: advisorFilter }),
@@ -1765,10 +1789,14 @@ export default function DocumentsPage() {
   const handlePanelChange = (nextPanel) => {
     setPanel(nextPanel)
     setActiveTab('all')
+    setSearch('')
     setStatus('')
     setAdvisorFilter('')
     setDegreeFilter('')
     setProgramFilter('')
+    if (isAdvisor) {
+      setSearchParams({ panel: nextPanel })
+    }
   }
 
   const handleTabChange = (key) => { setActiveTab(key); setAdvisorFilter(''); setDegreeFilter(''); setProgramFilter('') }
@@ -1932,39 +1960,42 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      {isAdvisor && (
+      {/* Staff approver panel switcher — แสดงเฉพาะ staff ที่มี assigned doc types */}
+      {isStaff && staffApproverTypes.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
-            onClick={() => handlePanelChange('advisees')}
+            onClick={() => handlePanelChange('library')}
             className={`rounded-xl border p-4 text-left transition-all ${
-              panel === 'advisees'
+              panel === 'library'
                 ? 'border-[#42b5e1] bg-[#f0f9ff] shadow-sm'
                 : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
             }`}
           >
             <div className="flex items-start gap-3">
-              <Users size={20} className={panel === 'advisees' ? 'text-[#42b5e1]' : 'text-slate-400'} />
+              <FileText size={20} className={panel === 'library' ? 'text-[#42b5e1]' : 'text-slate-400'} />
               <div>
-                <p className="text-sm font-semibold text-slate-800">{t('documents.panelAdvisorAdviseesTitle')}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelAdvisorAdviseesHint')}</p>
+                <p className="text-sm font-semibold text-slate-800">{t('documents.panelMyDocsTitle')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelMyDocsHint')}</p>
               </div>
             </div>
           </button>
           <button
             type="button"
-            onClick={() => handlePanelChange('mine')}
+            onClick={() => handlePanelChange('approver')}
             className={`rounded-xl border p-4 text-left transition-all ${
-              panel === 'mine'
-                ? 'border-emerald-300 bg-emerald-50 shadow-sm'
+              panel === 'approver'
+                ? 'border-amber-300 bg-amber-50 shadow-sm'
                 : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
             }`}
           >
             <div className="flex items-start gap-3">
-              <FileText size={20} className={panel === 'mine' ? 'text-emerald-600' : 'text-slate-400'} />
+              <CheckCircle2 size={20} className={panel === 'approver' ? 'text-amber-600' : 'text-slate-400'} />
               <div>
-                <p className="text-sm font-semibold text-slate-800">{t('documents.panelAdvisorMineTitle')}</p>
-                <p className="mt-0.5 text-xs text-slate-500">{t('documents.panelAdvisorMineHint')}</p>
+                <p className="text-sm font-semibold text-slate-800">{t('documents.panelStaffApproverTitle')}</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  {t('documents.panelStaffApproverHint', { types: staffApproverTypes.map(dt => dt.type_code).join(', ') })}
+                </p>
               </div>
             </div>
           </button>
@@ -1984,6 +2015,14 @@ export default function DocumentsPage() {
               <div className="flex items-start gap-2 text-sm text-amber-800">
                 <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
                 <p>{t('documents.panelApprovalNotice')}</p>
+              </div>
+            </div>
+          )}
+          {isStaff && panel === 'approver' && (
+            <div className="border-b border-amber-100 bg-amber-50 px-4 py-3">
+              <div className="flex items-start gap-2 text-sm text-amber-800">
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+                <p>{t('documents.panelStaffApproverNotice')}</p>
               </div>
             </div>
           )}
@@ -2109,9 +2148,11 @@ export default function DocumentsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap ${approvalColor[doc.approval_status] || ''}`}>
-                          {approvalLabel(doc.approval_status, t)}
-                        </span>
+                        {docTypeApprovalMap[doc.doc_type] !== false && (
+                          <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap ${approvalColor[doc.approval_status] || ''}`}>
+                            {approvalLabel(doc.approval_status, t)}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         {doc.file_count > 0 ? (
@@ -2221,9 +2262,11 @@ export default function DocumentsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap ${approvalColor[doc.approval_status] || ''}`}>
-                            {approvalLabel(doc.approval_status, t)}
-                          </span>
+                          {docTypeApprovalMap[doc.doc_type] !== false && (
+                            <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md whitespace-nowrap ${approvalColor[doc.approval_status] || ''}`}>
+                              {approvalLabel(doc.approval_status, t)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           {doc.file_count > 0 ? (
@@ -2271,7 +2314,9 @@ export default function DocumentsPage() {
           docTypes={docTypes} docTypeCategories={docTypeCategories} user={user} />
       )}
       {modal === 'detail' && selected && (
-        <DetailModal doc={selected} role={user?.role} approvalPanel={isAdmin && panel === 'approval'}
+        <DetailModal doc={selected} role={user?.role}
+          approvalPanel={(isAdmin && panel === 'approval') || (isStaff && panel === 'approver')}
+          requiresApproval={docTypeApprovalMap[selected.doc_type] !== false}
           onClose={() => { setModal(null); setSelected(null) }}
           onDeleted={refreshAll} />
       )}

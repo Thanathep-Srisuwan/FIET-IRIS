@@ -41,8 +41,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 })
 
-const auth      = [authenticate, requirePasswordChange]
-const adminOnly = [authenticate, requirePasswordChange, authorize('admin')]
+const auth           = [authenticate, requirePasswordChange]
+const adminOnly      = [authenticate, requirePasswordChange, authorize('admin')]
+const adminOrStaff   = [authenticate, requirePasswordChange, authorize('admin', 'staff')]
 
 // Static sub-routes (ต้องอยู่ก่อน /:id)
 router.get('/summary',                      ...adminOnly, getDocumentSummary)
@@ -52,8 +53,8 @@ router.delete('/trash/bulk-permanent',      ...adminOnly, bulkPermanentDeleteDoc
 router.get('/my-trash',                     ...auth,       getMyTrashedDocuments)
 router.put('/my-trash/:id/restore',         ...auth,       selfRestoreDocument)
 router.put('/:id/restore',                  ...adminOnly, restoreDocument)
-router.put('/:id/approve',                  ...adminOnly, approveDocument)
-router.put('/:id/reject',                   ...adminOnly, rejectDocument)
+router.put('/:id/approve',                  ...adminOrStaff, approveDocument)
+router.put('/:id/reject',                   ...adminOrStaff, rejectDocument)
 router.delete('/:id/permanent',             ...adminOnly, permanentDeleteDocument)
 
 // Standard routes

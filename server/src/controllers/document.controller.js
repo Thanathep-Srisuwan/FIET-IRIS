@@ -271,6 +271,7 @@ const getDocuments = async (req, res) => {
       page = 1, limit = 15,
       degree_level, advisor_id, owner_role,
       sort_by, sort_dir,
+      student_id,
     } = req.query
     const program = req.query.program || req.query.department
     const { user_id, role } = req.user
@@ -295,12 +296,28 @@ const getDocuments = async (req, res) => {
     addParam('user_id', sql.Int, user_id)
     let where = "WHERE d.status NOT IN ('deleted','trashed')"
 
-    const isAdvisorOwnScope = role === 'advisor' && (owner_role === 'advisor' || req.query.scope === 'mine')
+    const isAdvisorOwnScope  = role === 'advisor' && (owner_role === 'advisor' || req.query.scope === 'mine')
+    const isStaffApproverScope = role === 'staff' && req.query.scope === 'approver'
 
-    if (role === 'student' || role === 'staff' || isAdvisorOwnScope) {
+    if (role === 'student' || (role === 'staff' && !isStaffApproverScope) || isAdvisorOwnScope) {
       where += ' AND d.user_id = @user_id'
+    } else if (isStaffApproverScope) {
+      // staff เห็นเฉพาะเอกสาร pending ของ doc type ที่ตัวเองเป็น approver
+      where += `
+        AND ISNULL(d.approval_status,'pending') = 'pending'
+        AND EXISTS (
+          SELECT 1 FROM dbo.DOC_TYPES dt
+          WHERE dt.type_code = d.doc_type
+            AND dt.approver_user_id = @user_id
+            AND dt.requires_approval = 1
+            AND dt.is_active = 1
+        )`
     } else if (role === 'advisor') {
       where += ' AND u.advisor_id = @user_id'
+      if (student_id) {
+        where += ' AND d.user_id = @student_id'
+        addParam('student_id', sql.Int, parseInt(student_id))
+      }
     }
 
     if (doc_type)     { where += ' AND d.doc_type = @doc_type';         addParam('doc_type',           sql.NVarChar, doc_type) }
@@ -442,8 +459,14 @@ const createDocument = async (req, res) => {
     await ensureProjectCategoryConstraintDropped(pool)
     await ensureApprovalColumns(pool)
 
-    // admin อัปโหลดแทน → อนุมัติอัตโนมัติ, user อัปโหลดเอง → pending
-    const initialApproval = (role === 'admin') ? 'approved' : 'pending'
+    // ตรวจสอบว่า doc type นี้ต้องการ approval หรือไม่
+    const docTypeRow = await pool.request()
+      .input('type_code', sql.NVarChar, doc_type)
+      .query('SELECT requires_approval FROM dbo.DOC_TYPES WHERE type_code = @type_code AND is_active = 1')
+    const requiresApproval = docTypeRow.recordset[0]?.requires_approval ?? false
+
+    // admin อัปโหลดแทน หรือ doc type ไม่ต้องการ approval → อนุมัติอัตโนมัติ
+    const initialApproval = (role === 'admin' || !requiresApproval) ? 'approved' : 'pending'
 
     const docResult = await pool.request()
       .input('user_id',          sql.Int,      effectiveUserId)
@@ -1217,7 +1240,26 @@ const selfRestoreDocument = async (req, res) => {
   }
 }
 
-// PUT /api/documents/:id/approve — admin อนุมัติเอกสาร
+// helper: check if user can approve/reject a document (admin or assigned staff approver)
+const canApproveDoc = async (pool, docId, user) => {
+  if (user.role === 'admin') return true
+  if (user.role !== 'staff') return false
+  const r = await pool.request()
+    .input('doc_id',  sql.Int, docId)
+    .input('user_id', sql.Int, user.user_id)
+    .query(`
+      SELECT 1
+      FROM dbo.DOCUMENTS d
+      JOIN dbo.DOC_TYPES dt ON d.doc_type = dt.type_code
+      WHERE d.doc_id = @doc_id
+        AND dt.approver_user_id = @user_id
+        AND dt.requires_approval = 1
+        AND dt.is_active = 1
+    `)
+  return r.recordset.length > 0
+}
+
+// PUT /api/documents/:id/approve — admin หรือ staff approver
 const approveDocument = async (req, res) => {
   try {
     const { id } = req.params
@@ -1226,6 +1268,9 @@ const approveDocument = async (req, res) => {
     const pool = await getPool()
     await ensureApprovalColumns(pool)
     await ensureNotificationsTypeConstraint(pool)
+
+    if (!(await canApproveDoc(pool, id, req.user)))
+      return res.status(403).json({ message: 'คุณไม่มีสิทธิ์อนุมัติเอกสารประเภทนี้' })
 
     const result = await pool.request()
       .input('doc_id', sql.Int, id)
@@ -1279,7 +1324,7 @@ const approveDocument = async (req, res) => {
   }
 }
 
-// PUT /api/documents/:id/reject — admin ปฏิเสธเอกสาร
+// PUT /api/documents/:id/reject — admin หรือ staff approver
 const rejectDocument = async (req, res) => {
   try {
     const { id } = req.params
@@ -1288,6 +1333,9 @@ const rejectDocument = async (req, res) => {
     const pool = await getPool()
     await ensureApprovalColumns(pool)
     await ensureNotificationsTypeConstraint(pool)
+
+    if (!(await canApproveDoc(pool, id, req.user)))
+      return res.status(403).json({ message: 'คุณไม่มีสิทธิ์ปฏิเสธเอกสารประเภทนี้' })
 
     const result = await pool.request()
       .input('doc_id', sql.Int, id)

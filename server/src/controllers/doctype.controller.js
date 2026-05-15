@@ -7,17 +7,30 @@ const ensureTable = async (pool) => {
     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='DOC_TYPES' AND xtype='U')
     BEGIN
       CREATE TABLE dbo.DOC_TYPES (
-        type_id    INT IDENTITY(1,1) PRIMARY KEY,
-        type_code  NVARCHAR(50)  NOT NULL,
-        type_name  NVARCHAR(255) NOT NULL,
-        is_active  BIT DEFAULT 1,
-        sort_order INT DEFAULT 0,
-        created_at DATETIME DEFAULT GETDATE()
+        type_id          INT IDENTITY(1,1) PRIMARY KEY,
+        type_code        NVARCHAR(50)  NOT NULL,
+        type_name        NVARCHAR(255) NOT NULL,
+        is_active        BIT DEFAULT 1,
+        sort_order       INT DEFAULT 0,
+        requires_approval BIT NOT NULL DEFAULT 0,
+        approver_user_id INT NULL,
+        created_at       DATETIME DEFAULT GETDATE()
       )
-      INSERT INTO dbo.DOC_TYPES (type_code, type_name, sort_order)
-      VALUES ('RI', 'RI - Research Integrity', 1),
-             ('IRB', 'IRB - Institutional Review Board', 2)
+      INSERT INTO dbo.DOC_TYPES (type_code, type_name, sort_order, requires_approval)
+      VALUES ('RI', 'RI - Research Integrity', 1, 1),
+             ('IRB', 'IRB - Institutional Review Board', 2, 1)
     END
+  `)
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOC_TYPES') AND name='requires_approval')
+      ALTER TABLE dbo.DOC_TYPES ADD requires_approval BIT NOT NULL DEFAULT 0
+  `)
+  await pool.request().query(`
+    UPDATE dbo.DOC_TYPES SET requires_approval = 1 WHERE type_code IN ('RI','IRB') AND requires_approval = 0
+  `)
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id=OBJECT_ID('dbo.DOC_TYPES') AND name='approver_user_id')
+      ALTER TABLE dbo.DOC_TYPES ADD approver_user_id INT NULL
   `)
 }
 
@@ -50,7 +63,7 @@ const getAll = async (req, res) => {
     const pool = await getPool()
     await ensureTable(pool)
     const result = await pool.request().query(`
-      SELECT type_id, type_code, type_name, sort_order, created_at
+      SELECT type_id, type_code, type_name, sort_order, requires_approval, approver_user_id, created_at
       FROM dbo.DOC_TYPES
       WHERE is_active = 1
       ORDER BY sort_order, type_code
@@ -65,7 +78,7 @@ const getAll = async (req, res) => {
 // POST /api/doc-types (admin only)
 const create = async (req, res) => {
   try {
-    const { type_code, type_name, sort_order = 0 } = req.body
+    const { type_code, type_name, sort_order = 0, requires_approval = false } = req.body
     if (!type_code?.trim() || !type_name?.trim())
       return res.status(400).json({ message: 'กรุณากรอกรหัสและชื่อประเภท' })
 
@@ -80,12 +93,13 @@ const create = async (req, res) => {
       return res.status(400).json({ message: 'รหัสประเภทนี้มีอยู่แล้ว' })
 
     await pool.request()
-      .input('type_code',  sql.NVarChar(50),  code)
-      .input('type_name',  sql.NVarChar(255), type_name.trim())
-      .input('sort_order', sql.Int,           parseInt(sort_order) || 0)
+      .input('type_code',          sql.NVarChar(50),  code)
+      .input('type_name',          sql.NVarChar(255), type_name.trim())
+      .input('sort_order',         sql.Int,           parseInt(sort_order) || 0)
+      .input('requires_approval',  sql.Bit,           requires_approval ? 1 : 0)
       .query(`
-        INSERT INTO dbo.DOC_TYPES (type_code, type_name, sort_order)
-        VALUES (@type_code, @type_name, @sort_order)
+        INSERT INTO dbo.DOC_TYPES (type_code, type_name, sort_order, requires_approval)
+        VALUES (@type_code, @type_name, @sort_order, @requires_approval)
       `)
     await logAdminAction(pool, sql, {
       adminId: req.user?.user_id, adminName: req.user?.name,
@@ -102,16 +116,32 @@ const create = async (req, res) => {
 const updateDocType = async (req, res) => {
   try {
     const { id } = req.params
-    const { type_name, sort_order } = req.body
+    const { type_name, sort_order, requires_approval, approver_user_id } = req.body
     if (!type_name?.trim()) return res.status(400).json({ message: 'กรุณากรอกชื่อประเภท' })
 
     const pool = await getPool()
+    await ensureTable(pool)
+
+    // validate approver_user_id if provided
+    const approverIdParsed = approver_user_id ? parseInt(approver_user_id) : null
+    if (approverIdParsed) {
+      const userCheck = await pool.request()
+        .input('uid', sql.Int, approverIdParsed)
+        .query(`SELECT user_id FROM dbo.USERS WHERE user_id = @uid AND role IN ('admin','staff') AND is_active = 1`)
+      if (userCheck.recordset.length === 0)
+        return res.status(400).json({ message: 'ผู้อนุมัติต้องเป็น admin หรือ staff ที่ active' })
+    }
+
     const result = await pool.request()
-      .input('type_id',    sql.Int,          id)
-      .input('type_name',  sql.NVarChar(255), type_name.trim())
-      .input('sort_order', sql.Int,           parseInt(sort_order) ?? 0)
+      .input('type_id',           sql.Int,           id)
+      .input('type_name',         sql.NVarChar(255),  type_name.trim())
+      .input('sort_order',        sql.Int,            parseInt(sort_order) ?? 0)
+      .input('requires_approval', sql.Bit,            requires_approval ? 1 : 0)
+      .input('approver_user_id',  sql.Int,            approverIdParsed)
       .query(`
-        UPDATE dbo.DOC_TYPES SET type_name = @type_name, sort_order = @sort_order
+        UPDATE dbo.DOC_TYPES
+        SET type_name = @type_name, sort_order = @sort_order,
+            requires_approval = @requires_approval, approver_user_id = @approver_user_id
         WHERE type_id = @type_id AND is_active = 1
       `)
     if (result.rowsAffected[0] === 0) return res.status(404).json({ message: 'ไม่พบประเภทเอกสาร' })

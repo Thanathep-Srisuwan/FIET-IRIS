@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home,
   FileText,
@@ -31,7 +31,9 @@ const navByRole = {
   advisor: [
     { to: '/dashboard', labelKey: 'nav.home' },
     { to: '/advisor/advisees', labelKey: 'nav.advisorAdvisees' },
-    { to: '/documents', labelKey: 'nav.advisorDocuments' },
+    { to: '/documents?panel=advisees', labelKey: 'nav.advisorDocuments' },
+    { to: '/documents?panel=mine', labelKey: 'nav.advisorMyDocuments' },
+    { to: '/student/trash', labelKey: 'nav.studentTrash' },
     { to: '/help', labelKey: 'nav.help' },
   ],
   staff: [
@@ -67,6 +69,7 @@ export default function Sidebar({ onClose }) {
   const { user, logout } = useAuthStore()
   const { t } = useLanguage()
   const navigate = useNavigate()
+  const location = useLocation()
   const items = navByRole[user?.role] || []
 
   const handleLogout = async () => {
@@ -102,28 +105,34 @@ export default function Sidebar({ onClose }) {
                 </p>
               )
             }
+            const [itemPath, itemQuery = ''] = item.to.split('?')
+            const itemPanel = new URLSearchParams(itemQuery).get('panel')
+            const currentPanel = new URLSearchParams(location.search).get('panel') || 'advisees'
+            const isItemActive = itemPanel
+              ? location.pathname === itemPath && currentPanel === itemPanel
+              : location.pathname === item.to
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 onClick={onClose}
-                className={({ isActive }) =>
+                className={() =>
                   `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
-                    isActive
+                    isItemActive
                       ? 'bg-white text-fiet-navy shadow-sm shadow-slate-950/10 dark:bg-primary-900/30 dark:text-primary-100'
                       : 'text-slate-300 hover:bg-white/10 hover:text-white dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100'
                   }`
                 }
               >
-                {({ isActive }) => (
+                {() => (
                   <>
-                    {isActive && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary-500" />}
+                    {isItemActive && <span className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary-500" />}
                     <div className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors duration-200 ${
-                      isActive
+                      isItemActive
                         ? 'bg-primary-100 text-primary-700 dark:bg-primary-800/60 dark:text-primary-200'
                         : 'bg-white/10 text-slate-300 group-hover:bg-white/15 group-hover:text-primary-200 dark:bg-slate-900 dark:text-slate-400 dark:group-hover:text-primary-300'
                     }`}>
-                      {getIcon(item.to, isActive)}
+                      {getIcon(item.to, isItemActive)}
                     </div>
                     <span className="truncate">{t(item.labelKey)}</span>
                   </>
