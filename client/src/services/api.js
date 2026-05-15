@@ -66,6 +66,14 @@ export const documentService = {
   getTimeline:   (id)           => api.get(`/documents/${id}/timeline`),
   approve:       (id, data)     => api.put(`/documents/${id}/approve`, data),
   reject:        (id, data)     => api.put(`/documents/${id}/reject`, data),
+  bulkApprove:   (data)         => api.put('/documents/bulk-approve', data),
+  bulkReject:    (data)         => api.put('/documents/bulk-reject', data),
+}
+
+// Staff
+export const staffService = {
+  getStats:   ()       => api.get('/staff/stats'),
+  getHistory: (params) => api.get('/staff/history', { params }),
 }
 
 // Trash (admin only)

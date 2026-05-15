@@ -7,7 +7,8 @@ import ChangePasswordPage  from './pages/auth/ChangePasswordPage'
 import DashboardPage       from './pages/dashboard/DashboardPage'
 import DocumentsPage       from './pages/documents/DocumentsPage'
 import StudentTrashPage    from './pages/student/StudentTrashPage'
-import AdvisorAdviseesPage from './pages/advisor/AdvisorAdviseesPage'
+import AdvisorAdviseesPage   from './pages/advisor/AdvisorAdviseesPage'
+import StaffApprovalsPage    from './pages/staff/StaffApprovalsPage'
 import AdminUsersPage          from './pages/admin/AdminUsersPage'
 import AdminLogsPage           from './pages/admin/AdminLogsPage'
 import AdminAnnouncementsPage  from './pages/admin/AdminAnnouncementsPage'
@@ -49,7 +50,8 @@ export default function App() {
         <Route path="student/tasks"    element={<PrivateRoute roles={['student']}><Navigate to="/dashboard" replace /></PrivateRoute>} />
         <Route path="student/activity" element={<PrivateRoute roles={['student']}><Navigate to="/dashboard" replace /></PrivateRoute>} />
         <Route path="student/trash"    element={<PrivateRoute roles={['student','staff','advisor']}><StudentTrashPage /></PrivateRoute>} />
-        <Route path="advisor/advisees" element={<PrivateRoute roles={['advisor']}><AdvisorAdviseesPage /></PrivateRoute>} />
+        <Route path="advisor/advisees"   element={<PrivateRoute roles={['advisor']}><AdvisorAdviseesPage /></PrivateRoute>} />
+        <Route path="staff/approvals"    element={<PrivateRoute roles={['staff']}><StaffApprovalsPage /></PrivateRoute>} />
         <Route path="help"             element={<HelpPage />} />
 
         {/* Admin */}

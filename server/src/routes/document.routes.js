@@ -13,6 +13,7 @@ const {
   downloadFile, previewFile, getDocumentSummary,
   getMyTrashedDocuments, selfRestoreDocument,
   approveDocument, rejectDocument,
+  bulkApproveDocuments, bulkRejectDocuments,
 } = require('../controllers/document.controller')
 
 // Multer config
@@ -53,6 +54,8 @@ router.delete('/trash/bulk-permanent',      ...adminOnly, bulkPermanentDeleteDoc
 router.get('/my-trash',                     ...auth,       getMyTrashedDocuments)
 router.put('/my-trash/:id/restore',         ...auth,       selfRestoreDocument)
 router.put('/:id/restore',                  ...adminOnly, restoreDocument)
+router.put('/bulk-approve',                  ...adminOrStaff, bulkApproveDocuments)
+router.put('/bulk-reject',                   ...adminOrStaff, bulkRejectDocuments)
 router.put('/:id/approve',                  ...adminOrStaff, approveDocument)
 router.put('/:id/reject',                   ...adminOrStaff, rejectDocument)
 router.delete('/:id/permanent',             ...adminOnly, permanentDeleteDocument)

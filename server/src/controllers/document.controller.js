@@ -1388,6 +1388,146 @@ const rejectDocument = async (req, res) => {
   }
 }
 
+// PUT /api/documents/bulk-approve — admin หรือ staff approver (ทำทีละรายการในลูปเพื่อใช้ logic เดิม)
+const bulkApproveDocuments = async (req, res) => {
+  try {
+    const { ids, note } = req.body
+    const { user_id, role } = req.user
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'ระบุ ids อย่างน้อย 1 รายการ' })
+
+    const pool = await getPool()
+    await ensureApprovalColumns(pool)
+    await ensureNotificationsTypeConstraint(pool)
+
+    let approved = 0
+    const skipped = []
+
+    for (const rawId of ids) {
+      const id = parseInt(rawId)
+      if (isNaN(id)) continue
+
+      if (!(await canApproveDoc(pool, id, req.user))) { skipped.push(id); continue }
+
+      const docResult = await pool.request()
+        .input('doc_id', sql.Int, id)
+        .query(`
+          SELECT d.doc_id, d.title, d.user_id
+          FROM dbo.DOCUMENTS d
+          WHERE d.doc_id = @doc_id
+            AND d.status NOT IN ('deleted','trashed')
+            AND ISNULL(d.approval_status,'pending') = 'pending'
+        `)
+      if (docResult.recordset.length === 0) { skipped.push(id); continue }
+
+      const doc = docResult.recordset[0]
+
+      await pool.request()
+        .input('doc_id',        sql.Int,      id)
+        .input('approval_by',   sql.Int,      user_id)
+        .input('approval_note', sql.NVarChar, note?.trim() || null)
+        .query(`
+          UPDATE dbo.DOCUMENTS
+          SET approval_status='approved', approval_by=@approval_by,
+              approval_at=GETDATE(), approval_note=@approval_note, updated_at=GETDATE()
+          WHERE doc_id=@doc_id
+        `)
+
+      await logDocumentTimeline(pool, {
+        doc_id: id, actor_id: user_id,
+        event_type: 'approved', title: 'อนุมัติเอกสาร (กลุ่ม)',
+        detail: note?.trim() || 'อนุมัติผ่านการดำเนินการแบบกลุ่ม',
+      })
+
+      await pool.request()
+        .input('user_id', sql.Int, doc.user_id)
+        .input('doc_id',  sql.Int, id)
+        .input('type',    sql.NVarChar, 'approved')
+        .input('message', sql.NVarChar, `เอกสาร "${doc.title}" ได้รับการอนุมัติแล้ว${note?.trim() ? ': ' + note.trim() : ''}`)
+        .query(`INSERT INTO dbo.NOTIFICATIONS (user_id,doc_id,type,message,channel) VALUES (@user_id,@doc_id,@type,@message,'in_app')`)
+
+      approved++
+    }
+
+    logger.info(`Bulk approve: ${approved} docs by user ${user_id}`)
+    res.json({ message: `อนุมัติ ${approved} รายการสำเร็จ`, approved, skipped })
+  } catch (err) {
+    logger.error(`bulkApproveDocuments: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
+// PUT /api/documents/bulk-reject — admin หรือ staff approver
+const bulkRejectDocuments = async (req, res) => {
+  try {
+    const { ids, note } = req.body
+    const { user_id } = req.user
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ message: 'ระบุ ids อย่างน้อย 1 รายการ' })
+    if (!note?.trim())
+      return res.status(400).json({ message: 'กรุณาระบุเหตุผลการปฏิเสธ' })
+
+    const pool = await getPool()
+    await ensureApprovalColumns(pool)
+    await ensureNotificationsTypeConstraint(pool)
+
+    let rejected = 0
+    const skipped = []
+
+    for (const rawId of ids) {
+      const id = parseInt(rawId)
+      if (isNaN(id)) continue
+
+      if (!(await canApproveDoc(pool, id, req.user))) { skipped.push(id); continue }
+
+      const docResult = await pool.request()
+        .input('doc_id', sql.Int, id)
+        .query(`
+          SELECT d.doc_id, d.title, d.user_id
+          FROM dbo.DOCUMENTS d
+          WHERE d.doc_id = @doc_id
+            AND d.status NOT IN ('deleted','trashed')
+            AND ISNULL(d.approval_status,'pending') = 'pending'
+        `)
+      if (docResult.recordset.length === 0) { skipped.push(id); continue }
+
+      const doc = docResult.recordset[0]
+
+      await pool.request()
+        .input('doc_id',        sql.Int,      id)
+        .input('approval_by',   sql.Int,      user_id)
+        .input('approval_note', sql.NVarChar, note.trim())
+        .query(`
+          UPDATE dbo.DOCUMENTS
+          SET approval_status='rejected', approval_by=@approval_by,
+              approval_at=GETDATE(), approval_note=@approval_note, updated_at=GETDATE()
+          WHERE doc_id=@doc_id
+        `)
+
+      await logDocumentTimeline(pool, {
+        doc_id: id, actor_id: user_id,
+        event_type: 'rejected', title: 'ปฏิเสธเอกสาร (กลุ่ม)',
+        detail: note.trim(),
+      })
+
+      await pool.request()
+        .input('user_id', sql.Int, doc.user_id)
+        .input('doc_id',  sql.Int, id)
+        .input('type',    sql.NVarChar, 'rejected')
+        .input('message', sql.NVarChar, `เอกสาร "${doc.title}" ถูกปฏิเสธ: ${note.trim()}`)
+        .query(`INSERT INTO dbo.NOTIFICATIONS (user_id,doc_id,type,message,channel) VALUES (@user_id,@doc_id,@type,@message,'in_app')`)
+
+      rejected++
+    }
+
+    logger.info(`Bulk reject: ${rejected} docs by user ${user_id}`)
+    res.json({ message: `ปฏิเสธ ${rejected} รายการสำเร็จ`, rejected, skipped })
+  } catch (err) {
+    logger.error(`bulkRejectDocuments: ${err.message}`)
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในระบบ' })
+  }
+}
+
 module.exports = {
   getDocuments, getDocument, createDocument, deleteDocument,
   getTrashedDocuments, restoreDocument, permanentDeleteDocument,
@@ -1396,4 +1536,5 @@ module.exports = {
   downloadFile, previewFile, getDocumentSummary,
   getMyTrashedDocuments, selfRestoreDocument,
   approveDocument, rejectDocument,
+  bulkApproveDocuments, bulkRejectDocuments,
 }

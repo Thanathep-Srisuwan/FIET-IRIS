@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home,
@@ -14,11 +15,12 @@ import {
   Activity,
   LogOut,
   HelpCircle,
+  ClipboardCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../../stores/authStore'
 import { useLanguage } from '../../contexts/LanguageContext'
-import { authService } from '../../services/api'
+import { authService, staffService } from '../../services/api'
 import irisLogo from '../../assets/LOGO-IRIS.png'
 
 const navByRole = {
@@ -38,6 +40,7 @@ const navByRole = {
   ],
   staff: [
     { to: '/dashboard', labelKey: 'nav.home' },
+    { to: '/staff/approvals', labelKey: 'nav.staffApprovals', badge: true },
     { to: '/documents', labelKey: 'nav.myDocuments' },
     { to: '/student/trash', labelKey: 'nav.myTrash' },
     { to: '/help', labelKey: 'nav.help' },
@@ -71,6 +74,14 @@ export default function Sidebar({ onClose }) {
   const navigate = useNavigate()
   const location = useLocation()
   const items = navByRole[user?.role] || []
+  const [pendingCount, setPendingCount] = useState(0)
+
+  useEffect(() => {
+    if (user?.role !== 'staff') return
+    staffService.getStats()
+      .then(({ data }) => setPendingCount(data?.pending_count ?? 0))
+      .catch(() => {})
+  }, [user?.role])
 
   const handleLogout = async () => {
     try {
@@ -134,7 +145,12 @@ export default function Sidebar({ onClose }) {
                     }`}>
                       {getIcon(item.to, isItemActive)}
                     </div>
-                    <span className="truncate">{t(item.labelKey)}</span>
+                    <span className="truncate flex-1">{t(item.labelKey)}</span>
+                    {item.badge && pendingCount > 0 && (
+                      <span className="ml-1 shrink-0 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                        {pendingCount > 99 ? '99+' : pendingCount}
+                      </span>
+                    )}
                   </>
                 )}
               </NavLink>
@@ -145,8 +161,18 @@ export default function Sidebar({ onClose }) {
 
       <div className="shrink-0 border-t border-white/10 bg-slate-950/25 px-4 py-4 dark:border-slate-800 dark:bg-slate-950">
         <div className="mb-3 flex items-center gap-3 px-1">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-600 text-sm font-bold text-white">
-            {user?.name?.[0] || 'U'}
+          <div className="h-10 w-10 shrink-0 rounded-xl overflow-hidden">
+            {user?.profile_image_url ? (
+              <img
+                src={user.profile_image_url}
+                alt={user?.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-primary-600 text-sm font-bold text-white">
+                {user?.name?.[0] || 'U'}
+              </div>
+            )}
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white dark:text-slate-100">{user?.name}</p>
@@ -173,6 +199,7 @@ function getIcon(to, isActive) {
 
   if (to.includes('dashboard') || to === '/executive/overview') return <Home {...iconProps} />
   if (to === '/student/trash' || to === '/my-trash') return <Trash2 {...iconProps} />
+  if (to === '/staff/approvals') return <ClipboardCheck {...iconProps} />
   if (to.includes('documents')) return <FileText {...iconProps} />
   if (to.includes('advisor/advisees')) return <GraduationCap {...iconProps} />
   if (to.includes('admin/users')) return <Users {...iconProps} />

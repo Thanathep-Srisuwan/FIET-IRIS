@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { docTypeService, userService } from '../../services/api'
 import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
-import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X, ShieldCheck, UserCheck } from 'lucide-react'
+import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X, ShieldCheck, UserCheck, AlertTriangle } from 'lucide-react'
 
 function DocTypeBadge({ code }) {
   return (
@@ -352,6 +352,10 @@ export default function AdminDocTypesPage() {
     return max + 1
   }, [types])
 
+  const unassignedApprovalTypes = useMemo(() =>
+    types.filter(type => type.requires_approval && !type.approver_user_id),
+  [types])
+
   const filteredTypes = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return types
@@ -558,6 +562,23 @@ export default function AdminDocTypesPage() {
             </div>
           </div>
 
+          {!loading && unassignedApprovalTypes.length > 0 && (
+            <div className="mx-5 mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/20">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-red-800 dark:text-red-200">
+                  {t('adminDocTypes.noApproverWarningTitle')}
+                </p>
+                <p className="mt-0.5 text-xs text-red-700 dark:text-red-300">
+                  {t('adminDocTypes.noApproverWarningDesc', {
+                    count: unassignedApprovalTypes.length,
+                    codes: unassignedApprovalTypes.map(x => x.type_code).join(', '),
+                  })}
+                </p>
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className="text-center py-16 text-slate-400 text-sm">{t('common.loading')}</div>
           ) : filteredTypes.length === 0 ? (
@@ -613,7 +634,10 @@ export default function AdminDocTypesPage() {
                                     {approverUsers.find(u => u.user_id === type.approver_user_id)?.name || `#${type.approver_user_id}`}
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-slate-400 dark:text-slate-500">{t('adminDocTypes.approverAdmin')}</span>
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300 w-fit">
+                                    <AlertTriangle size={11} />
+                                    {t('adminDocTypes.noApproverBadge')}
+                                  </span>
                                 )}
                               </div>
                             ) : (

@@ -167,6 +167,19 @@ function StudentDocDrawer({ student, onClose }) {
                               {t('advisorAdvisees.statusPending')}
                             </span>
                           )}
+                          {doc.approval_status === 'approved' && (
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                              {t('advisorAdvisees.statusApproved')}
+                            </span>
+                          )}
+                          {doc.approval_status === 'rejected' && (
+                            <span
+                              className="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300"
+                              title={doc.approval_note || ''}
+                            >
+                              {t('advisorAdvisees.statusRejected')}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className={`mt-0.5 shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${s.cls}`}>

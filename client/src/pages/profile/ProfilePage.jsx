@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 import { useAuthStore } from '../../stores/authStore'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { authService } from '../../services/api'
+import ImageCropModal from '../../components/profile/ImageCropModal'
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuthStore()
@@ -17,11 +18,12 @@ export default function ProfilePage() {
   const photoSectionRef = useRef(null)
 
   const [form, setForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
-  const [loading, setLoading]         = useState(false)
-  const [photoFile, setPhotoFile]     = useState(null)
+  const [loading, setLoading]           = useState(false)
+  const [photoFile, setPhotoFile]       = useState(null)
   const [photoPreview, setPhotoPreview] = useState('')
   const [photoLoading, setPhotoLoading] = useState(false)
-  const [profile, setProfile]         = useState(null) // full profile with advisor
+  const [profile, setProfile]           = useState(null)
+  const [cropSrc, setCropSrc]           = useState(null) // raw image src for crop modal
 
   const profileImageUrl = user?.profile_image_url || ''
 
@@ -32,12 +34,7 @@ export default function ProfilePage() {
       .catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (!photoFile) { setPhotoPreview(''); return undefined }
-    const url = URL.createObjectURL(photoFile)
-    setPhotoPreview(url)
-    return () => URL.revokeObjectURL(url)
-  }, [photoFile])
+  // photoPreview is managed manually by handleCropConfirm / handlePhotoDiscard / handlePhotoUpload
 
   useEffect(() => {
     if (new URLSearchParams(location.search).get('focus') === 'photo') {
@@ -75,7 +72,26 @@ export default function ProfilePage() {
       return toast.error(t('profile.photoTypeError'))
     if (file.size > 5 * 1024 * 1024)
       return toast.error(t('profile.photoSizeError'))
-    setPhotoFile(file)
+    const url = URL.createObjectURL(file)
+    setCropSrc(url)
+  }
+
+  const handleCropConfirm = (croppedFile, previewUrl) => {
+    setPhotoFile(croppedFile)
+    setPhotoPreview(previewUrl)
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
+    setCropSrc(null)
+  }
+
+  const handleCropCancel = () => {
+    if (cropSrc) URL.revokeObjectURL(cropSrc)
+    setCropSrc(null)
+  }
+
+  const handlePhotoDiscard = () => {
+    if (photoPreview) URL.revokeObjectURL(photoPreview)
+    setPhotoFile(null)
+    setPhotoPreview('')
   }
 
   const handlePhotoUpload = async () => {
@@ -86,7 +102,9 @@ export default function ProfilePage() {
     try {
       const res = await authService.updateProfilePicture(data)
       updateUser(res.data.user)
+      if (photoPreview) URL.revokeObjectURL(photoPreview)
       setPhotoFile(null)
+      setPhotoPreview('')
       toast.success(t('profile.photoSaveSuccess'))
     } catch (err) {
       toast.error(err.response?.data?.message || t('profile.photoSaveFailed'))
@@ -100,7 +118,9 @@ export default function ProfilePage() {
     try {
       const res = await authService.removeProfilePicture()
       updateUser(res.data.user)
+      if (photoPreview) URL.revokeObjectURL(photoPreview)
       setPhotoFile(null)
+      setPhotoPreview('')
       toast.success(t('profile.photoRemoveSuccess'))
     } catch (err) {
       toast.error(err.response?.data?.message || t('profile.photoSaveFailed'))
@@ -113,13 +133,15 @@ export default function ProfilePage() {
     ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
     : 'U'
 
-  const avatarContent = (photoPreview || profileImageUrl)
-    ? <img src={photoPreview || profileImageUrl} alt="avatar" className="h-full w-full object-cover" />
+  const displaySrc = photoPreview || profileImageUrl
+  const avatarContent = displaySrc
+    ? <img src={displaySrc} alt="avatar" className="h-full w-full object-cover" />
     : initials
 
   const advisor = profile?.advisor
 
   return (
+    <>
     <div className="mx-auto max-w-3xl space-y-6 p-4 md:p-6">
       {/* Personal Info Card */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -244,9 +266,14 @@ export default function ProfilePage() {
                   {t('profile.uploadPhoto')}
                 </button>
               )}
-              {(profileImageUrl || photoFile) && (
-                <button type="button" onClick={photoFile ? () => setPhotoFile(null) : handlePhotoRemove} disabled={photoLoading} className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20">
-                  <Trash2 size={16} />{photoFile ? t('common.cancel') : t('profile.removePhoto')}
+              {photoFile && (
+                <button type="button" onClick={handlePhotoDiscard} disabled={photoLoading} className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                  {t('common.cancel')}
+                </button>
+              )}
+              {profileImageUrl && !photoFile && (
+                <button type="button" onClick={handlePhotoRemove} disabled={photoLoading} className="flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20">
+                  <Trash2 size={16} />{t('profile.removePhoto')}
                 </button>
               )}
             </div>
@@ -295,6 +322,15 @@ export default function ProfilePage() {
         </form>
       </div>
     </div>
+
+    {cropSrc && (
+      <ImageCropModal
+        imageSrc={cropSrc}
+        onConfirm={handleCropConfirm}
+        onCancel={handleCropCancel}
+      />
+    )}
+    </>
   )
 }
 

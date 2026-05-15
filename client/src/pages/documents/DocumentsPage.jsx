@@ -671,11 +671,33 @@ function DetailModal({ doc, onClose, onDeleted, role, approvalPanel = false, req
             )}
           </div>
 
-          <form onSubmit={handleUploadVersion} className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 space-y-3">
+          {role === 'student' && currentDoc.approval_status === 'rejected' && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-2">
+              <div className="flex items-start gap-3">
+                <XCircle size={18} className="mt-0.5 shrink-0 text-red-500" />
+                <div>
+                  <p className="text-sm font-semibold text-red-800">{t('documents.studentRejectedBannerTitle')}</p>
+                  <p className="mt-0.5 text-xs text-red-600">{t('documents.studentRejectedBannerDesc')}</p>
+                </div>
+              </div>
+              {currentDoc.approval_note && (
+                <div className="rounded-lg border border-red-200 bg-white px-3 py-2.5 ml-7">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-red-400">{t('documents.approvalNotePrefix')}</p>
+                  <p className="mt-1 text-sm text-red-700">{currentDoc.approval_note}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <form onSubmit={handleUploadVersion} className={`rounded-xl border p-4 space-y-3 ${role === 'student' && currentDoc.approval_status === 'rejected' ? 'border-red-300 bg-red-50/60' : 'border-dashed border-slate-200 bg-slate-50'}`}>
             <div className="flex items-center gap-2">
-              <UploadCloud size={17} className="text-[#42b5e1]" />
+              <UploadCloud size={17} className={role === 'student' && currentDoc.approval_status === 'rejected' ? 'text-red-500' : 'text-[#42b5e1]'} />
               <div>
-                <p className="text-sm font-semibold text-slate-700">{t('documents.modalVersionTitle')}</p>
+                <p className={`text-sm font-semibold ${role === 'student' && currentDoc.approval_status === 'rejected' ? 'text-red-800' : 'text-slate-700'}`}>
+                  {role === 'student' && currentDoc.approval_status === 'rejected'
+                    ? t('documents.studentRejectedUploadCta')
+                    : t('documents.modalVersionTitle')}
+                </p>
                 <p className="text-xs text-slate-400">{t('documents.modalVersionDesc')}</p>
               </div>
             </div>

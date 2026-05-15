@@ -13,5 +13,6 @@ router.use('/admin',        require('./admin.routes'))
 router.use('/settings',     require('./settings.routes'))
 router.use('/reference',    require('./reference.routes'))
 router.use('/faq',          require('./faq.routes'))
+router.use('/staff',        require('./staff.routes'))
 
 module.exports = router
