@@ -1,8 +1,111 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { docTypeService, userService } from '../../services/api'
 import { useLanguage } from '../../contexts/LanguageContext'
 import toast from 'react-hot-toast'
-import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X, ShieldCheck, UserCheck, AlertTriangle } from 'lucide-react'
+import { FileText, Search, ChevronDown, ChevronRight, FolderOpen, Plus, Pencil, Check, X, ShieldCheck, UserCheck, User } from 'lucide-react'
+
+function SearchableApproverSelect({ users, value, onChange, placeholder }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen]   = useState(false)
+  const ref               = useRef(null)
+
+  const selected = users.find(u => u.user_id === value) || null
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return users
+    return users.filter(u =>
+      u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    )
+  }, [users, query])
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const handleSelect = (user) => {
+    onChange(user ? user.user_id : null)
+    setOpen(false)
+    setQuery('')
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="input-field flex w-full items-center justify-between gap-2 text-left text-sm"
+      >
+        {selected ? (
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-medium text-slate-800 dark:text-slate-100">{selected.name}</span>
+            <span className="truncate text-[11px] text-slate-400">{selected.email}</span>
+          </span>
+        ) : (
+          <span className="flex-1 text-slate-400">{placeholder}</span>
+        )}
+        <ChevronDown size={14} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Search size={13} className="shrink-0 text-slate-400" />
+              <input
+                autoFocus
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="ค้นหาชื่อ หรืออีเมล..."
+                className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} className="shrink-0 text-slate-300 hover:text-slate-500">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="max-h-52 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => handleSelect(null)}
+              className={`flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${!value ? 'bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300' : 'text-slate-500'}`}
+            >
+              <User size={13} className="shrink-0" />
+              <span className="italic">ไม่ระบุ (Admin ดูแล)</span>
+            </button>
+
+            {filtered.length === 0 ? (
+              <p className="px-3 py-4 text-center text-xs text-slate-400">ไม่พบผู้ใช้ที่ค้นหา</p>
+            ) : (
+              filtered.map(u => (
+                <button
+                  key={u.user_id}
+                  type="button"
+                  onClick={() => handleSelect(u)}
+                  className={`flex w-full items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 ${value === u.user_id ? 'bg-primary-50 dark:bg-primary-950/30' : ''}`}
+                >
+                  <UserCheck size={13} className={`mt-0.5 shrink-0 ${value === u.user_id ? 'text-primary-600' : 'text-slate-400'}`} />
+                  <span className="min-w-0">
+                    <span className={`block truncate text-sm font-medium ${value === u.user_id ? 'text-primary-700 dark:text-primary-300' : 'text-slate-800 dark:text-slate-100'}`}>
+                      {u.name}
+                    </span>
+                    <span className="block truncate text-[11px] text-slate-400">{u.email}</span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function DocTypeBadge({ code }) {
   return (
@@ -318,7 +421,7 @@ export default function AdminDocTypesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
-  const [form, setForm] = useState({ type_code: '', type_name: '', sort_order: '', requires_approval: false })
+  const [form, setForm] = useState({ type_code: '', type_name: '', sort_order: '', requires_approval: false, approver_user_id: null })
   const [expandedId, setExpandedId] = useState(null)
   const [editingTypeId, setEditingTypeId] = useState(null)
   const [approverUsers, setApproverUsers] = useState([])
@@ -352,10 +455,6 @@ export default function AdminDocTypesPage() {
     return max + 1
   }, [types])
 
-  const unassignedApprovalTypes = useMemo(() =>
-    types.filter(type => type.requires_approval && !type.approver_user_id),
-  [types])
-
   const filteredTypes = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return types
@@ -381,9 +480,10 @@ export default function AdminDocTypesPage() {
         type_name: name,
         sort_order: Number.parseInt(form.sort_order, 10) || nextSortOrder,
         requires_approval: form.requires_approval,
+        approver_user_id: form.requires_approval ? (form.approver_user_id || null) : null,
       })
       toast.success(t('adminDocTypes.addSuccess'))
-      setForm({ type_code: '', type_name: '', sort_order: '', requires_approval: false })
+      setForm({ type_code: '', type_name: '', sort_order: '', requires_approval: false, approver_user_id: null })
       fetchAll()
     } catch (err) {
       toast.error(err.response?.data?.message || t('common.error'))
@@ -514,6 +614,23 @@ export default function AdminDocTypesPage() {
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{t('adminDocTypes.requiresApprovalHint')}</p>
             </div>
 
+            {form.requires_approval && (
+              <div>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1.5">
+                  {t('adminDocTypes.approverLabel')}
+                </label>
+                <SearchableApproverSelect
+                  users={approverUsers}
+                  value={form.approver_user_id}
+                  onChange={id => updateForm('approver_user_id', id)}
+                  placeholder={t('adminDocTypes.approverAdmin')}
+                />
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+                  {t('adminDocTypes.approverHint')}
+                </p>
+              </div>
+            )}
+
             <div className="rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-4">
               <p className="text-xs font-semibold text-slate-400 mb-2">{t('adminDocTypes.previewLabel')}</p>
               <div className="flex items-center gap-3">
@@ -561,23 +678,6 @@ export default function AdminDocTypesPage() {
               />
             </div>
           </div>
-
-          {!loading && unassignedApprovalTypes.length > 0 && (
-            <div className="mx-5 mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/50 dark:bg-red-950/20">
-              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-red-600 dark:text-red-400" />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-200">
-                  {t('adminDocTypes.noApproverWarningTitle')}
-                </p>
-                <p className="mt-0.5 text-xs text-red-700 dark:text-red-300">
-                  {t('adminDocTypes.noApproverWarningDesc', {
-                    count: unassignedApprovalTypes.length,
-                    codes: unassignedApprovalTypes.map(x => x.type_code).join(', '),
-                  })}
-                </p>
-              </div>
-            </div>
-          )}
 
           {loading ? (
             <div className="text-center py-16 text-slate-400 text-sm">{t('common.loading')}</div>
@@ -634,9 +734,8 @@ export default function AdminDocTypesPage() {
                                     {approverUsers.find(u => u.user_id === type.approver_user_id)?.name || `#${type.approver_user_id}`}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300 w-fit">
-                                    <AlertTriangle size={11} />
-                                    {t('adminDocTypes.noApproverBadge')}
+                                  <span className="text-xs text-slate-400 dark:text-slate-500">
+                                    {t('adminDocTypes.approverAdmin')}
                                   </span>
                                 )}
                               </div>

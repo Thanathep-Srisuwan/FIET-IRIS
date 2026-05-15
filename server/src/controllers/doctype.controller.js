@@ -78,7 +78,7 @@ const getAll = async (req, res) => {
 // POST /api/doc-types (admin only)
 const create = async (req, res) => {
   try {
-    const { type_code, type_name, sort_order = 0, requires_approval = false } = req.body
+    const { type_code, type_name, sort_order = 0, requires_approval = false, approver_user_id } = req.body
     if (!type_code?.trim() || !type_name?.trim())
       return res.status(400).json({ message: 'กรุณากรอกรหัสและชื่อประเภท' })
 
@@ -92,14 +92,24 @@ const create = async (req, res) => {
     if (existing.recordset.length > 0)
       return res.status(400).json({ message: 'รหัสประเภทนี้มีอยู่แล้ว' })
 
+    const approverIdParsed = approver_user_id ? parseInt(approver_user_id) : null
+    if (approverIdParsed) {
+      const userCheck = await pool.request()
+        .input('uid', sql.Int, approverIdParsed)
+        .query(`SELECT user_id FROM dbo.USERS WHERE user_id = @uid AND role IN ('admin','staff') AND is_active = 1`)
+      if (userCheck.recordset.length === 0)
+        return res.status(400).json({ message: 'ไม่พบผู้ใช้ที่เลือกเป็นผู้อนุมัติ' })
+    }
+
     await pool.request()
       .input('type_code',          sql.NVarChar(50),  code)
       .input('type_name',          sql.NVarChar(255), type_name.trim())
       .input('sort_order',         sql.Int,           parseInt(sort_order) || 0)
       .input('requires_approval',  sql.Bit,           requires_approval ? 1 : 0)
+      .input('approver_user_id',   sql.Int,           approverIdParsed)
       .query(`
-        INSERT INTO dbo.DOC_TYPES (type_code, type_name, sort_order, requires_approval)
-        VALUES (@type_code, @type_name, @sort_order, @requires_approval)
+        INSERT INTO dbo.DOC_TYPES (type_code, type_name, sort_order, requires_approval, approver_user_id)
+        VALUES (@type_code, @type_name, @sort_order, @requires_approval, @approver_user_id)
       `)
     await logAdminAction(pool, sql, {
       adminId: req.user?.user_id, adminName: req.user?.name,
