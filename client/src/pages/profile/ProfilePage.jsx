@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
-  BookOpen, Camera, GraduationCap, ImageUp, LockKeyhole,
+  BookOpen, Building2, Camera, GraduationCap, ImageUp, LockKeyhole,
   Mail, Phone, ShieldCheck, Trash2, User, UserCheck,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -183,6 +183,9 @@ export default function ProfilePage() {
           )}
           {profile?.program && (
             <InfoRow icon={<BookOpen size={16} />} label="สาขาวิชา" value={profile.program} />
+          )}
+          {profile?.affiliation && (
+            <InfoRow icon={<Building2 size={16} />} label="สังกัด" value={profile.affiliation} />
           )}
           {profile?.phone && (
             <InfoRow icon={<Phone size={16} />} label="เบอร์โทรศัพท์" value={profile.phone} />
