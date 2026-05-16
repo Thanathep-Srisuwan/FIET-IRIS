@@ -82,6 +82,11 @@ export default function Topbar({ onMenuClick }) {
   const dropdownRef = useRef(null)
   const meta = getPageMeta(location.pathname, location.search, user?.role)
 
+  useEffect(() => {
+    const pageTitle = t(meta.titleKey)
+    document.title = pageTitle ? `${pageTitle} — FIET IRIS` : 'FIET IRIS'
+  }, [meta.titleKey, locale, t])
+
   const today = new Date().toLocaleDateString(locale, {
     weekday: 'short',
     year: 'numeric',
