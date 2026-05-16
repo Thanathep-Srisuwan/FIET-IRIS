@@ -208,11 +208,11 @@ export default function LandingPage() {
       <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-gray-100 dark:border-slate-800 sticky top-0 z-50 shadow-sm transition-all duration-300">
         <div className="w-full px-6 h-[64px] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 transition-transform hover:scale-105">
+            <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
               <img src={kmuttLogo} alt="KMUTT" className="w-full h-full object-contain dark:brightness-110" />
             </div>
             <div className="w-px h-8 bg-[#dde5ee] dark:bg-slate-800" />
-            <div className="w-12 h-14 rounded-lg overflow-hidden flex-shrink-0 transition-transform hover:scale-105">
+            <div className="w-12 h-14 rounded-lg overflow-hidden flex-shrink-0">
               <img src={fietLogo} alt="FIET" className="w-full h-full object-contain dark:brightness-110" />
             </div>
             <div className="w-px h-8 bg-[#dde5ee] dark:bg-slate-800 hidden md:block" />

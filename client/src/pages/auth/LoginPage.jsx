@@ -62,11 +62,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col bg-[#f0f4f8] transition-colors duration-300 dark:bg-slate-950">
       <header className="flex h-[60px] items-center justify-between border-b border-[#e8edf2] bg-white px-4 dark:border-slate-800 dark:bg-slate-900 sm:px-10">
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg transition-transform hover:scale-105">
+          <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg">
             <img src={kmuttLogo} alt="KMUTT" className="h-full w-full object-contain dark:brightness-110" />
           </div>
           <div className="h-8 w-px bg-[#dde5ee] dark:bg-slate-800" />
-          <div className="h-14 w-12 flex-shrink-0 overflow-hidden rounded-lg transition-transform hover:scale-105">
+          <div className="h-14 w-12 flex-shrink-0 overflow-hidden rounded-lg">
             <img src={fietLogo} alt="FIET" className="h-full w-full object-contain dark:brightness-110" />
           </div>
           <div className="h-8 w-px bg-[#dde5ee] dark:bg-slate-800" />
