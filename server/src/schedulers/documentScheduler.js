@@ -261,7 +261,7 @@ const runScheduler = () => {
     }
   }, { timezone: 'Asia/Bangkok' })
 
-  logger.info('📅 Scheduler พร้อมทำงาน (ทุกวัน 08:00 น. เวลาไทย)')
+  // logger.info('📅 Scheduler พร้อมทำงาน (ทุกวัน 08:00 น. เวลาไทย)')
 }
 
 module.exports = { runScheduler }
